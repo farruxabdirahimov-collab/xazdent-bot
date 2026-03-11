@@ -77,6 +77,18 @@ async def init_db():
                 region TEXT,
                 status TEXT DEFAULT 'pending',
                 rating REAL DEFAULT 0,
+                total_deals INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shop_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                price REAL NOT NULL,
+                unit TEXT NOT NULL,
+                description TEXT,
+                is_active INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -95,10 +107,7 @@ async def init_db():
 
             INSERT OR IGNORE INTO settings VALUES ('ball_price', '1000');
             INSERT OR IGNORE INTO settings VALUES ('elon_price', '0.5');
-            INSERT OR IGNORE INTO settings VALUES ('card_number', '8600 0000 0000 0000');
-            INSERT OR IGNORE INTO settings VALUES ('small_room_price', '0');
-            INSERT OR IGNORE INTO settings VALUES ('standard_room_price', '0');
-            INSERT OR IGNORE INTO settings VALUES ('premium_room_price', '0');
+            INSERT OR IGNORE INTO settings VALUES ('card_number', '9860020138100068');
         """)
         await db.commit()
     print("✅ Database tayyor!")
