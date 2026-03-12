@@ -17,6 +17,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from database import (init_db, get_user, db_run, db_get, db_all, db_insert,
                       get_setting, update_setting, add_balance, get_next_room_code)
 from texts import t, REGIONS, REGIONS_RU
+from version import VERSION, BREAKING, CHANGELOG, HYPE_MESSAGES
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -1523,11 +1524,97 @@ async def set_elon(msg: Message):
         await msg.answer(f"✅ 1 e'lon = *{v} ball*")
     except: await msg.answer("❌ /setelon 0.5")
 
+# ── FALLBACK — noma'lum matn ─────────────────────────────
+@router.message(F.text)
+async def fallback_text(msg: Message, state: FSMContext):
+    """
+    Foydalanuvchi tugma matni o'zgarganda yoki noto'g'ri narsa
+    yozganda — menyuni qayta ko'rsatadi. /start shart emas.
+    """
+    cur_state = await state.get_state()
+    # Agar aktiv holatda bo'lsa (forma to'ldirish) — hech narsa qilma
+    if cur_state is not None:
+        return
+
+    u = await get_user(msg.from_user.id)
+    if not u or u["role"] in (None, "none"):
+        await msg.answer(
+            "👋 *XAZDENT*ga xush kelibsiz!\n\nRo'yxatdan o'tish uchun /start bosing."
+        )
+        return
+
+    kb  = kb_main_clinic() if u["role"] in ("clinic","lab") else kb_main_seller()
+    txt = "🏥 *Klinika paneli*" if u["role"] in ("clinic","lab") else "🛒 *Sotuvchi paneli*"
+    await msg.answer(txt, reply_markup=kb)
+
+
+# ── BROADCAST — deploy xabari ────────────────────────────
+def build_update_message(role: str) -> str:
+    """Versiyaga qarab chiroyli xabar"""
+    import random
+    hype = random.choice(HYPE_MESSAGES)
+    role_emoji = "🏥" if role in ("clinic","lab") else "🛒"
+    return (
+        f"{'='*28}\n"
+        f"🔄 *XAZDENT v{VERSION} — Yangilandi!*\n"
+        f"{'='*28}\n\n"
+        f"{hype}\n\n"
+        f"📋 *Nima yangilandi:*\n"
+        f"{CHANGELOG}\n\n"
+        f"{role_emoji} Menyu qayta yuklandi.\n"
+        f"*Davom eting* 👇"
+    )
+
+async def broadcast_update():
+    """
+    BREAKING=True bo'lsa barcha foydalanuvchilarga xabar yuboradi.
+    BREAKING=False bo'lsa — jim yangilanadi, hech kim sezmaYdi.
+    """
+    if not BREAKING:
+        log.info(f"v{VERSION} — silent update, broadcast yo'q")
+        return
+
+    users = await db_all(
+        "SELECT id, role FROM users WHERE role NOT IN ('none') AND is_blocked=0"
+    )
+    log.info(f"🎉 Broadcast v{VERSION}: {len(users)} ta foydalanuvchi")
+    sent = errors = 0
+
+    for u in users:
+        try:
+            kb  = kb_main_clinic() if u["role"] in ("clinic","lab") else kb_main_seller()
+            txt = build_update_message(u["role"])
+            await bot.send_message(u["id"], txt, reply_markup=kb)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            errors += 1
+            log.debug(f"Broadcast skip {u['id']}: {e}")
+
+    log.info(f"✅ Broadcast tugadi: {sent} yuborildi, {errors} xato")
+
+    # Adminlarga hisobot
+    for aid in ADMIN_IDS:
+        try:
+            await bot.send_message(aid,
+                f"📊 *Broadcast hisoboti*\n\n"
+                f"🔄 Versiya: *v{VERSION}*\n"
+                f"✅ Yuborildi: *{sent}* ta\n"
+                f"❌ Xato: *{errors}* ta\n"
+                f"👥 Jami: *{len(users)}* ta"
+            )
+        except: pass
+
+
 # ── MAIN ──────────────────────────────────────────────────
 async def main():
     await init_db()
     dp.include_router(router)
     log.info("🦷 XAZDENT Bot ishga tushdi!")
+
+    # Deploy xabari — version.py da BREAKING=True bo'lsa yuboradi
+    asyncio.create_task(broadcast_update())
+
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
