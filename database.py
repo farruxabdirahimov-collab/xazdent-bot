@@ -1,5 +1,4 @@
 import aiosqlite
-import os
 import random
 
 DB_PATH = "xazdent.db"
@@ -18,6 +17,8 @@ async def init_db():
                 clinic_name TEXT,
                 region TEXT,
                 address TEXT,
+                latitude REAL,
+                longitude REAL,
                 balance REAL DEFAULT 0,
                 is_blocked INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now'))
@@ -35,19 +36,29 @@ async def init_db():
                 owner_id INTEGER,
                 status TEXT DEFAULT 'active',
                 max_needs INTEGER NOT NULL,
-                monthly_price INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            -- Ehtiyoj to'plami (bir sessiyada bir nechta ehtiyoj)
+            CREATE TABLE IF NOT EXISTS batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL,
+                status TEXT DEFAULT 'active',
+                deadline_hours INTEGER DEFAULT 24,
+                created_at TEXT DEFAULT (datetime('now')),
+                expires_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS needs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id INTEGER,
                 room_id INTEGER,
                 owner_id INTEGER,
                 product_name TEXT NOT NULL,
                 quantity REAL NOT NULL,
-                unit TEXT NOT NULL,
+                unit TEXT NOT NULL DEFAULT 'dona',
                 budget REAL,
-                deadline_hours INTEGER NOT NULL,
+                deadline_hours INTEGER NOT NULL DEFAULT 24,
                 extra_note TEXT,
                 status TEXT DEFAULT 'active',
                 channel_message_id INTEGER,
@@ -58,10 +69,11 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS offers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 need_id INTEGER,
+                batch_id INTEGER,
                 seller_id INTEGER,
                 product_name TEXT NOT NULL,
                 price REAL NOT NULL,
-                currency TEXT DEFAULT 'uzs',
+                unit TEXT DEFAULT 'dona',
                 delivery_hours INTEGER NOT NULL,
                 note TEXT,
                 status TEXT DEFAULT 'pending',
@@ -106,7 +118,7 @@ async def init_db():
             );
 
             INSERT OR IGNORE INTO settings VALUES ('ball_price', '1000');
-            INSERT OR IGNORE INTO settings VALUES ('elon_price', '0.5');
+            INSERT OR IGNORE INTO settings VALUES ('elon_price', '0');
             INSERT OR IGNORE INTO settings VALUES ('card_number', '9860020138100068');
         """)
         await db.commit()
@@ -157,18 +169,9 @@ async def add_balance(user_id: int, balls: float):
     await db_run("UPDATE users SET balance=balance+? WHERE id=?", (balls, user_id))
 
 
-async def deduct_balance(user_id: int, balls: float) -> bool:
-    user = await get_user(user_id)
-    if not user or user["balance"] < balls:
-        return False
-    await db_run("UPDATE users SET balance=balance-? WHERE id=?", (balls, user_id))
-    return True
-
-
 async def get_next_room_code(room_type: str) -> str:
     rows = await db_all("SELECT room_code FROM rooms")
     existing = {r["room_code"] for r in rows}
-
     for building in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         for _ in range(300):
             if room_type == "small":
@@ -178,11 +181,10 @@ async def get_next_room_code(room_type: str) -> str:
                 d2 = random.randint(1, 9)
                 while d2 == d1:
                     d2 = random.randint(1, 9)
-                digits = random.choice([[d1, d1, d2], [d1, d2, d2], [d2, d1, d2]])
+                digits = random.choice([[d1, d1, d2], [d1, d2, d2]])
             else:
                 d = random.randint(1, 9)
                 digits = [d, d, d]
-
             code = f"{building}-{''.join(map(str, digits))}"
             if code not in existing:
                 return code
