@@ -53,9 +53,8 @@ class StepAdd(StatesGroup):     # Tartibli ehtiyoj
     confirm = State()
 
 class OfferState(StatesGroup):
-    batch_select = State()
     price = State()
-    delivery = State()
+    note = State()
 
 class Topup(StatesGroup):
     amount = State()
@@ -157,18 +156,54 @@ async def post_to_channel(need: dict, owner: dict):
     words  = need["product_name"].split()
     tags   = " ".join(f"#{w.lower()}" for w in words[:3] if len(w) > 2)
     txt = (
-        f"📋 *BUYURTMA*\n\n"
+        f"📋 *BUYURTMA #{need['id']}*\n\n"
         f"🦷 {need['product_name']}\n"
         f"📦 {need['quantity']} {need['unit']}\n"
-        f"⏱ {dl_txt} ichida\n\n"
+        f"⏱ {dl_txt} ichida\n"
         f"📍 {owner.get('region','')}\n\n"
-        f"{tags}\n💬 @XazdentBot"
+        f"{tags}"
     )
+    # Deep link: t.me/BotUsername?start=offer_NEEDID
+    bot_info = await bot.get_me()
+    deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Taklif berish", url=deep_link)]
+    ])
     try:
-        m = await bot.send_message(CHANNEL_ID, txt)
+        m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
         return m.message_id
     except Exception as e:
         log.error(f"Kanal xato: {e}"); return None
+
+async def notify_sellers(need: dict, owner: dict):
+    """Barcha aktiv sotuvchilarga lichkada xabar yuborish"""
+    sellers = await db_all(
+        "SELECT DISTINCT u.id FROM users u "
+        "WHERE u.role='seller' AND u.id != ? AND u.is_blocked=0",
+        (need["owner_id"],)
+    )
+    bot_info = await bot.get_me()
+    deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Taklif berish", url=deep_link)],
+        [InlineKeyboardButton(text="❌ Keyinroq", callback_data="seller_skip")]
+    ])
+    txt = (
+        f"📦 *Yangi buyurtma!*\n\n"
+        f"🦷 {need['product_name']}\n"
+        f"📦 {need['quantity']} {need['unit']}\n"
+        f"📍 {owner.get('region','')}\n"
+        f"⏱ {need['deadline_hours']} soat ichida"
+    )
+    sent = 0
+    for s in sellers:
+        try:
+            await bot.send_message(s["id"], txt, reply_markup=kb)
+            sent += 1
+            await asyncio.sleep(0.05)  # flood limit
+        except Exception as e:
+            log.debug(f"Seller {s['id']} ga yuborib bolmadi: {e}")
+    log.info(f"Notify: {sent}/{len(sellers)} sotuvchiga yuborildi")
 
 async def build_comparison_table(batch_id: int):
     """
@@ -396,15 +431,36 @@ def build_excel(sellers, table, col_totals, col_missing):
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
     await state.clear()
+    args = msg.text.split(maxsplit=1)
+    deep = args[1] if len(args) > 1 else ""
+
     u = await get_user(msg.from_user.id)
+
+    # Deep link: ?start=offer_NEEDID
+    if deep.startswith("offer_") and u and u["role"] == "seller":
+        try:
+            nid = int(deep.split("_")[1])
+            await _start_offer_flow(msg, state, nid)
+            return
+        except: pass
 
     if u and u["role"] not in (None, "none"):
         kb = kb_main_clinic() if u["role"] in ("clinic","lab") else kb_main_seller()
         txt = "🏥 *Klinika paneli*" if u["role"] in ("clinic","lab") else "🛒 *Sotuvchi paneli*"
-        await msg.answer(txt, reply_markup=kb); return
+        await msg.answer(txt, reply_markup=kb)
+        # Agar deep link bo'lsa lekin hali taklif bermagan bo'lsa — taklif flow boshlash
+        if deep.startswith("offer_") and u["role"] == "seller":
+            try:
+                nid = int(deep.split("_")[1])
+                await _start_offer_flow(msg, state, nid)
+            except: pass
+        return
 
     await db_run("INSERT OR IGNORE INTO users(id,username,full_name) VALUES(?,?,?)",
                  (msg.from_user.id, msg.from_user.username, msg.from_user.full_name))
+    # Deep link saqlash — ro'yxatdan o'tgandan keyin ishlatiladi
+    if deep:
+        await state.update_data(pending_deep=deep)
     await state.set_state(Reg.name)
     await msg.answer(
         "👋 *XAZDENT*ga xush kelibsiz!\n\n"
@@ -485,6 +541,8 @@ async def reg_role(call: CallbackQuery, state: FSMContext):
         (d.get("clinic_name"), d.get("phone"), d.get("region"), d.get("address"),
          d.get("lat"), d.get("lon"), role, call.from_user.id)
     )
+    d = await state.get_data()
+    pending_deep = d.get("pending_deep","")
     await state.clear()
     kb  = kb_main_clinic() if role in ("clinic","lab") else kb_main_seller()
     txt = {
@@ -493,6 +551,12 @@ async def reg_role(call: CallbackQuery, state: FSMContext):
         "seller": "🛒 *Sotuvchi paneli*\n\nEhtiyojlar lentini ko'rib taklif yuboring!"
     }.get(role, "Xush kelibsiz!")
     await call.message.answer(txt, reply_markup=kb)
+    # Agar deep link bor edi va sotuvchi bo'lsa
+    if pending_deep.startswith("offer_") and role == "seller":
+        try:
+            nid = int(pending_deep.split("_")[1])
+            await _start_offer_flow(call, state, nid)
+        except: pass
     await call.answer()
 
 # ── PROFIL ─────────────────────────────────────────────────
@@ -613,6 +677,9 @@ async def bulk_confirm(call: CallbackQuery, state: FSMContext):
         mid = await post_to_channel(dict(nd), dict(owner))
         if mid:
             await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, nid))
+        # Birinchi mahsulot uchun sotuvchilarga xabar (hammasi uchun alohida yubormaslik uchun)
+        if count == 0:
+            asyncio.create_task(notify_sellers(dict(nd), dict(owner)))
         count += 1
     
     await state.clear()
@@ -725,6 +792,7 @@ async def step_confirm(call: CallbackQuery, state: FSMContext):
         "INSERT INTO rooms(room_code,room_type,owner_id,max_needs) VALUES(?,?,?,?)",
         (await get_next_room_code("standard"), "standard", call.from_user.id, 25)
     )
+    first = True
     for item in items:
         nid = await db_insert(
             "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -734,6 +802,9 @@ async def step_confirm(call: CallbackQuery, state: FSMContext):
         mid = await post_to_channel(dict(nd), dict(owner))
         if mid:
             await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, nid))
+        if first:
+            asyncio.create_task(notify_sellers(dict(nd), dict(owner)))
+            first = False
     await state.clear()
     await call.message.edit_text(
         f"✅ *{len(items)} ta ehtiyoj joylashtirildi!*\n\n"
@@ -1158,58 +1229,114 @@ async def my_offers_seller(msg: Message):
         st = {"pending":"⏳","accepted":"✅","rejected":"❌"}.get(o["status"],"📤")
         await msg.answer(f"{st} *{o['np']}* — {o['price']:,.0f} so'm, {o['delivery_hours']}s")
 
+# ── TAKLIF BERISH HELPER ──────────────────────────────────
+async def _start_offer_flow(msg_or_obj, state: FSMContext, nid: int):
+    """Deep link yoki tugmadan kelib taklif flow boshlash"""
+    uid = msg_or_obj.from_user.id
+    nd  = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+    if not nd or nd["status"] != "active":
+        if hasattr(msg_or_obj, "answer"):
+            await msg_or_obj.answer("⚠️ Bu ehtiyoj allaqachon yopilgan yoki topilmadi.")
+        return
+    exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
+    if exists:
+        if hasattr(msg_or_obj, "answer"):
+            await msg_or_obj.answer("⚠️ Bu ehtiyojga allaqachon taklif yubordingiz!")
+        return
+    await state.update_data(need_id=nid, need_unit=nd["unit"],
+                            need_name=nd["product_name"], batch_id=nd["batch_id"])
+    await state.set_state(OfferState.price)
+    txt = (
+        f"📦 *Buyurtma:*\n"
+        f"🦷 {nd['product_name']}\n"
+        f"📦 {nd['quantity']} {nd['unit']}\n\n"
+        f"💰 Narxingiz? _(1 {nd['unit']} uchun, so'mda)_"
+    )
+    if hasattr(msg_or_obj, "answer"):
+        await msg_or_obj.answer(txt, reply_markup=ReplyKeyboardRemove())
+    else:
+        await msg_or_obj.message.answer(txt, reply_markup=ReplyKeyboardRemove())
+
 @router.callback_query(F.data.startswith("make_offer_"))
 async def make_offer_start(call: CallbackQuery, state: FSMContext):
     parts = call.data.split("_")
-    nid, unit = int(parts[2]), parts[3]
-    exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?",
-                          (nid, call.from_user.id))
-    if exists: await call.answer("⚠️ Bu ehtiyojga taklif yubordingiz!", show_alert=True); return
-    nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
-    await state.update_data(need_id=nid, need_unit=unit, need_name=nd["product_name"],
-                            batch_id=nd["batch_id"])
-    await state.set_state(OfferState.price)
-    await call.message.answer(
-        f"💰 *{nd['product_name']}* uchun narx?\n_(1 {unit} uchun, so'mda)_"
-    )
+    nid   = int(parts[2])
+    await _start_offer_flow(call, state, nid)
     await call.answer()
+
+@router.callback_query(F.data=="seller_skip")
+async def seller_skip(call: CallbackQuery):
+    """Sotuvchi 'Keyinroq' bosdi — xabarni o'chiradi"""
+    try: await call.message.delete()
+    except: pass
+    await call.answer("Keyinroq ko'rasiz")
 
 @router.message(OfferState.price)
 async def offer_price(msg: Message, state: FSMContext):
     try:
         price = float(msg.text.replace(" ","").replace(",",""))
         await state.update_data(price=price)
-        await state.set_state(OfferState.delivery)
-        await msg.answer("🚚 Yetkazib berish muddati:",
-                         reply_markup=ik(ib("⚡️ 2 soat","del_2"), ib("🕐 24 soat","del_24"),
-                                         ib("📅 2 kun","del_48"), ib("🗓 1 hafta","del_168")))
-    except: await msg.answer("❌ Faqat raqam!")
+        await state.set_state(OfferState.note)
+        await msg.answer(
+            f"📝 Izoh? _(ixtiyoriy: mavjudlik, sifat, brend...)_",
+            reply_markup=ik(ib("⏭ Izohsiz yuborish","offer_no_note"))
+        )
+    except:
+        await msg.answer("❌ Faqat raqam kiriting!\n_Masalan: 285000_")
 
-@router.callback_query(F.data.startswith("del_"), OfferState.delivery)
-async def offer_delivery(call: CallbackQuery, state: FSMContext):
-    hours = int(call.data[4:])
-    d     = await state.get_data()
-    u     = await get_user(call.from_user.id)
+@router.callback_query(F.data=="offer_no_note", OfferState.note)
+async def offer_note_skip(call: CallbackQuery, state: FSMContext):
+    await _save_offer(call, state, note=None)
+    await call.answer()
+
+@router.message(OfferState.note)
+async def offer_note_text(msg: Message, state: FSMContext):
+    await _save_offer(msg, state, note=msg.text)
+
+async def _save_offer(obj, state: FSMContext, note):
+    """Taklifni saqlash va klinikaga xabar"""
+    if hasattr(obj, "from_user"):
+        uid = obj.from_user.id
+    else:
+        uid = obj.message.from_user.id
+
+    d = await state.get_data()
+    u = await get_user(uid)
+
     await db_insert(
-        "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours) VALUES(?,?,?,?,?,?,?)",
-        (d["need_id"], d.get("batch_id"), call.from_user.id, d["need_name"], d["price"], d["need_unit"], hours)
+        "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) VALUES(?,?,?,?,?,?,?,?)",
+        (d["need_id"], d.get("batch_id"), uid, d["need_name"], d["price"], d["need_unit"], 24, note)
     )
+
     # Klinikaga xabar
-    nd = await db_get("SELECT n.*,u2.id cid FROM needs n JOIN users u2 ON n.owner_id=u2.id WHERE n.id=?",
-                      (d["need_id"],))
-    shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (call.from_user.id,))
-    sname= shop["shop_name"] if shop else (u["clinic_name"] or u["full_name"] or "Sotuvchi")
+    nd    = await db_get("SELECT n.*,u2.id cid FROM needs n JOIN users u2 ON n.owner_id=u2.id WHERE n.id=?",
+                         (d["need_id"],))
+    shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (uid,))
+    sname = shop["shop_name"] if shop else (u["clinic_name"] or u["full_name"] or "Sotuvchi")
+    note_txt = f"\n📝 _{note}_" if note else ""
     try:
         await bot.send_message(nd["cid"],
             f"📩 *Yangi taklif!*\n\n"
-            f"🦷 {d['need_name']}\n💰 {d['price']:,.0f} so'm/{d['need_unit']}\n"
-            f"🚚 {hours} soat | 🏪 {sname}",
-            reply_markup=ik(ib("📊 Jadval ko'rish", f"tbl_{d.get('batch_id','0')}"))
+            f"🦷 {d['need_name']}\n"
+            f"💰 *{d['price']:,.0f} so'm*/{d['need_unit']}\n"
+            f"🏪 {sname}{note_txt}",
+            reply_markup=ik(ib("📊 Jadval ko'rish", f"tbl_{d.get('batch_id') or 0}"))
         )
-    except Exception as e: log.error(e)
+    except Exception as e:
+        log.error(f"Klinikaga xabar xato: {e}")
+
     await state.clear()
-    await call.message.answer("✅ Taklif yuborildi!")
-    await call.answer("✅")
+    confirm_txt = (
+        f"✅ *Taklif yuborildi!*\n\n"
+        f"🦷 {d['need_name']}\n"
+        f"💰 {d['price']:,.0f} so'm/{d['need_unit']}"
+    )
+    if note:
+        confirm_txt += f"\n📝 {note}"
+    if hasattr(obj, "answer"):
+        await obj.answer(confirm_txt)
+    else:
+        await obj.message.answer(confirm_txt)
 
 # ── DO'KON ─────────────────────────────────────────────────
 @router.message(F.text == "🏪 Do'konim")
