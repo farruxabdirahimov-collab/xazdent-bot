@@ -26,9 +26,17 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 BOT_TOKEN  = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID", "@xazdent")
+_CHANNEL_RAW = os.getenv("CHANNEL_ID", "@xazdent")
+# @ bo'lsa saqlaydi, raqam bo'lsa ham ishlaydi
+CHANNEL_ID = _CHANNEL_RAW if _CHANNEL_RAW.startswith("-") else (
+    "@" + _CHANNEL_RAW.lstrip("@")
+)
 ADMIN_IDS  = [int(x) for x in os.getenv("ADMIN_IDS","").split(",") if x.strip()]
 CARD_NUM   = "9860020138100068"
+
+# Papka yo'li — main.py qayerda bo'lsa webapp ham shu yerda
+BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
+WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp  = Dispatcher(storage=MemoryStorage())
@@ -185,9 +193,11 @@ async def post_to_channel(need: dict, owner: dict):
         ])
     try:
         m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
+        log.info(f"Kanal post: msg_id={m.message_id}, need={need['id']}")
         return m.message_id
     except Exception as e:
-        log.error(f"Kanal xato: {e}"); return None
+        log.error(f"Kanal xato (CHANNEL_ID={CHANNEL_ID!r}): {e}")
+        return None
 
 async def notify_sellers(need: dict, owner: dict):
     """Barcha aktiv sotuvchilarga lichkada xabar yuborish"""
@@ -1693,15 +1703,24 @@ async def handle_offer_page(request):
     batch_id = request.match_info.get("batch_id","")
     path = os.path.join(BASE_DIR, "webapp", "offer.html")
     if not os.path.exists(path):
-        return aiohttp_web.Response(text="offer.html topilmadi", status=404)
+        log.error(f"offer.html topilmadi: {path}")
+        return aiohttp_web.Response(text="<h2>offer.html topilmadi</h2><p>"+path+"</p>",
+                                    content_type="text/html", status=404)
     with open(path,"r",encoding="utf-8") as f:
         html = f.read()
-    # batch_id va clinic nomini URL params orqali uzatiladi
+    # batch_id va query string ni inject qilamiz
+    qs = request.rel_url.query_string
+    if batch_id and "batch=" not in qs:
+        qs = f"batch={batch_id}&{qs}" if qs else f"batch={batch_id}"
     html = html.replace(
         "const params=new URLSearchParams(window.location.search);",
-        f"const params=new URLSearchParams('{request.rel_url.query_string}');"
+        f"const params=new URLSearchParams({repr(qs)});"
     )
     return aiohttp_web.Response(text=html, content_type="text/html", charset="utf-8")
+
+async def handle_offer_root(request):
+    """Agar batch_id bo'lmasa — asosiy offer sahifasi"""
+    return await handle_offer_page(request)
 
 async def handle_api_needs(request):
     """Offer page uchun needs ma'lumotlari JSON formatda"""
@@ -1732,13 +1751,10 @@ async def handle_webapp_data(request):
     # Bu endpoint faqat test uchun — asosiy ma'lumot tg.sendData() orqali keladi
     return aiohttp_web.Response(text="ok")
 
-# Papka yo'li — main.py qayerda bo'lsa, webapp ham shu yerda
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
-
 async def start_webserver():
     app = aiohttp_web.Application()
     app.router.add_get("/order", handle_order_page)
+    app.router.add_get("/offer", handle_offer_root)
     app.router.add_get("/offer/{batch_id}", handle_offer_page)
     app.router.add_get("/api/needs/{batch_id}", handle_api_needs)
     # Static faqat papka mavjud bo'lsa qo'shamiz
