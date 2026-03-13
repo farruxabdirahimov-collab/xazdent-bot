@@ -1624,13 +1624,18 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "")   # Railway URL: https://yourapp.railwa
 
 async def handle_order_page(request):
     """Xaridor mini app sahifasi"""
-    return aiohttp_web.FileResponse("webapp/order.html")
+    path = os.path.join(BASE_DIR, "webapp", "order.html")
+    if not os.path.exists(path):
+        return aiohttp_web.Response(text="order.html topilmadi", status=404)
+    return aiohttp_web.FileResponse(path)
 
 async def handle_offer_page(request):
     """Sotuvchi mini app sahifasi — batch_id URL dan olinadi"""
     batch_id = request.match_info.get("batch_id","")
-    # HTML ni o'qib batch_id ni inject qilamiz
-    with open("webapp/offer.html","r",encoding="utf-8") as f:
+    path = os.path.join(BASE_DIR, "webapp", "offer.html")
+    if not os.path.exists(path):
+        return aiohttp_web.Response(text="offer.html topilmadi", status=404)
+    with open(path,"r",encoding="utf-8") as f:
         html = f.read()
     # batch_id va clinic nomini URL params orqali uzatiladi
     html = html.replace(
@@ -1668,12 +1673,21 @@ async def handle_webapp_data(request):
     # Bu endpoint faqat test uchun — asosiy ma'lumot tg.sendData() orqali keladi
     return aiohttp_web.Response(text="ok")
 
+# Papka yo'li — main.py qayerda bo'lsa, webapp ham shu yerda
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
+
 async def start_webserver():
     app = aiohttp_web.Application()
     app.router.add_get("/order", handle_order_page)
     app.router.add_get("/offer/{batch_id}", handle_offer_page)
     app.router.add_get("/api/needs/{batch_id}", handle_api_needs)
-    app.router.add_static("/static", "webapp")
+    # Static faqat papka mavjud bo'lsa qo'shamiz
+    if os.path.isdir(WEBAPP_DIR):
+        app.router.add_static("/static", WEBAPP_DIR)
+        log.info(f"📁 webapp papka topildi: {WEBAPP_DIR}")
+    else:
+        log.warning(f"⚠️ webapp papka yo'q: {WEBAPP_DIR}")
     runner = aiohttp_web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 8080))
