@@ -26,11 +26,13 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 BOT_TOKEN  = os.getenv("BOT_TOKEN")
-_CHANNEL_RAW = os.getenv("CHANNEL_ID", "@xazdent")
-# @ bo'lsa saqlaydi, raqam bo'lsa ham ishlaydi
-CHANNEL_ID = _CHANNEL_RAW if _CHANNEL_RAW.startswith("-") else (
-    "@" + _CHANNEL_RAW.lstrip("@")
-)
+_CHANNEL_RAW = os.getenv("CHANNEL_ID", "@xazdent").strip()
+# Raqam bo'lsa int ga o'tkazamiz (Telegram shuni talab qiladi ba'zan)
+# Public kanal @ bilan, private -100xxx raqam bilan
+if _CHANNEL_RAW.lstrip("-").isdigit():
+    CHANNEL_ID = int(_CHANNEL_RAW)   # raqamli ID → int
+else:
+    CHANNEL_ID = "@" + _CHANNEL_RAW.lstrip("@")  # @ bilan
 ADMIN_IDS  = [int(x) for x in os.getenv("ADMIN_IDS","").split(",") if x.strip()]
 CARD_NUM   = "9860020138100068"
 
@@ -1589,6 +1591,24 @@ async def adm_set(call: CallbackQuery):
         f"`/setball 2000` | `/setelon 0.5`"
     )
     await call.answer()
+
+@router.message(Command("testchannel"))
+async def test_channel(msg: Message):
+    """Admin uchun kanal test buyrug'i"""
+    if msg.from_user.id not in ADMIN_IDS: return
+    await msg.answer(f"🔍 Tekshirilmoqda...\nCHANNEL_ID = `{CHANNEL_ID}`")
+    try:
+        m = await bot.send_message(CHANNEL_ID,
+            "✅ *Test xabari* — kanal ishlayapti!\n_Bu xabarni o'chirishingiz mumkin._")
+        await msg.answer(f"✅ Kanal ishlayapti!\nmsg_id = `{m.message_id}`")
+    except Exception as e:
+        await msg.answer(
+            f"❌ *Kanal xato:*\n`{e}`\n\n"
+            f"*Yechim:*\n"
+            f"• Public kanal: `@kanalusername` yozing\n"
+            f"• Private kanal: to\'g\'ri `-100xxx` raqam\n"
+            f"• Bot admin ekanini tekshiring"
+        )
 
 @router.message(Command("setball"))
 async def set_ball(msg: Message):
