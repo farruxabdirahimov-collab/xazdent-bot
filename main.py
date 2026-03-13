@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import (
     Message, CallbackQuery,
-    InlineKeyboardMarkup, InlineKeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo,
     ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
     BufferedInputFile
 )
@@ -16,6 +16,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from database import (init_db, get_user, db_run, db_get, db_all, db_insert,
                       get_setting, update_setting, add_balance, get_next_room_code)
+from aiohttp import web as aiohttp_web
+import json
 from texts import t, REGIONS, REGIONS_RU
 from version import VERSION, BREAKING, CHANGELOG, HYPE_MESSAGES
 
@@ -165,11 +167,22 @@ async def post_to_channel(need: dict, owner: dict):
         f"{tags}"
     )
     # Deep link: t.me/BotUsername?start=offer_NEEDID
-    bot_info = await bot.get_me()
-    deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💬 Taklif berish", url=deep_link)]
-    ])
+    webapp_url = os.getenv("WEBAPP_URL","")
+    batch_id   = need.get("batch_id","")
+    clinic_enc = (owner.get("clinic_name","") or owner.get("full_name","") or "Klinika").replace(" ","+")
+    if webapp_url:
+        # Mini App URL — to'g'ridan forma ochiladi
+        offer_url = f"{webapp_url}/offer/{batch_id}?clinic={clinic_enc}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 Taklif berish →", web_app=WebAppInfo(url=offer_url))]
+        ])
+    else:
+        # Fallback: bot deep link
+        bot_info  = await bot.get_me()
+        deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Taklif berish", url=deep_link)]
+        ])
     try:
         m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
         return m.message_id
@@ -1606,11 +1619,186 @@ async def broadcast_update():
         except: pass
 
 
+# ── WEB SERVER (Mini App uchun) ──────────────────────────
+WEBAPP_URL = os.getenv("WEBAPP_URL", "")   # Railway URL: https://yourapp.railway.app
+
+async def handle_order_page(request):
+    """Xaridor mini app sahifasi"""
+    return aiohttp_web.FileResponse("webapp/order.html")
+
+async def handle_offer_page(request):
+    """Sotuvchi mini app sahifasi — batch_id URL dan olinadi"""
+    batch_id = request.match_info.get("batch_id","")
+    # HTML ni o'qib batch_id ni inject qilamiz
+    with open("webapp/offer.html","r",encoding="utf-8") as f:
+        html = f.read()
+    # batch_id va clinic nomini URL params orqali uzatiladi
+    html = html.replace(
+        "const params=new URLSearchParams(window.location.search);",
+        f"const params=new URLSearchParams('{request.rel_url.query_string}');"
+    )
+    return aiohttp_web.Response(text=html, content_type="text/html", charset="utf-8")
+
+async def handle_api_needs(request):
+    """Offer page uchun needs ma'lumotlari JSON formatda"""
+    batch_id = request.match_info.get("batch_id","0")
+    needs = await db_all(
+        "SELECT id,product_name,quantity,unit FROM needs WHERE batch_id=? AND status='active' ORDER BY id",
+        (batch_id,)
+    )
+    clinic = None
+    if needs:
+        owner = await db_get("SELECT clinic_name,full_name FROM users WHERE id="
+                             "(SELECT owner_id FROM batches WHERE id=?)", (batch_id,))
+        if owner:
+            clinic = owner["clinic_name"] or owner["full_name"] or "Klinika"
+    data = {
+        "batch_id": batch_id,
+        "clinic": clinic or "Klinika",
+        "needs": [{"id":n["id"],"name":n["product_name"],
+                   "qty":n["quantity"],"unit":n["unit"]} for n in needs]
+    }
+    return aiohttp_web.Response(
+        text=json.dumps(data, ensure_ascii=False),
+        content_type="application/json"
+    )
+
+async def handle_webapp_data(request):
+    """Mini App dan kelgan ma'lumotlarni qabul qilish"""
+    # Bu endpoint faqat test uchun — asosiy ma'lumot tg.sendData() orqali keladi
+    return aiohttp_web.Response(text="ok")
+
+async def start_webserver():
+    app = aiohttp_web.Application()
+    app.router.add_get("/order", handle_order_page)
+    app.router.add_get("/offer/{batch_id}", handle_offer_page)
+    app.router.add_get("/api/needs/{batch_id}", handle_api_needs)
+    app.router.add_static("/static", "webapp")
+    runner = aiohttp_web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = aiohttp_web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    log.info(f"🌐 Web server: http://0.0.0.0:{port}")
+
+# ── WEBAPP_DATA handler (tg.sendData() dan) ──────────────
+@router.message(F.web_app_data)
+async def handle_miniapp_data(msg: Message, state: FSMContext):
+    """Mini App dan kelgan JSON ma'lumotlarni qayta ishlash"""
+    try:
+        data = json.loads(msg.web_app_data.data)
+    except:
+        await msg.answer("❌ Ma'lumot xato formatda.")
+        return
+
+    action = data.get("action")
+    u = await get_user(msg.from_user.id)
+
+    if action == "new_order":
+        # Xaridor buyurtma yubordi
+        items   = data.get("items", [])
+        dl      = data.get("deadline_hours", 24)
+        expires = (datetime.now()+timedelta(hours=dl)).isoformat()
+
+        if not items:
+            await msg.answer("❌ Mahsulot tanlanmagan."); return
+
+        batch_id = await db_insert(
+            "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+            (msg.from_user.id, dl, expires)
+        )
+        room = await db_get("SELECT * FROM rooms WHERE owner_id=? AND status='active' LIMIT 1",
+                            (msg.from_user.id,))
+        room_id = room["id"] if room else await db_insert(
+            "INSERT INTO rooms(room_code,room_type,owner_id,max_needs) VALUES(?,?,?,?)",
+            (await get_next_room_code("standard"), "standard", msg.from_user.id, 25)
+        )
+        count = 0
+        for item in items:
+            nid = await db_insert(
+                "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (batch_id, room_id, msg.from_user.id, item["name"],
+                 item["qty"], item["unit"], dl, expires)
+            )
+            nd  = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+            mid = await post_to_channel(dict(nd), dict(u))
+            if mid:
+                await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, nid))
+            if count == 0:
+                asyncio.create_task(notify_sellers(dict(nd), dict(u)))
+            count += 1
+
+        dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+        await msg.answer(
+            f"✅ *{count} ta ehtiyoj joylashtirildi!*\n\n"
+            f"📦 To'plam #{batch_id} | ⏱ {dl_map.get(dl,str(dl)+' soat')}\n\n"
+            f"Sotuvchilar taklif yuboradi.\n"
+            f"📊 *Jadval & Takliflar* tugmasida solishtiring!",
+            reply_markup=kb_main_clinic()
+        )
+
+    elif action == "new_offer":
+        # Sotuvchi taklif yubordi
+        batch_id = data.get("batch_id")
+        offers   = data.get("offers", [])
+        shop     = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (msg.from_user.id,))
+        sname    = shop["shop_name"] if shop else (u["clinic_name"] or u["full_name"] or "Sotuvchi")
+        
+        saved = 0
+        notified_clinic = False
+        for o in offers:
+            if o.get("no_stock"):
+                continue  # mavjud emas — saqlamaymiz
+            price = o.get("price")
+            if not price:
+                continue
+            nd = await db_get("SELECT * FROM needs WHERE id=?", (o["need_id"],))
+            if not nd:
+                continue
+            exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?",
+                                  (o["need_id"], msg.from_user.id))
+            if exists:
+                continue
+            await db_insert(
+                "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (o["need_id"], batch_id, msg.from_user.id, o["name"],
+                 price, o["unit"], 24, o.get("note"))
+            )
+            saved += 1
+            # Klinikaga bir marta xabar
+            if not notified_clinic:
+                owner_row = await db_get("SELECT owner_id FROM batches WHERE id=?", (batch_id,))
+                if owner_row:
+                    try:
+                        await bot.send_message(owner_row["owner_id"],
+                            f"📩 *Yangi taklif!*\n\n"
+                            f"🏪 {sname}\n"
+                            f"📦 {saved} ta mahsulotga narx yuborildi",
+                            reply_markup=ik(ib("📊 Jadval ko'rish", f"tbl_{batch_id}"))
+                        )
+                        notified_clinic = True
+                    except Exception as e:
+                        log.error(e)
+
+        if saved:
+            await msg.answer(
+                f"✅ *{saved} ta taklif yuborildi!*\n\n"
+                f"Klinika qabul qilgach siz bilan bog'lanadi.",
+                reply_markup=kb_main_seller()
+            )
+        else:
+            await msg.answer("⚠️ Hech narsa saqlanmadi. Narx kiritilmagan yoki taklif allaqachon yuborilgan.")
+
 # ── MAIN ──────────────────────────────────────────────────
 async def main():
     await init_db()
     dp.include_router(router)
     log.info("🦷 XAZDENT Bot ishga tushdi!")
+
+    # Web server Mini App uchun
+    await start_webserver()
 
     # Deploy xabari — version.py da BREAKING=True bo'lsa yuboradi
     asyncio.create_task(broadcast_update())
