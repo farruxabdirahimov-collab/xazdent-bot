@@ -196,12 +196,26 @@ async def notify_sellers(need: dict, owner: dict):
         "WHERE u.role='seller' AND u.id != ? AND u.is_blocked=0",
         (need["owner_id"],)
     )
-    bot_info = await bot.get_me()
-    deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Taklif berish", url=deep_link)],
-        [InlineKeyboardButton(text="❌ Keyinroq", callback_data="seller_skip")]
-    ])
+    webapp_url = os.getenv("WEBAPP_URL","")
+    batch_id   = need.get("batch_id","")
+    clinic_enc = (owner.get("clinic_name","") or owner.get("full_name","") or "Klinika").replace(" ","+")
+
+    if webapp_url and batch_id:
+        # Mini App mavjud — to'g'ridan forma ochiladi
+        offer_url = f"{webapp_url}/offer/{batch_id}?clinic={clinic_enc}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 Narx kiriting →", web_app=WebAppInfo(url=offer_url))],
+            [InlineKeyboardButton(text="❌ Keyinroq", callback_data="seller_skip")]
+        ])
+    else:
+        # Fallback — bot deep link
+        bot_info  = await bot.get_me()
+        deep_link = f"https://t.me/{bot_info.username}?start=offer_{need['id']}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Taklif berish", url=deep_link)],
+            [InlineKeyboardButton(text="❌ Keyinroq", callback_data="seller_skip")]
+        ])
+
     txt = (
         f"📦 *Yangi buyurtma!*\n\n"
         f"🦷 {need['product_name']}\n"
@@ -214,7 +228,7 @@ async def notify_sellers(need: dict, owner: dict):
         try:
             await bot.send_message(s["id"], txt, reply_markup=kb)
             sent += 1
-            await asyncio.sleep(0.05)  # flood limit
+            await asyncio.sleep(0.05)
         except Exception as e:
             log.debug(f"Seller {s['id']} ga yuborib bolmadi: {e}")
     log.info(f"Notify: {sent}/{len(sellers)} sotuvchiga yuborildi")
@@ -1246,30 +1260,60 @@ async def my_offers_seller(msg: Message):
 # ── TAKLIF BERISH HELPER ──────────────────────────────────
 async def _start_offer_flow(msg_or_obj, state: FSMContext, nid: int):
     """Deep link yoki tugmadan kelib taklif flow boshlash"""
-    uid = msg_or_obj.from_user.id
+    uid = msg_or_obj.from_user.id if hasattr(msg_or_obj,"from_user") else msg_or_obj.message.from_user.id
     nd  = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
     if not nd or nd["status"] != "active":
-        if hasattr(msg_or_obj, "answer"):
-            await msg_or_obj.answer("⚠️ Bu ehtiyoj allaqachon yopilgan yoki topilmadi.")
+        txt = "⚠️ Bu ehtiyoj allaqachon yopilgan yoki topilmadi."
+        if hasattr(msg_or_obj,"answer"): await msg_or_obj.answer(txt)
+        else: await msg_or_obj.message.answer(txt)
         return
+
+    batch_id  = nd["batch_id"]
+    webapp_url= os.getenv("WEBAPP_URL","")
+
+    # Mini App mavjud bo'lsa — to'g'ridan ochiladi
+    if webapp_url and batch_id:
+        owner     = await db_get("SELECT clinic_name,full_name FROM users WHERE id=?", (nd["owner_id"],))
+        clinic    = (owner["clinic_name"] or owner["full_name"] or "Klinika").replace(" ","+") if owner else "Klinika"
+        offer_url = f"{webapp_url}/offer/{batch_id}?clinic={clinic}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💰 Narx kiriting →", web_app=WebAppInfo(url=offer_url))]
+        ])
+        # Batch dagi barcha ehtiyojlarni ko'rsatish
+        all_needs = await db_all("SELECT * FROM needs WHERE batch_id=? AND status='active' ORDER BY id", (batch_id,))
+        already   = {r["need_id"] for r in await db_all("SELECT need_id FROM offers WHERE batch_id=? AND seller_id=?", (batch_id, uid))}
+        preview   = "\n".join([
+            f"{'✅' if n['id'] in already else '🦷'} {n['product_name']} — {n['quantity']} {n['unit']}"
+            for n in all_needs
+        ])
+        txt = f"📦 *Buyurtma #{batch_id}*\n\n{preview}\n\nBarcha narxlarni bir joyda kiriting:"
+        if hasattr(msg_or_obj,"answer"):
+            await msg_or_obj.answer(txt, reply_markup=kb)
+        else:
+            await msg_or_obj.message.answer(txt, reply_markup=kb)
+        return
+
+    # Fallback — alohida narx so'rash (bot ichida sodda)
     exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
     if exists:
-        if hasattr(msg_or_obj, "answer"):
-            await msg_or_obj.answer("⚠️ Bu ehtiyojga allaqachon taklif yubordingiz!")
+        txt = "⚠️ Bu ehtiyojga allaqachon taklif yubordingiz!"
+        if hasattr(msg_or_obj,"answer"): await msg_or_obj.answer(txt)
+        else: await msg_or_obj.message.answer(txt)
         return
     await state.update_data(need_id=nid, need_unit=nd["unit"],
-                            need_name=nd["product_name"], batch_id=nd["batch_id"])
+                            need_name=nd["product_name"], batch_id=batch_id)
     await state.set_state(OfferState.price)
     txt = (
-        f"📦 *Buyurtma:*\n"
-        f"🦷 {nd['product_name']}\n"
-        f"📦 {nd['quantity']} {nd['unit']}\n\n"
-        f"💰 Narxingiz? _(1 {nd['unit']} uchun, so'mda)_"
+        f"📦 *{nd['product_name']}* — {nd['quantity']} {nd['unit']}\n\n"
+        f"💰 Narxingiz? _(so'mda)_"
     )
-    if hasattr(msg_or_obj, "answer"):
-        await msg_or_obj.answer(txt, reply_markup=ReplyKeyboardRemove())
+    quick = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Mavjud emas", callback_data=f"no_stock_{nid}")]
+    ])
+    if hasattr(msg_or_obj,"answer"):
+        await msg_or_obj.answer(txt, reply_markup=quick)
     else:
-        await msg_or_obj.message.answer(txt, reply_markup=ReplyKeyboardRemove())
+        await msg_or_obj.message.answer(txt, reply_markup=quick)
 
 @router.callback_query(F.data.startswith("make_offer_"))
 async def make_offer_start(call: CallbackQuery, state: FSMContext):
@@ -1280,10 +1324,25 @@ async def make_offer_start(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data=="seller_skip")
 async def seller_skip(call: CallbackQuery):
-    """Sotuvchi 'Keyinroq' bosdi — xabarni o'chiradi"""
     try: await call.message.delete()
     except: pass
     await call.answer("Keyinroq ko'rasiz")
+
+@router.callback_query(F.data.startswith("no_stock_"))
+async def no_stock_handler(call: CallbackQuery, state: FSMContext):
+    """Sotuvchi mahsulot mavjud emas dedi"""
+    nid = int(call.data[9:])
+    nd  = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+    if nd:
+        # Mavjud emas deb saqlaymiz (price=0, note=mavjud_emas)
+        await db_insert(
+            "INSERT OR IGNORE INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (nid, nd["batch_id"], call.from_user.id, nd["product_name"], 0, nd["unit"], 24, "mavjud_emas")
+        )
+    await state.clear()
+    await call.message.edit_text("❌ *Mavjud emas* deb belgilandi. Rahmat!")
+    await call.answer()
 
 @router.message(OfferState.price)
 async def offer_price(msg: Message, state: FSMContext):
