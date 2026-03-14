@@ -17,6 +17,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
+import json as _json
+import aiohttp.web as _web
 from database import (
     init_db, get_user, db_run, db_get, db_all, db_insert,
     get_setting, update_setting, add_balance,
@@ -50,6 +52,10 @@ class NeedState(StatesGroup):
     qty      = State()
     deadline = State()
 
+class BulkState(StatesGroup):
+    items    = State()   # Mahsulotlar ro'yxati (list of dicts)
+    deadline = State()
+
 class TopupState(StatesGroup):
     amount  = State()
     receipt = State()
@@ -61,6 +67,9 @@ class OfferState(StatesGroup):
 class ShopState(StatesGroup):
     cat  = State()
     name = State()
+
+class MyProductsState(StatesGroup):
+    editing = State()   # ro'yxat tahrirlash
 
 # ── KEYBOARDS ─────────────────────────────────────────────────────────────────
 def ik(*rows):
@@ -86,7 +95,7 @@ def kb_clinic(lg):
     return rk(
         [KeyboardButton(text="📋 Ehtiyojlarim"), KeyboardButton(text="✏️ Ehtiyoj yozish")],
         [KeyboardButton(text="📩 Takliflar"),     KeyboardButton(text="💰 Hisobim")],
-        [KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📦 Mahsulotlarim"), KeyboardButton(text="⚙️ Profil")],
     )
 
 def kb_seller(lg):
@@ -367,11 +376,46 @@ async def need_start(msg: Message, state: FSMContext):
             reply_markup=ik([ib("✏️ Profilni to'ldirish", "edit_profile")]),
         )
         return
-    await state.set_state(NeedState.product)
     await msg.answer(
-        "🦷 *Nima kerak?*\n\n_Masalan: Xarizma plomba A2, GC Fuji IX, Endomotor_",
+        "📋 *Ehtiyoj yozish*\n\nQancha mahsulot kerak?",
+        reply_markup=ik(
+            [ib("1️⃣ 1 ta mahsulot", "need_single")],
+            [ib("📋 Ko'p mahsulot (Mini App)", "need_bulk")],
+        ),
+    )
+
+@router.callback_query(F.data == "need_single")
+async def need_single(call: CallbackQuery, state: FSMContext):
+    await state.set_state(NeedState.product)
+    await call.message.answer(
+        "🦷 *Nima kerak?*\n\n_Masalan: Xarizma plomba A2_",
         reply_markup=ReplyKeyboardRemove(),
     )
+    await call.answer()
+
+@router.callback_query(F.data == "need_bulk")
+async def need_bulk(call: CallbackQuery, state: FSMContext):
+    webapp_url = WEBAPP_URL
+    if not webapp_url:
+        # WEBAPP_URL yo'q — matn orqali kiritish
+        await state.set_state(BulkState.items)
+        await call.message.answer(
+            "📋 *Ko'p mahsulot*\n\n"
+            "Har bir mahsulotni yangi qatorda yozing:\n\n"
+            "```\n5 dona Xarizma A2\n2 kg GC Fuji IX\n1 dona Endomotor\n```\n\n"
+            "_Format: miqdor + birlik + nom_",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    else:
+        uid  = call.from_user.id
+        u    = await get_user(uid)
+        name = (u["clinic_name"] or u["full_name"] or "Klinika").replace(" ", "+")
+        url  = f"{webapp_url}/order?clinic={name}&uid={uid}"
+        await call.message.answer(
+            "📋 *Ko'p mahsulot buyurtmasi*\n\nQuyidagi tugmani bosing:",
+            reply_markup=ik([ib("📋 Buyurtma yaratish →", web_app=WebAppInfo(url=url))]),
+        )
+    await call.answer()
 
 @router.message(NeedState.product)
 async def need_product(msg: Message, state: FSMContext):
@@ -482,6 +526,138 @@ async def need_confirm(call: CallbackQuery, state: FSMContext):
     # Sotuvchilarga xabar (fon da)
     asyncio.create_task(notify_sellers(need_id, dict(need), dict(u)))
 
+# ── BULK (matn orqali, WEBAPP_URL yo'q bo'lsa) ──────────────────────────────
+@router.message(BulkState.items)
+async def bulk_items(msg: Message, state: FSMContext):
+    lines  = [l.strip() for l in msg.text.strip().split("\n") if l.strip()]
+    parsed = []
+    errors = []
+    for line in lines:
+        parts = line.split(None, 2)
+        if len(parts) >= 3:
+            try:
+                qty  = float(parts[0].replace(",", "."))
+                unit = parts[1]
+                name = parts[2]
+                parsed.append({"qty": qty, "unit": unit, "name": name})
+            except Exception:
+                errors.append(line)
+        elif len(parts) == 2:
+            try:
+                qty  = float(parts[0].replace(",", "."))
+                name = parts[1]
+                parsed.append({"qty": qty, "unit": "dona", "name": name})
+            except Exception:
+                errors.append(line)
+        else:
+            errors.append(line)
+    if not parsed:
+        await msg.answer("❌ Format xato. Masalan:\n`5 dona Xarizma A2`")
+        return
+    await state.update_data(bulk_items=parsed)
+    await state.set_state(BulkState.deadline)
+    preview = "\n".join([f"• {p['qty']} {p['unit']} — {p['name']}" for p in parsed])
+    err_txt = f"\n\n⚠️ Qabul qilinmadi: {', '.join(errors)}" if errors else ""
+    await msg.answer(
+        f"📋 *{len(parsed)} ta mahsulot:*\n\n{preview}{err_txt}\n\n⏱ Qachongacha kerak?",
+        reply_markup=kb_deadline(),
+    )
+
+@router.callback_query(F.data.startswith("dl_"), BulkState.deadline)
+async def bulk_deadline(call: CallbackQuery, state: FSMContext):
+    dl = int(call.data[3:])
+    await state.update_data(deadline=dl)
+    d     = await state.get_data()
+    items = d["bulk_items"]
+    dl_map = {2: "2 soat", 24: "24 soat", 72: "3 kun", 168: "1 hafta"}
+    preview = "\n".join([f"• {p['qty']} {p['unit']} — {p['name']}" for p in items])
+    await call.message.answer(
+        f"✅ *Tasdiqlang:*\n\n{preview}\n\n⏱ {dl_map.get(dl, str(dl)+' soat')} ichida\n\n"
+        f"*{len(items)} ta e'lon joylashtiriladi*",
+        reply_markup=kb_confirm(),
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "confirm", BulkState.deadline)
+async def bulk_confirm(call: CallbackQuery, state: FSMContext):
+    d       = await state.get_data()
+    items   = d["bulk_items"]
+    uid     = call.from_user.id
+    u       = await get_user(uid)
+    room    = await get_or_create_room(uid)
+    expires = (datetime.now() + timedelta(hours=d["deadline"])).isoformat()
+
+    batch_id = await db_insert(
+        "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+        (uid, d["deadline"], expires),
+    )
+
+    count = 0
+    for item in items:
+        nid = await db_insert(
+            "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (batch_id, room["id"], uid, item["name"], item["qty"], item["unit"], d["deadline"], expires),
+        )
+        need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+        mid  = await post_to_channel(nid, dict(need))
+        if mid:
+            await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, nid))
+        count += 1
+
+    asyncio.create_task(notify_sellers_batch(batch_id, uid))
+    await state.clear()
+    await call.message.edit_text(
+        f"✅ *{count} ta e'lon joylashtirildi!*\n\n"
+        f"Sotuvchilar ko'rib chiqadi va taklif yuboradi.\n"
+        f"📋 *Takliflar* bo'limida ko'rasiz."
+    )
+    await call.answer("✅")
+
+async def notify_sellers_batch(batch_id: int, owner_id: int):
+    """Batch dagi barcha ehtiyojlar haqida sotuvchilarga xabar."""
+    needs   = await db_all("SELECT * FROM needs WHERE batch_id=?", (batch_id,))
+    owner   = await get_user(owner_id)
+    sellers = await db_all(
+        "SELECT id FROM users WHERE role='seller' AND id!=? AND is_blocked=0", (owner_id,)
+    )
+    if not needs or not sellers:
+        return
+
+    preview = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in needs[:5]])
+    if len(needs) > 5:
+        preview += f"\n• ...va yana {len(needs)-5} ta"
+
+    if WEBAPP_URL:
+        url = f"{WEBAPP_URL}/offer/{batch_id}"
+        kb  = ik(
+            [ib("💰 Narx kiriting →", web_app=WebAppInfo(url=url))],
+            [ib("⏭ Keyinroq", "skip_notify")],
+        )
+    else:
+        bot_info = await bot.get_me()
+        kb = ik(
+            [ib("📤 Taklif yuborish", url=f"https://t.me/{bot_info.username}?start=offer_{needs[0]['id']}")],
+            [ib("⏭ Keyinroq", "skip_notify")],
+        )
+
+    dl_map = {2: "2 soat", 24: "24 soat", 72: "3 kun", 168: "1 hafta"}
+    txt = (
+        f"📦 *{len(needs)} ta buyurtma!*\n\n"
+        f"{preview}\n\n"
+        f"📍 {owner['region'] or ''}\n"
+        f"⏱ {dl_map.get(needs[0]['deadline_hours'], '?')} ichida"
+    )
+    sent = 0
+    for s in sellers:
+        try:
+            await bot.send_message(s["id"], txt, reply_markup=kb)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass
+    log.info(f"Batch notify: {sent}/{len(sellers)} sotuvchiga")
+
 # ── EHTIYOJLARIM ─────────────────────────────────────────────────────────────
 @router.message(F.text == "📋 Ehtiyojlarim")
 async def my_needs(msg: Message):
@@ -520,6 +696,31 @@ async def my_needs(msg: Message):
 async def new_need_btn(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await need_start(call.message, state)
+
+@router.callback_query(F.data.startswith("view_batch_"))
+async def view_batch_offers(call: CallbackQuery):
+    batch_id = int(call.data[11:])
+    needs    = await db_all("SELECT * FROM needs WHERE batch_id=?", (batch_id,))
+    if not needs:
+        await call.answer("Bo'sh batch", show_alert=True)
+        return
+    txt  = f"📩 *Batch #{batch_id} takliflari*\n\n"
+    for n in needs:
+        offs = await db_all(
+            "SELECT o.*, u.clinic_name, u.full_name FROM offers o "
+            "JOIN users u ON o.seller_id=u.id "
+            "WHERE o.need_id=? ORDER BY o.price ASC LIMIT 3", (n["id"],)
+        )
+        txt += f"🦷 *{n['product_name']}*\n"
+        if offs:
+            for i, o in enumerate(offs, 1):
+                name = o["clinic_name"] or o["full_name"] or "Sotuvchi"
+                txt += f"  {i}. {name} — {o['price']:,.0f} so'm\n"
+        else:
+            txt += "  _Taklif kelmagan_\n"
+        txt += "\n"
+    await call.message.answer(txt)
+    await call.answer()
 
 @router.callback_query(F.data.startswith("view_offers_"))
 async def view_offers(call: CallbackQuery):
@@ -1108,6 +1309,198 @@ async def cb_cancel(call: CallbackQuery, state: FSMContext):
         pass
     await call.answer("Bekor qilindi")
 
+# ── WEB APP DATA (Mini App dan kelgan) ────────────────────────────────────────
+@router.message(F.web_app_data)
+async def web_app_data(msg: Message, state: FSMContext):
+    import json
+    try:
+        data = json.loads(msg.web_app_data.data)
+    except Exception:
+        await msg.answer("❌ Ma'lumot xato.")
+        return
+
+    if data.get("type") == "bulk_order":
+        items    = data.get("items", [])
+        deadline = int(data.get("deadline", 24))
+        uid      = msg.from_user.id
+        u        = await get_user(uid)
+
+        if not items:
+            await msg.answer("❌ Buyurtma bo'sh.")
+            return
+
+        room    = await get_or_create_room(uid)
+        expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
+
+        batch_id = await db_insert(
+            "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+            (uid, deadline, expires),
+        )
+
+        count = 0
+        for item in items:
+            nid = await db_insert(
+                "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (batch_id, room["id"], uid,
+                 item["name"], float(item["qty"]), item.get("unit", "dona"),
+                 deadline, expires),
+            )
+            need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+            mid  = await post_to_channel(nid, dict(need))
+            if mid:
+                await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, nid))
+            count += 1
+
+        dl_map   = {2: "2 soat", 24: "24 soat", 72: "3 kun", 168: "1 hafta"}
+        preview  = "\n".join([f"• {it['qty']} {it.get('unit','dona')} — {it['name']}" for it in items[:5]])
+        if len(items) > 5:
+            preview += f"\n• ...va yana {len(items)-5} ta"
+
+        chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
+        await msg.answer(
+            f"✅ *{count} ta e'lon joylashtirildi!*\n\n"
+            f"{preview}\n\n"
+            f"⏱ {dl_map.get(deadline, str(deadline)+' soat')} ichida\n\n"
+            f"📋 *Takliflar* bo'limida kuzating.",
+        )
+        asyncio.create_task(notify_sellers_batch(batch_id, uid))
+
+    elif data.get("type") == "offer":
+        # Sotuvchi Mini App dan taklif berdi
+        offers   = data.get("offers", [])
+        batch_id = int(data.get("batch_id", 0))
+        uid      = msg.from_user.id
+        u        = await get_user(uid)
+
+        if not offers:
+            await msg.answer("❌ Taklif bo'sh.")
+            return
+
+        shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=? AND status='active'", (uid,))
+        sname = (shop["shop_name"] if shop else None) or u["clinic_name"] or u["full_name"] or "Sotuvchi"
+
+        saved = 0
+        for offer in offers:
+            nid   = int(offer.get("need_id", 0))
+            price = float(offer.get("price", 0))
+            if not nid or price <= 0:
+                continue
+            nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+            if not nd:
+                continue
+            exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
+            if exists:
+                continue
+            await db_insert(
+                "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (nid, batch_id, uid, nd["product_name"], price,
+                 nd["unit"], 24, offer.get("note", "")),
+            )
+            saved += 1
+
+        if saved > 0:
+            # Klinikaga xabar
+            needs = await db_all("SELECT DISTINCT owner_id FROM needs WHERE batch_id=?", (batch_id,))
+            for n in needs:
+                try:
+                    await bot.send_message(
+                        n["owner_id"],
+                        f"📩 *Yangi taklif!*\n\n"
+                        f"🏪 {sname}\n"
+                        f"📦 {saved} ta mahsulotga narx berdi",
+                        reply_markup=ik([ib("📩 Takliflarni ko'rish", f"view_batch_{batch_id}")]),
+                    )
+                except Exception:
+                    pass
+
+        await msg.answer(f"✅ *{saved} ta taklif yuborildi!* Rahmat, {sname}.")
+
+# ── KLINIKA MAHSULOTLARI (sevimlilar ro'yxati) ────────────────────────────────
+@router.message(F.text == "📦 Mahsulotlarim")
+async def my_products(msg: Message, state: FSMContext):
+    uid      = msg.from_user.id
+    products = await db_all(
+        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id",
+        (uid,),
+    )
+    if not products:
+        await msg.answer(
+            "📦 *Mahsulotlarim ro\'yxati bo\'sh*\n\n"
+            "Ro\'yxat saqlasangiz, Mini App da avtomatik chiqadi.\n\n"
+            "Har bir mahsulotni yangi qatorda yozing:\n"
+            "_Masalan:\n"
+            "Xarizma A2\n"
+            "GC Fuji IX dona\n"
+            "Latex qo\'lqop M_",
+            reply_markup=ik([ib("✏️ Ro\'yxat kiritish", "edit_my_products")]),
+        )
+        return
+
+    txt  = f"📦 *Mahsulotlarim:* {len(products)} ta\n\n"
+    txt += "\n".join([f"{i}. {p['name']} ({p['unit']})" for i, p in enumerate(products, 1)])
+    await msg.answer(
+        txt,
+        reply_markup=ik(
+            [ib("✏️ Tahrirlash", "edit_my_products")],
+            [ib("🗑 Hammasini o\'chirish", "clear_my_products")],
+        ),
+    )
+
+@router.callback_query(F.data == "edit_my_products")
+async def edit_my_products(call: CallbackQuery, state: FSMContext):
+    uid      = call.from_user.id
+    products = await db_all(
+        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id", (uid,)
+    )
+    existing = "\n".join([p["name"] for p in products]) if products else ""
+    await state.set_state(MyProductsState.editing)
+    await call.message.answer(
+        "✏️ *Mahsulotlar ro\'yxatini kiriting*\n\n"
+        "Har bir mahsulotni yangi qatorda yozing.\n"
+        "_Birlik ham yozsa bo\'ladi: `Latex qo\'lqop M dona`_\n\n"
+        + (f"*Hozirgi ro\'yxat:*\n```\n{existing}\n```\n\n" if existing else "") +
+        "Yangi ro\'yxatni yuboring:",
+        reply_markup=ik([ib("❌ Bekor", "cancel")]),
+    )
+    await call.answer()
+
+@router.message(MyProductsState.editing)
+async def save_my_products(msg: Message, state: FSMContext):
+    uid   = msg.from_user.id
+    lines = [l.strip() for l in msg.text.strip().split("\n") if l.strip()]
+    if not lines:
+        await msg.answer("❌ Bo\'sh ro\'yxat. Qaytadan yuboring.")
+        return
+
+    # Eskilarni o\'chirib yangilarini saqlaymiz
+    await db_run("DELETE FROM clinic_products WHERE owner_id=?", (uid,))
+    for i, line in enumerate(lines):
+        parts = line.rsplit(None, 1)
+        # Oxirgi so\'z unit bo\'lishi mumkin
+        known_units = {"dona", "kg", "litr", "quti", "paket", "ml", "gr", "mm"}
+        if len(parts) == 2 and parts[1].lower() in known_units:
+            name, unit = parts[0].strip(), parts[1].lower()
+        else:
+            name, unit = line.strip(), "dona"
+        await db_insert(
+            "INSERT INTO clinic_products(owner_id,name,unit,sort_order) VALUES(?,?,?,?)",
+            (uid, name, unit, i),
+        )
+
+    await state.clear()
+    await msg.answer(
+        f"✅ *{len(lines)} ta mahsulot saqlandi!*\n\n"
+        f"Endi *Ko\'p mahsulot* bosganda Mini App da shu ro\'yxat chiqadi."
+    )
+
+@router.callback_query(F.data == "clear_my_products")
+async def clear_my_products(call: CallbackQuery):
+    await db_run("DELETE FROM clinic_products WHERE owner_id=?", (call.from_user.id,))
+    await call.message.edit_text("🗑 Ro\'yxat tozalandi.")
+    await call.answer()
+
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
 async def fallback(msg: Message, state: FSMContext):
@@ -1124,10 +1517,68 @@ async def fallback(msg: Message, state: FSMContext):
         await msg.answer(t(lg, "welcome"), reply_markup=kb_lang())
 
 # ── MAIN ─────────────────────────────────────────────────────────────────────
+# ── WEB SERVER (Mini App uchun) ───────────────────────────────────────────────
+async def handle_order_page(request):
+    path = os.path.join(BASE_DIR, "webapp", "order.html")
+    if not os.path.exists(path):
+        return _web.Response(text="order.html topilmadi", status=404)
+    return _web.FileResponse(path)
+
+async def handle_api_products(request):
+    """GET /api/products/{uid} — klinikaning mahsulotlar ro'yxati"""
+    uid      = int(request.match_info.get("uid", 0))
+    products = await db_all(
+        "SELECT name, unit FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id",
+        (uid,),
+    )
+    data = [{"name": p["name"], "unit": p["unit"]} for p in products]
+    return _web.Response(
+        text=_json.dumps(data, ensure_ascii=False),
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+async def handle_offer_page(request):
+    path = os.path.join(BASE_DIR, "webapp", "offer.html")
+    if not os.path.exists(path):
+        return _web.Response(text="offer.html topilmadi", status=404)
+    return _web.FileResponse(path)
+
+async def handle_api_needs(request):
+    """GET /api/needs/{batch_id} — batch dagi ehtiyojlar"""
+    batch_id = int(request.match_info.get("batch_id", 0))
+    needs    = await db_all(
+        "SELECT id, product_name, quantity, unit FROM needs WHERE batch_id=? AND status='active' ORDER BY id",
+        (batch_id,),
+    )
+    data = [{"id": n["id"], "name": n["product_name"], "qty": n["quantity"], "unit": n["unit"]} for n in needs]
+    return _web.Response(
+        text=_json.dumps(data, ensure_ascii=False),
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+async def start_webserver():
+    app = _web.Application()
+    app.router.add_get("/order",                  handle_order_page)
+    app.router.add_get("/offer/{batch_id}",        handle_offer_page)
+    app.router.add_get("/api/products/{uid}",      handle_api_products)
+    app.router.add_get("/api/needs/{batch_id}",    handle_api_needs)
+    webapp_dir = os.path.join(BASE_DIR, "webapp")
+    if os.path.isdir(webapp_dir):
+        app.router.add_static("/static", webapp_dir)
+    runner = _web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = _web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    log.info(f"🌐 Web server: http://0.0.0.0:{port}")
+
 async def main():
     await init_db()
     dp.include_router(router)
     log.info("🦷 XAZDENT Bot ishga tushdi!")
+    await start_webserver()
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
