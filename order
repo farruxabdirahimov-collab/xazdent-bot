@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Buyurtma yaratish</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--tg-theme-bg-color, #ffffff);
+    color: var(--tg-theme-text-color, #000000);
+    padding-bottom: 80px;
+    min-height: 100vh;
+  }
+
+  .header {
+    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    padding: 14px 16px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .header h1 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .header p {
+    font-size: 13px;
+    opacity: 0.6;
+  }
+
+  .list {
+    padding: 8px 0;
+  }
+
+  .item {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--tg-theme-bg-color, #fff);
+    transition: background 0.15s;
+  }
+
+  .item:active { background: var(--tg-theme-secondary-bg-color, #f5f5f5); }
+
+  .item-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+    color: var(--tg-theme-hint-color, #888);
+  }
+
+  .item-num.active {
+    background: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #fff);
+  }
+
+  .item-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .item-name {
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+
+  .item-name-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--tg-theme-text-color, #000);
+    outline: none;
+    padding: 0;
+  }
+
+  .item-name-input::placeholder {
+    color: var(--tg-theme-hint-color, #aaa);
+    font-weight: 400;
+  }
+
+  .item-hint {
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #888);
+  }
+
+  .counter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .counter-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
+    color: var(--tg-theme-button-color, #2481cc);
+    font-size: 20px;
+    font-weight: 400;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s;
+  }
+
+  .counter-btn:active { transform: scale(0.88); }
+
+  .counter-val {
+    min-width: 52px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .unit-select {
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #888);
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    margin-top: 2px;
+    display: block;
+  }
+
+  /* Add row */
+  .add-row {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--tg-theme-button-color, #2481cc);
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .add-row:active { opacity: 0.6; }
+
+  /* Bottom bar */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px 16px;
+    background: var(--tg-theme-bg-color, #fff);
+    border-top: 1px solid rgba(0,0,0,0.08);
+    z-index: 20;
+  }
+
+  .summary {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #888);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  .summary span {
+    font-weight: 600;
+    color: var(--tg-theme-button-color, #2481cc);
+  }
+
+  .send-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #fff);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+  }
+
+  .send-btn:active { opacity: 0.8; }
+  .send-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Deadline selector */
+  .deadline-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.07);
+  }
+
+  .deadline-label {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #888);
+    margin-bottom: 8px;
+  }
+
+  .deadline-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .deadline-chip {
+    padding: 6px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,0.12);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background: transparent;
+    color: var(--tg-theme-text-color, #000);
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.15s;
+  }
+
+  .deadline-chip.selected {
+    background: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #fff);
+    border-color: transparent;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📋 Buyurtma yaratish</h1>
+  <p id="subtitle">Mahsulotlarni kiriting</p>
+</div>
+
+<div class="list" id="list"></div>
+
+<div class="add-row" id="add-row" onclick="addItem()">
+  <span style="font-size:20px;line-height:1">+</span>
+  <span>Mahsulot qo'shish</span>
+</div>
+
+<div class="deadline-section">
+  <div class="deadline-label">⏱ Qachongacha kerak?</div>
+  <div class="deadline-options">
+    <button class="deadline-chip" data-val="2"   onclick="selectDeadline(this)">⚡️ 2 soat</button>
+    <button class="deadline-chip selected" data-val="24" onclick="selectDeadline(this)">🕐 24 soat</button>
+    <button class="deadline-chip" data-val="72"  onclick="selectDeadline(this)">📅 3 kun</button>
+    <button class="deadline-chip" data-val="168" onclick="selectDeadline(this)">🗓 1 hafta</button>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="summary" id="summary"></div>
+  <button class="send-btn" id="send-btn" onclick="sendOrder()" disabled>✅ Yuborish</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
+
+// URL dan klinika nomini olish
+const params  = new URLSearchParams(window.location.search);
+const clinic  = params.get('clinic') || '';
+const uid     = params.get('uid') || '';
+
+let deadline  = 24;
+let itemCount = 0;
+
+// 15 ta bo'sh qator bilan boshlash
+const DEFAULT_PRODUCTS = [
+  "Xarizma A2", "Xarizma A3", "GC Fuji IX",
+  "Endomotor ignalari", "Dental X-ray plyonka",
+  "Latex qo'lqop M", "Latex qo'lqop L",
+  "Niqob (50 ta)", "Spirt (1 litr)", "H2O2 3%",
+  "Kofferdam", "Kompozit A2", "Sement",
+  "Anesteziya (Ultracain)", "Ig'na (40mm)",
+];
+
+function init() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  itemCount = 0;
+
+  DEFAULT_PRODUCTS.forEach(name => addItem(name));
+  updateSummary();
+}
+
+function addItem(defaultName = '', defaultUnit = 'dona') {
+  itemCount++;
+  const id    = itemCount;
+  const units = ['dona','kg','litr','quti','paket','ml','gr'];
+  const opts  = units.map(u =>
+    `<option value="${u}"${u===defaultUnit?' selected':''}>${u}</option>`
+  ).join('');
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.id = `item-${id}`;
+  div.innerHTML = `
+    <div class="item-num" id="num-${id}">${id}</div>
+    <div class="item-body">
+      <input class="item-name-input" id="name-${id}" type="text"
+        placeholder="Mahsulot nomi..." value="${defaultName}"
+        oninput="updateNum(${id})" autocomplete="off" autocorrect="off">
+      <select class="unit-select" id="unit-${id}">${opts}</select>
+    </div>
+    <div class="counter">
+      <button class="counter-btn" onclick="change(${id}, -1)">−</button>
+      <div class="counter-val" id="qty-${id}">0</div>
+      <button class="counter-btn" onclick="change(${id}, +1)">+</button>
+    </div>
+  `;
+  document.getElementById('list').appendChild(div);
+  updateNum(id);
+}
+
+function change(id, delta) {
+  const el  = document.getElementById(`qty-${id}`);
+  const cur = parseInt(el.textContent) || 0;
+  const nxt = Math.max(0, cur + delta);
+  el.textContent = nxt;
+  updateNum(id);
+  updateSummary();
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+}
+
+function updateNum(id) {
+  const qty  = parseInt(document.getElementById(`qty-${id}`)?.textContent) || 0;
+  const name = document.getElementById(`name-${id}`)?.value?.trim() || '';
+  const num  = document.getElementById(`num-${id}`);
+  if (num) {
+    num.classList.toggle('active', qty > 0 && name.length > 0);
+  }
+  updateSummary();
+}
+
+function updateSummary() {
+  const items = getFilledItems();
+  const btn   = document.getElementById('send-btn');
+  const sub   = document.getElementById('summary');
+  if (items.length === 0) {
+    sub.innerHTML = 'Miqdorni kiriting';
+    btn.disabled  = true;
+  } else {
+    sub.innerHTML = `<span>${items.length}</span> ta mahsulot tayyor`;
+    btn.disabled  = false;
+  }
+}
+
+function getFilledItems() {
+  const items = [];
+  for (let i = 1; i <= itemCount; i++) {
+    const nameEl = document.getElementById(`name-${i}`);
+    const qtyEl  = document.getElementById(`qty-${i}`);
+    const unitEl = document.getElementById(`unit-${i}`);
+    if (!nameEl || !qtyEl) continue;
+    const name = nameEl.value.trim();
+    const qty  = parseInt(qtyEl.textContent) || 0;
+    const unit = unitEl ? unitEl.value : 'dona';
+    if (name && qty > 0) {
+      items.push({ name, qty, unit });
+    }
+  }
+  return items;
+}
+
+function selectDeadline(el) {
+  document.querySelectorAll('.deadline-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  deadline = parseInt(el.dataset.val);
+}
+
+function sendOrder() {
+  const items = getFilledItems();
+  if (!items.length) return;
+
+  const data = JSON.stringify({
+    type:     'bulk_order',
+    items:    items,
+    deadline: deadline,
+    uid:      uid,
+  });
+
+  if (tg) {
+    tg.sendData(data);
+  } else {
+    alert('Yuborildi: ' + data);
+  }
+}
+
+// Ishga tushirish — API dan mahsulotlar yuklash
+async function init() {
+  if (uid) {
+    try {
+      const res  = await fetch(`/api/products/${uid}`);
+      const data = await res.json();
+      if (data && data.length > 0) {
+        // Saqlangan mahsulotlar bor
+        document.getElementById('subtitle').textContent = `${data.length} ta saqlangan mahsulot`;
+        const list = document.getElementById('list');
+        list.innerHTML = '';
+        itemCount = 0;
+        data.forEach(p => addItem(p.name, p.unit));
+        // 3 ta bo'sh qator qo'shamiz (yangi qo'shish uchun)
+        for (let i = 0; i < 3; i++) addItem('', 'dona');
+        updateSummary();
+        return;
+      }
+    } catch (e) {
+      console.log('API xato:', e);
+    }
+  }
+  // API yo'q yoki bo'sh — standart ro'yxat
+  initDefault();
+}
+
+function initDefault() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  itemCount = 0;
+  DEFAULT_PRODUCTS.forEach(name => addItem(name, 'dona'));
+  updateSummary();
+}
+
+init();
+</script>
+</body>
+</html>
