@@ -14,7 +14,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from database import init_db, get_user, db_run, db_get, db_all, db_insert
-from database import get_setting, update_setting, add_balance, deduct_balance, get_next_room_code
+from database import get_setting, update_setting, add_balance, get_next_room_code
 from texts import t, REGIONS, REGIONS_RU
 
 load_dotenv()
