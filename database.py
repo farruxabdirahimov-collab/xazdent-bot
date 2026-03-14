@@ -117,6 +117,15 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS clinic_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                unit TEXT DEFAULT 'dona',
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             INSERT OR IGNORE INTO settings VALUES ('ball_price', '1000');
             INSERT OR IGNORE INTO settings VALUES ('elon_price', '0');
             INSERT OR IGNORE INTO settings VALUES ('card_number', '9860020138100068');
