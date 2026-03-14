@@ -510,15 +510,21 @@ async def need_confirm(call: CallbackQuery, state: FSMContext):
     if mid:
         await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, need_id))
 
-    # Kanalga link
-    chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
-    link = f"[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else "_(kanal xabari yuborilmadi)_"
-
     await state.clear()
+    # Kanalga link
+    product = d["product"]
+    qty     = d["qty"]
+    unit    = d.get("unit", "dona")
+    if mid and isinstance(CHANNEL_ID, str):
+        chan = CHANNEL_ID.lstrip("@")
+        link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})"
+    else:
+        link = ""
+
     await call.message.edit_text(
         f"✅ *E'lon joylashtirildi!*\n\n"
-        f"🦷 {d['product']}\n"
-        f"📦 {d['qty']} {d.get('unit','dona')}\n\n"
+        f"🦷 {product}\n"
+        f"📦 {qty} {unit}"
         f"{link}",
     )
     await call.answer("✅")
@@ -1284,20 +1290,31 @@ async def adm_rej(call: CallbackQuery):
     await call.message.edit_caption(call.message.caption + "\n\n❌ RAD ETILDI", reply_markup=None)
     await call.answer("❌")
 
+# ── /debug ───────────────────────────────────────────────────────────────────
+@router.message(Command('debug'))
+async def debug_cmd(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
+    info = (
+        f'BOT_TOKEN: OK\n'
+        f'CHANNEL_ID: {CHANNEL_ID}\n'
+        f'WEBAPP_URL: {WEBAPP_URL or "YOQ!"}\n'
+        f'ADMIN_IDS: {ADMIN_IDS}\n'
+        f'BASE_DIR: {BASE_DIR}'
+    )
+    await msg.answer(info, parse_mode=None)
+
 # ── /testchannel ──────────────────────────────────────────────────────────────
 @router.message(Command("testchannel"))
 async def test_channel(msg: Message):
     if msg.from_user.id not in ADMIN_IDS:
         return
-    await msg.answer(f"🔍 `CHANNEL_ID = {CHANNEL_ID}`\nTest yuborilmoqda...")
+    await msg.answer(str(CHANNEL_ID), parse_mode=None)
     try:
-        m = await bot.send_message(CHANNEL_ID, "✅ *Test* — bot kanalga yoza oladi!")
-        await msg.answer(f"✅ Muvaffaqiyat! msg_id=`{m.message_id}`")
+        m = await bot.send_message(CHANNEL_ID, 'Test xabar!')
+        await msg.answer(f'OK! msg_id={m.message_id}', parse_mode=None)
     except Exception as e:
-        await msg.answer(
-            f"❌ *Xato:*\n`{e}`\n\n"
-            f"Railway da `CHANNEL_ID = @kanalusername` qilib o'zgartiring."
-        )
+        await msg.answer(str(e)[:500], parse_mode=None)
 
 # ── CANCEL ───────────────────────────────────────────────────────────────────
 @router.callback_query(F.data == "cancel")
