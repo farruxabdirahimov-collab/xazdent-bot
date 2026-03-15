@@ -1746,12 +1746,106 @@ async def handle_api_needs(request):
         headers={"Access-Control-Allow-Origin": "*"},
     )
 
+async def handle_submit_offer(request):
+    """Kanal orqali kelgan taklif — API orqali saqlanadi."""
+    try:
+        body     = await request.json()
+        payload  = body.get("payload", "")
+        user_id  = body.get("user_id")
+        if not payload or not user_id:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
+                content_type="application/json",
+            )
+        data = _json.loads(payload)
+        if data.get("type") != "offer":
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "noto'g'ri type"}),
+                content_type="application/json",
+            )
+
+        uid      = int(user_id)
+        offers   = data.get("offers", [])
+        batch_id = int(data.get("batch_id", 0))
+        delivery = int(data.get("delivery", 24))
+        u        = await get_user(uid)
+        if not u:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
+                content_type="application/json",
+            )
+
+        shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=? AND status='active'", (uid,))
+        sname = (shop["shop_name"] if shop else None) or u["clinic_name"] or u["full_name"] or "Sotuvchi"
+
+        saved = 0
+        unavail_count = 0
+        for offer in offers:
+            nid     = int(offer.get("need_id", 0))
+            price   = float(offer.get("price", 0))
+            unavail = bool(offer.get("unavailable", False))
+            note    = offer.get("note", "") or ""
+            if not nid:
+                continue
+            nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+            if not nd:
+                continue
+            exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
+            if exists:
+                continue
+            if unavail:
+                await db_insert(
+                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (nid, batch_id, uid, nd["product_name"], 0, nd["unit"], delivery, "mavjud_emas"),
+                )
+                unavail_count += 1
+            elif price > 0:
+                await db_insert(
+                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (nid, batch_id, uid, nd["product_name"], price, nd["unit"], delivery, note),
+                )
+                saved += 1
+
+        if saved > 0:
+            owner_rows = await db_all("SELECT DISTINCT owner_id FROM needs WHERE batch_id=?", (batch_id,))
+            dl_map = {2:"2 soat",24:"24 soat",48:"2 kun",168:"1 hafta"}
+            for row in owner_rows:
+                try:
+                    await bot.send_message(
+                        row["owner_id"],
+                        f"📩 *Yangi taklif!*\n\n"
+                        f"🏪 {sname}\n"
+                        f"📦 {saved} ta mahsulotga narx berdi\n"
+                        f"🚚 {dl_map.get(delivery, str(delivery)+' soat')} ichida yetkazadi",
+                        reply_markup=ik([ib("📩 Takliflarni ko'rish", f"view_batch_{batch_id}")]),
+                    )
+                except Exception:
+                    pass
+
+        parts = []
+        if saved > 0: parts.append(f"{saved} ta narx")
+        if unavail_count > 0: parts.append(f"{unavail_count} ta mavjud emas")
+        return _web.Response(
+            text=_json.dumps({"ok": True, "result": " | ".join(parts) if parts else "0"}),
+            content_type="application/json",
+        )
+    except Exception as e:
+        log.error(f"submit_offer xato: {e}")
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": str(e)}),
+            content_type="application/json",
+            status=500,
+        )
+
 async def start_webserver():
     app = _web.Application()
     app.router.add_get("/order",                  handle_order_page)
     app.router.add_get("/offer/{batch_id}",        handle_offer_page)
     app.router.add_get("/api/products/{uid}",      handle_api_products)
     app.router.add_get("/api/needs/{batch_id}",    handle_api_needs)
+    app.router.add_post("/api/submit_offer",       handle_submit_offer)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
         app.router.add_static("/static", webapp_dir)
