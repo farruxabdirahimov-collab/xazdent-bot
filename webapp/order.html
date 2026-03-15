@@ -2,453 +2,331 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Buyurtma yaratish</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--tg-theme-bg-color, #ffffff);
-    color: var(--tg-theme-text-color, #000000);
-    padding-bottom: 80px;
-    min-height: 100vh;
-  }
-
-  .header {
-    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
-    padding: 14px 16px 12px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    border-bottom: 1px solid rgba(0,0,0,0.08);
-  }
-
-  .header h1 {
-    font-size: 17px;
-    font-weight: 600;
-    margin-bottom: 2px;
-  }
-
-  .header p {
-    font-size: 13px;
-    opacity: 0.6;
-  }
-
-  .list {
-    padding: 8px 0;
-  }
-
-  .item {
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(0,0,0,0.07);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: var(--tg-theme-bg-color, #fff);
-    transition: background 0.15s;
-  }
-
-  .item:active { background: var(--tg-theme-secondary-bg-color, #f5f5f5); }
-
-  .item-num {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-    flex-shrink: 0;
-    color: var(--tg-theme-hint-color, #888);
-  }
-
-  .item-num.active {
-    background: var(--tg-theme-button-color, #2481cc);
-    color: var(--tg-theme-button-text-color, #fff);
-  }
-
-  .item-body {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .item-name {
-    font-size: 15px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 2px;
-  }
-
-  .item-name-input {
-    width: 100%;
-    border: none;
-    background: transparent;
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--tg-theme-text-color, #000);
-    outline: none;
-    padding: 0;
-  }
-
-  .item-name-input::placeholder {
-    color: var(--tg-theme-hint-color, #aaa);
-    font-weight: 400;
-  }
-
-  .item-hint {
-    font-size: 12px;
-    color: var(--tg-theme-hint-color, #888);
-  }
-
-  .counter {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-
-  .counter-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: none;
-    background: var(--tg-theme-secondary-bg-color, #f1f1f1);
-    color: var(--tg-theme-button-color, #2481cc);
-    font-size: 20px;
-    font-weight: 400;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.1s;
-  }
-
-  .counter-btn:active { transform: scale(0.88); }
-
-  .counter-val {
-    min-width: 52px;
-    text-align: center;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .unit-select {
-    border: none;
-    background: transparent;
-    font-size: 12px;
-    color: var(--tg-theme-hint-color, #888);
-    cursor: pointer;
-    outline: none;
-    padding: 0;
-    margin-top: 2px;
-    display: block;
-  }
-
-  /* Add row */
-  .add-row {
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--tg-theme-button-color, #2481cc);
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .add-row:active { opacity: 0.6; }
-
-  /* Bottom bar */
-  .bottom-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 10px 16px;
-    background: var(--tg-theme-bg-color, #fff);
-    border-top: 1px solid rgba(0,0,0,0.08);
-    z-index: 20;
-  }
-
-  .summary {
-    font-size: 13px;
-    color: var(--tg-theme-hint-color, #888);
-    margin-bottom: 8px;
-    text-align: center;
-  }
-
-  .summary span {
-    font-weight: 600;
-    color: var(--tg-theme-button-color, #2481cc);
-  }
-
-  .send-btn {
-    width: 100%;
-    padding: 14px;
-    border: none;
-    border-radius: 12px;
-    background: var(--tg-theme-button-color, #2481cc);
-    color: var(--tg-theme-button-text-color, #fff);
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: opacity 0.15s;
-  }
-
-  .send-btn:active { opacity: 0.8; }
-  .send-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  /* Deadline selector */
-  .deadline-section {
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(0,0,0,0.07);
-  }
-
-  .deadline-label {
-    font-size: 13px;
-    color: var(--tg-theme-hint-color, #888);
-    margin-bottom: 8px;
-  }
-
-  .deadline-options {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .deadline-chip {
-    padding: 6px 14px;
-    border-radius: 16px;
-    border: 1px solid rgba(0,0,0,0.12);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    background: transparent;
-    color: var(--tg-theme-text-color, #000);
-    -webkit-tap-highlight-color: transparent;
-    transition: all 0.15s;
-  }
-
-  .deadline-chip.selected {
-    background: var(--tg-theme-button-color, #2481cc);
-    color: var(--tg-theme-button-text-color, #fff);
-    border-color: transparent;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color, #000);
+  padding-bottom: 80px;
+}
+.header {
+  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  padding: 14px 16px 10px;
+  position: sticky; top: 0; z-index: 10;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+.header h1 { font-size: 17px; font-weight: 600; }
+.header p  { font-size: 12px; opacity: .55; margin-top: 2px; }
+.add-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  color: var(--tg-theme-button-color, #007aff);
+  font-size: 15px; font-weight: 500;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+  -webkit-tap-highlight-color: transparent;
+}
+.add-btn:active { opacity: .6; }
+.add-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--tg-theme-button-color, #007aff);
+  color: #fff; display: flex; align-items: center;
+  justify-content: center; font-size: 20px; flex-shrink: 0;
+}
+.item { border-bottom: 1px solid rgba(0,0,0,0.07); }
+.item-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px 6px;
+}
+.item-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  color: var(--tg-theme-hint-color, #888);
+  font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background .15s, color .15s;
+}
+.item-num.active {
+  background: var(--tg-theme-button-color, #007aff); color: #fff;
+}
+.item-name-input {
+  flex: 1; border: none; background: transparent;
+  font-size: 15px; font-weight: 500;
+  color: var(--tg-theme-text-color, #000);
+  outline: none; padding: 0; min-width: 0;
+}
+.item-name-input::placeholder {
+  color: var(--tg-theme-hint-color, #aaa); font-weight: 400;
+}
+.item-del {
+  width: 24px; height: 24px; border: none; background: none;
+  color: var(--tg-theme-hint-color, #bbb); font-size: 20px;
+  cursor: pointer; padding: 0; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.item-bottom {
+  display: flex; align-items: center;
+  padding: 4px 16px 10px 50px; gap: 8px;
+}
+.counter {
+  display: flex; align-items: center;
+  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  border-radius: 10px; overflow: hidden;
+}
+.counter-btn {
+  width: 36px; height: 32px; border: none;
+  background: transparent;
+  color: var(--tg-theme-button-color, #007aff);
+  font-size: 22px; font-weight: 300; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .1s;
+}
+.counter-btn:active { transform: scale(.82); }
+.counter-val {
+  min-width: 44px; text-align: center;
+  font-size: 15px; font-weight: 600;
+}
+.unit-sel {
+  border: none;
+  background: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  border-radius: 8px; font-size: 13px;
+  color: var(--tg-theme-hint-color, #666);
+  padding: 0 8px; height: 32px; cursor: pointer; outline: none;
+}
+.dl-row { padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.07); }
+.dl-label { font-size: 13px; opacity: .55; margin-bottom: 8px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  padding: 6px 14px; border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.12);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; background: transparent;
+  color: var(--tg-theme-text-color, #000);
+  -webkit-tap-highlight-color: transparent;
+}
+.chip.sel {
+  background: var(--tg-theme-button-color, #007aff);
+  color: var(--tg-theme-button-text-color, #fff);
+  border-color: transparent;
+}
+.bottom {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 8px 16px 12px;
+  background: var(--tg-theme-bg-color, #fff);
+  border-top: 1px solid rgba(0,0,0,0.08); z-index: 20;
+}
+.summary {
+  font-size: 13px; color: var(--tg-theme-hint-color, #888);
+  text-align: center; margin-bottom: 8px;
+}
+.summary b { color: var(--tg-theme-button-color, #007aff); }
+.send-btn {
+  width: 100%; padding: 14px; border: none; border-radius: 12px;
+  background: var(--tg-theme-button-color, #007aff);
+  color: var(--tg-theme-button-text-color, #fff);
+  font-size: 16px; font-weight: 600; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: opacity .15s;
+}
+.send-btn:active { opacity: .8; }
+.send-btn:disabled { opacity: .35; cursor: not-allowed; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>📋 Buyurtma yaratish</h1>
-  <p id="subtitle">Mahsulotlarni kiriting</p>
+  <p id="subtitle">Mahsulot nomini yozing</p>
 </div>
 
-<div class="list" id="list"></div>
-
-<div class="add-row" id="add-row" onclick="addItem()">
-  <span style="font-size:20px;line-height:1">+</span>
+<div class="add-btn" onclick="addItem()">
+  <div class="add-icon">+</div>
   <span>Mahsulot qo'shish</span>
 </div>
 
-<div class="deadline-section">
-  <div class="deadline-label">⏱ Qachongacha kerak?</div>
-  <div class="deadline-options">
-    <button class="deadline-chip" data-val="2"   onclick="selectDeadline(this)">⚡️ 2 soat</button>
-    <button class="deadline-chip selected" data-val="24" onclick="selectDeadline(this)">🕐 24 soat</button>
-    <button class="deadline-chip" data-val="72"  onclick="selectDeadline(this)">📅 3 kun</button>
-    <button class="deadline-chip" data-val="168" onclick="selectDeadline(this)">🗓 1 hafta</button>
+<div id="list"></div>
+
+<div class="dl-row">
+  <div class="dl-label">⏱ Qachongacha kerak?</div>
+  <div class="chips">
+    <button class="chip"     data-val="2"   onclick="selDl(this)">⚡️ 2 soat</button>
+    <button class="chip sel" data-val="24"  onclick="selDl(this)">🕐 24 soat</button>
+    <button class="chip"     data-val="72"  onclick="selDl(this)">📅 3 kun</button>
+    <button class="chip"     data-val="168" onclick="selDl(this)">🗓 1 hafta</button>
   </div>
 </div>
 
-<div class="bottom-bar">
-  <div class="summary" id="summary"></div>
-  <button class="send-btn" id="send-btn" onclick="sendOrder()" disabled>✅ Yuborish</button>
+<div class="bottom">
+  <div class="summary" id="summary">Mahsulot qo'shing</div>
+  <button class="send-btn" id="send-btn" onclick="send()" disabled>✅ Yuborish</button>
 </div>
 
 <script>
 const tg = window.Telegram?.WebApp;
-if (tg) {
-  tg.ready();
-  tg.expand();
-}
+if (tg) { tg.ready(); tg.expand(); }
 
-// URL dan klinika nomini olish
-const params  = new URLSearchParams(window.location.search);
-const clinic  = params.get('clinic') || '';
-const uid     = params.get('uid') || '';
+const params = new URLSearchParams(window.location.search);
+const uid    = params.get('uid') || '';
+let deadline = 24;
+let idCnt    = 0;
 
-let deadline  = 24;
-let itemCount = 0;
-
-// 15 ta bo'sh qator bilan boshlash
-const DEFAULT_PRODUCTS = [
-  "Xarizma A2", "Xarizma A3", "GC Fuji IX",
-  "Endomotor ignalari", "Dental X-ray plyonka",
-  "Latex qo'lqop M", "Latex qo'lqop L",
-  "Niqob (50 ta)", "Spirt (1 litr)", "H2O2 3%",
-  "Kofferdam", "Kompozit A2", "Sement",
-  "Anesteziya (Ultracain)", "Ig'na (40mm)",
-];
-
-function init() {
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-  itemCount = 0;
-
-  DEFAULT_PRODUCTS.forEach(name => addItem(name));
-  updateSummary();
-}
-
-function addItem(defaultName = '', defaultUnit = 'dona') {
-  itemCount++;
-  const id    = itemCount;
+function addItem(name, unit, qty) {
+  name = name || ''; unit = unit || 'dona'; qty = qty || 0;
+  idCnt++;
+  const id    = idCnt;
   const units = ['dona','kg','litr','quti','paket','ml','gr'];
   const opts  = units.map(u =>
-    `<option value="${u}"${u===defaultUnit?' selected':''}>${u}</option>`
+    '<option value="'+u+'"'+(u===unit?' selected':'')+'>'+u+'</option>'
   ).join('');
+
   const div = document.createElement('div');
-  div.className = 'item';
-  div.id = `item-${id}`;
-  div.innerHTML = `
-    <div class="item-num" id="num-${id}">${id}</div>
-    <div class="item-body">
-      <input class="item-name-input" id="name-${id}" type="text"
-        placeholder="Mahsulot nomi..." value="${defaultName}"
-        oninput="updateNum(${id})" autocomplete="off" autocorrect="off">
-      <select class="unit-select" id="unit-${id}">${opts}</select>
-    </div>
-    <div class="counter">
-      <button class="counter-btn" onclick="change(${id}, -1)">−</button>
-      <div class="counter-val" id="qty-${id}">0</div>
-      <button class="counter-btn" onclick="change(${id}, +1)">+</button>
-    </div>
-  `;
+  div.className = 'item'; div.id = 'item-'+id;
+  div.innerHTML =
+    '<div class="item-top">' +
+      '<div class="item-num" id="num-'+id+'">'+id+'</div>' +
+      '<input class="item-name-input" id="name-'+id+'" type="text" ' +
+        'placeholder="Mahsulot nomi..." value="'+name+'" ' +
+        'oninput="sync('+id+')" autocomplete="off" autocorrect="off">' +
+      '<button class="item-del" onclick="removeItem('+id+')">&#215;</button>' +
+    '</div>' +
+    '<div class="item-bottom">' +
+      '<div class="counter">' +
+        '<button class="counter-btn" onclick="chg('+id+',-1)">&#8722;</button>' +
+        '<div class="counter-val" id="qty-'+id+'">'+qty+'</div>' +
+        '<button class="counter-btn" onclick="chg('+id+',+1)">+</button>' +
+      '</div>' +
+      '<select class="unit-sel" id="unit-'+id+'">'+opts+'</select>' +
+    '</div>';
+
   document.getElementById('list').appendChild(div);
-  updateNum(id);
+  sync(id);
+  if (!name) setTimeout(function(){ var el=document.getElementById('name-'+id); if(el)el.focus(); }, 80);
 }
 
-function change(id, delta) {
-  const el  = document.getElementById(`qty-${id}`);
-  const cur = parseInt(el.textContent) || 0;
-  const nxt = Math.max(0, cur + delta);
+function removeItem(id) {
+  var el = document.getElementById('item-'+id);
+  if (el) el.remove();
+  renum(); refresh();
+}
+
+function renum() {
+  var items = document.querySelectorAll('.item');
+  items.forEach(function(item, i) {
+    var id  = item.id.replace('item-','');
+    var num = document.getElementById('num-'+id);
+    if (num) num.textContent = i+1;
+  });
+}
+
+function chg(id, delta) {
+  var el  = document.getElementById('qty-'+id);
+  var cur = parseInt(el.textContent) || 0;
+  var nxt = Math.max(0, cur+delta);
   el.textContent = nxt;
-  updateNum(id);
-  updateSummary();
-  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  sync(id);
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
-function updateNum(id) {
-  const qty  = parseInt(document.getElementById(`qty-${id}`)?.textContent) || 0;
-  const name = document.getElementById(`name-${id}`)?.value?.trim() || '';
-  const num  = document.getElementById(`num-${id}`);
-  if (num) {
-    num.classList.toggle('active', qty > 0 && name.length > 0);
-  }
-  updateSummary();
+function sync(id) {
+  var qty  = parseInt(document.getElementById('qty-'+id) && document.getElementById('qty-'+id).textContent) || 0;
+  var name = (document.getElementById('name-'+id) && document.getElementById('name-'+id).value || '').trim();
+  var num  = document.getElementById('num-'+id);
+  if (num) num.classList.toggle('active', qty>0 && name.length>0);
+  refresh();
 }
 
-function updateSummary() {
-  const items = getFilledItems();
-  const btn   = document.getElementById('send-btn');
-  const sub   = document.getElementById('summary');
+function refresh() {
+  var items = filled();
+  var btn   = document.getElementById('send-btn');
+  var sub   = document.getElementById('summary');
   if (items.length === 0) {
-    sub.innerHTML = 'Miqdorni kiriting';
+    sub.innerHTML = "Mahsulot qo'shing";
     btn.disabled  = true;
   } else {
-    sub.innerHTML = `<span>${items.length}</span> ta mahsulot tayyor`;
+    sub.innerHTML = '<b>'+items.length+'</b> ta mahsulot tayyor';
     btn.disabled  = false;
   }
 }
 
-function getFilledItems() {
-  const items = [];
-  for (let i = 1; i <= itemCount; i++) {
-    const nameEl = document.getElementById(`name-${i}`);
-    const qtyEl  = document.getElementById(`qty-${i}`);
-    const unitEl = document.getElementById(`unit-${i}`);
-    if (!nameEl || !qtyEl) continue;
-    const name = nameEl.value.trim();
-    const qty  = parseInt(qtyEl.textContent) || 0;
-    const unit = unitEl ? unitEl.value : 'dona';
-    if (name && qty > 0) {
-      items.push({ name, qty, unit });
-    }
-  }
-  return items;
+function filled() {
+  var res   = [];
+  var items = document.querySelectorAll('.item');
+  items.forEach(function(item) {
+    var id   = item.id.replace('item-','');
+    var name = (document.getElementById('name-'+id) && document.getElementById('name-'+id).value||'').trim();
+    var qty  = parseInt(document.getElementById('qty-'+id) && document.getElementById('qty-'+id).textContent)||0;
+    var unit = (document.getElementById('unit-'+id) && document.getElementById('unit-'+id).value)||'dona';
+    if (name && qty>0) res.push({name:name, qty:qty, unit:unit});
+  });
+  return res;
 }
 
-function selectDeadline(el) {
-  document.querySelectorAll('.deadline-chip').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
+function selDl(el) {
+  document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('sel'); });
+  el.classList.add('sel');
   deadline = parseInt(el.dataset.val);
 }
 
-function sendOrder() {
-  const items = getFilledItems();
+function send() {
+  var items = filled();
   if (!items.length) return;
 
-  const data = JSON.stringify({
-    type:     'bulk_order',
-    items:    items,
-    deadline: deadline,
-    uid:      uid,
-  });
+  var btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Yuklanmoqda...';
 
-  if (tg) {
-    tg.sendData(data);
-  } else {
-    alert('Yuborildi: ' + data);
+  var userId = uid;
+  if (!userId && tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+    userId = tg.initDataUnsafe.user.id;
   }
-}
 
-// Ishga tushirish — API dan mahsulotlar yuklash
-async function init() {
-  if (uid) {
-    try {
-      const res  = await fetch(`/api/products/${uid}`);
-      const data = await res.json();
-      if (data && data.length > 0) {
-        // Saqlangan mahsulotlar bor
-        document.getElementById('subtitle').textContent = `${data.length} ta saqlangan mahsulot`;
-        const list = document.getElementById('list');
-        list.innerHTML = '';
-        itemCount = 0;
-        data.forEach(p => addItem(p.name, p.unit));
-        // 3 ta bo'sh qator qo'shamiz (yangi qo'shish uchun)
-        for (let i = 0; i < 3; i++) addItem('', 'dona');
-        updateSummary();
-        return;
-      }
-    } catch (e) {
-      console.log('API xato:', e);
+  var payload = JSON.stringify({type:'bulk_order', items:items, deadline:deadline, uid:userId});
+
+  // API orqali yuboramiz
+  fetch('/api/submit_order', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({payload: payload, user_id: userId, init_data: tg ? tg.initData : ''})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.ok) {
+      btn.textContent = '✅ Yuborildi!';
+      setTimeout(function() { if (tg) tg.close(); }, 1500);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '✅ Yuborish';
+      alert('Xato: ' + (res.error || 'nomalum'));
     }
-  }
-  // API yo'q yoki bo'sh — standart ro'yxat
-  initDefault();
+  })
+  .catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '✅ Yuborish';
+    // Fallback — sendData orqali urinib ko'ramiz
+    if (tg) { try { tg.sendData(payload); } catch(e2) {} }
+    else alert('Xato: ' + e.message);
+  });
 }
 
-function initDefault() {
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-  itemCount = 0;
-  DEFAULT_PRODUCTS.forEach(name => addItem(name, 'dona'));
-  updateSummary();
+async function loadProducts() {
+  if (!uid) return;
+  try {
+    var r = await fetch('/api/products/'+uid);
+    var d = await r.json();
+    if (d && d.length > 0) {
+      document.getElementById('subtitle').textContent = d.length+' ta saqlangan mahsulot';
+      d.forEach(function(p){ addItem(p.name, p.unit||'dona', 0); });
+      return;
+    }
+  } catch(e) {}
 }
 
-init();
+loadProducts();
 </script>
 </body>
 </html>
