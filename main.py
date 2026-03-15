@@ -1746,6 +1746,88 @@ async def handle_api_needs(request):
         headers={"Access-Control-Allow-Origin": "*"},
     )
 
+async def handle_submit_order(request):
+    """order.html dan kelgan buyurtma — API orqali."""
+    try:
+        body    = await request.json()
+        payload = body.get("payload", "")
+        user_id = body.get("user_id")
+        if not payload or not user_id:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
+                content_type="application/json",
+            )
+        data     = _json.loads(payload)
+        items    = data.get("items", [])
+        deadline = int(data.get("deadline", 24))
+        uid      = int(user_id)
+
+        if not items:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "items bo'sh"}),
+                content_type="application/json",
+            )
+
+        u = await get_user(uid)
+        if not u:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
+                content_type="application/json",
+            )
+
+        room    = await get_or_create_room(uid)
+        expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
+
+        batch_id = await db_insert(
+            "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+            (uid, deadline, expires),
+        )
+
+        saved_needs = []
+        for item in items:
+            nid = await db_insert(
+                "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (batch_id, room["id"], uid,
+                 item["name"], float(item["qty"]), item.get("unit","dona"),
+                 deadline, expires),
+            )
+            need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+            saved_needs.append(dict(need))
+
+        mid = await post_batch_to_channel(batch_id, saved_needs, dict(u))
+        if mid:
+            for n in saved_needs:
+                await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
+
+        # Botda ham xabar yuboramiz
+        dl_map   = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+        preview  = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in saved_needs[:5]])
+        chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
+        link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else ""
+        try:
+            await bot.send_message(
+                uid,
+                f"✅ *{len(saved_needs)} ta mahsulot joylashtirildi!*{link}\n\n"
+                f"{preview}\n\n"
+                f"⏱ {dl_map.get(deadline, str(deadline)+' soat')} ichida",
+            )
+        except Exception as e:
+            log.error(f"Buyurtmachi ga xabar xato: {e}")
+
+        asyncio.create_task(notify_sellers_batch(batch_id, uid))
+
+        return _web.Response(
+            text=_json.dumps({"ok": True, "batch_id": batch_id, "count": len(saved_needs)}),
+            content_type="application/json",
+        )
+    except Exception as e:
+        log.error(f"submit_order xato: {e}")
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": str(e)}),
+            content_type="application/json", status=500,
+        )
+
 async def handle_submit_offer(request):
     """Kanal orqali kelgan taklif — API orqali saqlanadi."""
     try:
@@ -1845,6 +1927,7 @@ async def start_webserver():
     app.router.add_get("/offer/{batch_id}",        handle_offer_page)
     app.router.add_get("/api/products/{uid}",      handle_api_products)
     app.router.add_get("/api/needs/{batch_id}",    handle_api_needs)
+    app.router.add_post("/api/submit_order",       handle_submit_order)
     app.router.add_post("/api/submit_offer",       handle_submit_offer)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
