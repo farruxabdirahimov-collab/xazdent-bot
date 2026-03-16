@@ -36,6 +36,11 @@ ADMIN_IDS  = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
+# E'lon narxlari (ball)
+AD_PRICE_TOSHKENT = 200   # Toshkent shahri uchun
+AD_PRICE_REGION   = 50    # Boshqa viloyatlar uchun
+AD_PRICE_BOTH_AUD = 2     # Ikki auditoriya (clinic+zubtex) ko'paytiruvchi
+
 bot    = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp     = Dispatcher(storage=MemoryStorage())
 router = Router()
@@ -50,6 +55,19 @@ class RegState(StatesGroup):
 
 class AdminState(StatesGroup):
     setting_input = State()
+
+class AdState(StatesGroup):
+    audience   = State()   # Kim: clinic/zubtex/seller
+    regions    = State()   # Viloyatlar (checkbox)
+    content    = State()   # Matn/rasm/link
+    confirm    = State()   # Tasdiqlash
+
+class AdState(StatesGroup):
+    """Reklama e'lon berish."""
+    audience  = State()   # Kimlar: klinika/zubtex/seller
+    regions   = State()   # Viloyatlar
+    content   = State()   # Rasm/matn/link
+    confirm   = State()   # Tasdiqlash
 
 class NeedState(StatesGroup):
     product  = State()
@@ -446,7 +464,44 @@ async def show_profile(msg: Message, state: FSMContext):
         f"🏠 {u['address'] or '—'}\n"
         f"💰 Balans: {u['balance'] or 0:.1f} ball"
     )
-    await msg.answer(txt, reply_markup=ik([ib("✏️ Tahrirlash", "edit_profile")]))
+    role_label = {"clinic":"🏥 Klinika","zubtex":"🔬 Zubtexnik","seller":"🛒 Sotuvchi"}.get(u["role"],"—")
+    txt += f"\n👤 Rol: {role_label}"
+    await msg.answer(txt, reply_markup=ik(
+        [ib("✏️ Tahrirlash", "edit_profile")],
+        [ib("🔄 Rolni o'zgartirish", "change_role")],
+        [ib("📢 E'lon berish", "ad_start")],
+    ))
+
+@router.callback_query(F.data == "change_role")
+async def change_role(call: CallbackQuery):
+    await call.message.answer(
+        "🔄 *Yangi rolni tanlang:*",
+        reply_markup=ik(
+            [ib("🏥 Klinika / Vrach", "role_clinic")],
+            [ib("🔬 Zubtexnik",        "role_zubtex")],
+            [ib("🛒 Sotuvchi",          "role_seller")],
+        )
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "change_role")
+async def change_role(call: CallbackQuery):
+    lg = await lang(call.from_user.id)
+    await call.message.answer(
+        "🔄 *Yangi rolingizni tanlang:*",
+        reply_markup=ik(
+            [ib("🏥 Vrach / Klinika", "role_clinic")],
+            [ib("🔬 Zubtexnik",        "role_zubtex")],
+            [ib("🛒 Sotuvchi",          "role_seller")],
+            [ib("◀️ Orqaga",            "back_profile")],
+        )
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "back_profile")
+async def back_profile(call: CallbackQuery):
+    await call.message.delete()
+    await call.answer()
 
 @router.callback_query(F.data == "edit_profile")
 async def edit_profile(call: CallbackQuery, state: FSMContext):
@@ -1568,6 +1623,311 @@ async def adm_rej(call: CallbackQuery):
     await call.answer("❌")
 
 # ── /debug ───────────────────────────────────────────────────────────────────
+# ── REKLAMA E'LON TIZIMI ─────────────────────────────────────────────────────
+# Narxlar: Toshkent shahri 200 ball, boshqa 50 ball
+# 2 auditoriya (klinika+zubtex) tanlansa — 2x
+
+AD_REGION_PRICES = {
+    "Toshkent shahri": 200,
+}
+AD_REGION_DEFAULT = 50
+
+def calc_ad_price(regions: list, audiences: list) -> tuple:
+    """Ball narxini hisoblaydi. (jami, izoh)"""
+    multiplier = 2 if len(audiences) >= 2 else 1
+    total = 0
+    details = []
+    for reg in regions:
+        base = AD_REGION_PRICES.get(reg, AD_REGION_DEFAULT)
+        price = base * multiplier
+        total += price
+        if multiplier == 2:
+            details.append(f"{reg}: {base}×2={price} ball")
+        else:
+            details.append(f"{reg}: {price} ball")
+    return total, details
+
+@router.callback_query(F.data == "ad_start")
+async def ad_start(call: CallbackQuery, state: FSMContext):
+    u = await get_user(call.from_user.id)
+    if not u:
+        await call.answer("Avval ro'yxatdan o'ting", show_alert=True)
+        return
+    balls = u["balance"] or 0
+    await state.set_state(AdState.audience)
+    await state.update_data(ad_audiences=[], ad_regions=[])
+    await call.message.answer(
+        f"📢 *Reklama e'lon berish*\n\n"
+        f"💰 Balansingiz: *{balls:.1f} ball*\n\n"
+        f"1️⃣ *Kimga ko'rinsin?* (bir yoki bir nechta)\n"
+        f"_(Hammasini bosing, keyin ✅ Davom etish)_",
+        reply_markup=ik(
+            [ib("🏥 Vrach / Klinika", "ad_aud_clinic")],
+            [ib("🔬 Zubtexnik",        "ad_aud_zubtex")],
+            [ib("🛒 Sotuvchi",          "ad_aud_seller")],
+            [ib("✅ Davom etish →",     "ad_aud_done")],
+            [ib("❌ Bekor",             "cancel_ad")],
+        )
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("ad_aud_"), AdState.audience)
+async def ad_audience(call: CallbackQuery, state: FSMContext):
+    d    = await state.get_data()
+    auds = d.get("ad_audiences", [])
+    key  = call.data[7:]  # clinic / zubtex / seller
+
+    if key == "done":
+        if not auds:
+            await call.answer("Kamida 1 ta tanlang!", show_alert=True)
+            return
+        await state.set_state(AdState.regions)
+        # Viloyat tanlash
+        from texts import REGIONS
+        rows = []
+        for i in range(0, len(REGIONS), 2):
+            row = [ib(REGIONS[i], f"ad_reg_{i}")]
+            if i+1 < len(REGIONS):
+                row.append(ib(REGIONS[i+1], f"ad_reg_{i+1}"))
+            rows.append(row)
+        rows.append([ib("🌍 Barcha viloyatlar", "ad_reg_all")])
+        rows.append([ib("✅ Davom etish →",     "ad_reg_done")])
+        rows.append([ib("⬅️ Orqaga",            "ad_back_aud")])
+        aud_names = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
+        selected  = ", ".join(aud_names.get(a,"?") for a in auds)
+        await call.message.edit_text(
+            f"📢 *Reklama e'lon berish*\n\n"
+            f"✅ Auditoriya: *{selected}*\n\n"
+            f"2️⃣ *Qaysi viloyatlarga?*\n"
+            f"_(Galochka qo'yib, ✅ Davom etish bosing)_",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
+        )
+        await call.answer()
+        return
+
+    # Toggle audience
+    if key in auds:
+        auds.remove(key)
+        await call.answer(f"Olib tashlandi")
+    else:
+        auds.append(key)
+        await call.answer(f"✅ Qo'shildi")
+    await state.update_data(ad_audiences=auds)
+
+    # Tugmalarni yangilaymiz — tanlangan ko'rinsin
+    aud_names = {"clinic":"🏥 Vrach/Klinika","zubtex":"🔬 Zubtexnik","seller":"🛒 Sotuvchi"}
+    rows = []
+    for ak, alabel in aud_names.items():
+        mark = "✅ " if ak in auds else ""
+        rows.append([ib(f"{mark}{alabel}", f"ad_aud_{ak}")])
+    rows.append([ib("✅ Davom etish →", "ad_aud_done")])
+    rows.append([ib("❌ Bekor", "cancel_ad")])
+    try:
+        await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    except Exception:
+        pass
+
+@router.callback_query(F.data.startswith("ad_reg_"), AdState.regions)
+async def ad_region(call: CallbackQuery, state: FSMContext):
+    from texts import REGIONS
+    d    = await state.get_data()
+    regs = list(d.get("ad_regions", []))
+    key  = call.data[7:]  # 0..13, all, done
+
+    if key == "done":
+        if not regs:
+            await call.answer("Kamida 1 ta viloyat tanlang!", show_alert=True)
+            return
+        await state.set_state(AdState.content)
+        # Narx hisoblash
+        auds  = d.get("ad_audiences", [])
+        total, details = calc_ad_price(regs, auds)
+        u     = await get_user(call.from_user.id)
+        balls = u["balance"] or 0
+        detail_txt = "\n".join(f"  • {d}" for d in details)
+        aud_names  = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
+        aud_txt    = ", ".join(aud_names.get(a,"?") for a in auds)
+        if len(auds) >= 2:
+            detail_txt += f"\n  _(2 auditoriya × 2 = 2x narx)_"
+        await call.message.edit_text(
+            f"📢 *Reklama e'lon berish*\n\n"
+            f"✅ Auditoriya: *{aud_txt}*\n"
+            f"✅ Viloyatlar: *{len(regs)} ta*\n\n"
+            f"💰 *Narx tahlili:*\n{detail_txt}\n\n"
+            f"*Jami: {total} ball*\n"
+            f"Balansingiz: {balls:.1f} ball\n\n"
+            f"3️⃣ *Reklama kontentini yuboring:*\n"
+            f"_(Rasm, matn yoki ikkalasi. Link ham yozishingiz mumkin)_",
+            reply_markup=ik(
+                [ib("⬅️ Orqaga", "ad_back_reg")],
+                [ib("❌ Bekor",   "cancel_ad")],
+            )
+        )
+        await state.update_data(ad_total=total, ad_details=details)
+        await call.answer()
+        return
+
+    if key == "all":
+        reg_names = [r.split(" ",1)[1] for r in REGIONS]
+        regs = reg_names
+        await call.answer("✅ Barcha viloyatlar tanlandi")
+    else:
+        idx      = int(key)
+        reg_name = REGIONS[idx].split(" ",1)[1]
+        if reg_name in regs:
+            regs.remove(reg_name)
+            await call.answer("Olib tashlandi")
+        else:
+            regs.append(reg_name)
+            await call.answer("✅ Qo'shildi")
+
+    await state.update_data(ad_regions=regs)
+
+    # Tugmalar yangilanadi
+    rows = []
+    for i in range(0, len(REGIONS), 2):
+        rn1  = REGIONS[i].split(" ",1)[1]
+        m1   = "✅ " if rn1 in regs else ""
+        row  = [ib(f"{m1}{REGIONS[i]}", f"ad_reg_{i}")]
+        if i+1 < len(REGIONS):
+            rn2 = REGIONS[i+1].split(" ",1)[1]
+            m2  = "✅ " if rn2 in regs else ""
+            row.append(ib(f"{m2}{REGIONS[i+1]}", f"ad_reg_{i+1}"))
+        rows.append(row)
+    rows.append([ib("🌍 Barcha viloyatlar", "ad_reg_all")])
+    rows.append([ib(f"✅ Davom etish ({len(regs)} ta) →", "ad_reg_done")])
+    rows.append([ib("⬅️ Orqaga", "ad_back_aud")])
+    try:
+        await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    except Exception:
+        pass
+
+@router.message(AdState.content, F.photo | F.text)
+async def ad_content(msg: Message, state: FSMContext):
+    d     = await state.get_data()
+    total = d.get("ad_total", 0)
+    u     = await get_user(msg.from_user.id)
+    balls = u["balance"] or 0
+
+    if total > balls:
+        await msg.answer(
+            f"❌ *Balans yetarli emas!*\n\n"
+            f"Kerak: *{total} ball*\nBalansingiz: *{balls:.1f} ball*\n\n"
+            f"Hisob to'ldirish uchun: 💰 *Hisobim*",
+            reply_markup=ik([ib("❌ Bekor", "cancel_ad")])
+        )
+        return
+
+    # Kontent saqlash
+    if msg.photo:
+        await state.update_data(ad_photo=msg.photo[-1].file_id, ad_text=msg.caption or "")
+    else:
+        await state.update_data(ad_photo=None, ad_text=msg.text)
+
+    await state.set_state(AdState.confirm)
+    d     = await state.get_data()
+    auds  = d.get("ad_audiences", [])
+    regs  = d.get("ad_regions", [])
+    details = d.get("ad_details", [])
+    aud_names = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
+    aud_txt   = ", ".join(aud_names.get(a,"?") for a in auds)
+    detail_txt= "\n".join(f"  • {x}" for x in details)
+
+    preview = f"📢 *Reklama ko'rinishi:*\n\n"
+    if d.get("ad_text"):
+        preview += d["ad_text"]
+
+    await msg.answer(
+        f"✅ *Tasdiqlang:*\n\n"
+        f"👥 Auditoriya: *{aud_txt}*\n"
+        f"📍 Viloyatlar: *{len(regs)} ta*\n"
+        f"💰 Narx: *{total} ball*\n"
+        f"  _(Sababi: {', '.join(details[:2])}{'...' if len(details)>2 else ''})_\n\n"
+        f"{preview}",
+        reply_markup=ik(
+            [ib("✅ Roziman — yuborish", "ad_confirm")],
+            [ib("✏️ Tahrirlash",         "ad_back_reg")],
+            [ib("❌ Bekor",              "cancel_ad")],
+        )
+    )
+
+@router.callback_query(F.data == "ad_confirm", AdState.confirm)
+async def ad_confirm(call: CallbackQuery, state: FSMContext):
+    d     = await state.get_data()
+    uid   = call.from_user.id
+    u     = await get_user(uid)
+    total = d.get("ad_total", 0)
+    balls = u["balance"] or 0
+
+    if total > balls:
+        await call.answer("Balans yetarli emas!", show_alert=True)
+        return
+
+    # Balansdan ayirish
+    await db_run("UPDATE users SET balance=balance-? WHERE id=?", (total, uid))
+
+    # Kimga yuboramiz
+    auds  = d.get("ad_audiences", [])
+    regs  = d.get("ad_regions", [])
+    photo = d.get("ad_photo")
+    text  = d.get("ad_text", "")
+    ad_text = f"📢 *Reklama*\n\n{text}" if text else "📢 *Reklama*"
+
+    # Foydalanuvchilar
+    role_filter = "','".join(auds)
+    targets = await db_all(
+        f"SELECT id FROM users WHERE role IN ('{role_filter}') AND is_blocked=0"
+    )
+    reg_set = set(regs)
+    sent = 0
+    for t in targets:
+        tu = await get_user(t["id"])
+        if tu and tu.get("region") and tu["region"] in reg_set:
+            try:
+                if photo:
+                    await bot.send_photo(t["id"], photo, caption=ad_text)
+                else:
+                    await bot.send_message(t["id"], ad_text)
+                sent += 1
+                import asyncio as _a; await _a.sleep(0.05)
+            except Exception:
+                pass
+
+    await state.clear()
+    await call.message.edit_text(
+        f"✅ *Reklama yuborildi!*\n\n"
+        f"📤 {sent} ta foydalanuvchiga yetkazildi\n"
+        f"💰 Balansingizdan *{total} ball* ayirildi"
+    )
+    await call.answer("✅")
+
+@router.callback_query(F.data == "cancel_ad")
+async def cancel_ad(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    try: await call.message.delete()
+    except Exception: pass
+    await call.answer("Bekor qilindi")
+
+@router.callback_query(F.data == "ad_back_aud")
+async def ad_back_aud(call: CallbackQuery, state: FSMContext):
+    await state.set_state(AdState.audience)
+    d    = await state.get_data()
+    auds = d.get("ad_audiences", [])
+    aud_names = {"clinic":"🏥 Vrach/Klinika","zubtex":"🔬 Zubtexnik","seller":"🛒 Sotuvchi"}
+    rows = []
+    for ak, alabel in aud_names.items():
+        mark = "✅ " if ak in auds else ""
+        rows.append([ib(f"{mark}{alabel}", f"ad_aud_{ak}")])
+    rows.append([ib("✅ Davom etish →", "ad_aud_done")])
+    rows.append([ib("❌ Bekor", "cancel_ad")])
+    await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    await call.answer()
+
+@router.callback_query(F.data == "ad_back_reg")
+async def ad_back_reg(call: CallbackQuery, state: FSMContext):
+    await state.set_state(AdState.regions)
+    await call.answer("Viloyat tanloviga qaytildi")
+
 # ── ADMIN BUYRUQLAR ───────────────────────────────────────────────────────────
 @router.message(Command("admin"))
 async def admin_panel(msg: Message):
@@ -2270,6 +2630,295 @@ async def save_my_products(msg: Message, state: FSMContext):
 async def clear_my_products(call: CallbackQuery):
     await db_run("DELETE FROM clinic_products WHERE owner_id=?", (call.from_user.id,))
     await call.message.edit_text("🗑 Ro\'yxat tozalandi.")
+    await call.answer()
+
+# ── E'LON BERISH ─────────────────────────────────────────────────────────────
+# Viloyat narxlari
+_AD_REGIONS = [
+    ("🏙 Toshkent shahri", 200),
+    ("🌆 Toshkent viloyati", 50),
+    ("🏛 Samarqand", 50),
+    ("🕌 Buxoro", 50),
+    ("🌸 Farg'ona", 50),
+    ("🏔 Andijon", 50),
+    ("🌿 Namangan", 50),
+    ("🌊 Xorazm", 50),
+    ("🌵 Qashqadaryo", 50),
+    ("🏜 Surxondaryo", 50),
+    ("🌾 Jizzax", 50),
+    ("🌱 Sirdaryo", 50),
+    ("💎 Navoiy", 50),
+    ("🏝 Qoraqalpog'iston", 50),
+]
+
+def _calc_ad_price(audiences: list, regions: list) -> tuple:
+    """Ball narxini hisoblash. (jami, izoh)"""
+    base = 0
+    for reg in regions:
+        price = next((p for r, p in _AD_REGIONS if r == reg), 50)
+        base += price
+    # Ikki auditoriya bo'lsa 2x
+    mult = 2 if len(audiences) >= 2 else 1
+    total = base * mult
+    parts = [f"{len(regions)} ta viloyat × {base//len(regions) if regions else 0} ball"]
+    if mult > 1:
+        parts.append(f"2 ta auditoriya × 2")
+    return total, ", ".join(parts)
+
+def _ad_audience_kb(selected: list) -> InlineKeyboardMarkup:
+    opts = [
+        ("🏥 Klinikalar / Vrachlar", "aud_clinic"),
+        ("🔬 Zubtexniklar",          "aud_zubtex"),
+        ("🛒 Sotuvchilar",           "aud_seller"),
+    ]
+    rows = []
+    for label, key in opts:
+        check = "✅ " if key in selected else ""
+        rows.append([ib(f"{check}{label}", f"adaud_{key}")])
+    rows.append([ib("▶️ Davom etish →", "adaud_next"), ib("◀️ Orqaga", "ad_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+def _ad_regions_kb(selected: list) -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(_AD_REGIONS), 2):
+        row = []
+        for reg, price in _AD_REGIONS[i:i+2]:
+            check = "✅ " if reg in selected else ""
+            row.append(ib(f"{check}{reg} ({price}⚡)", f"adreg_{i if reg==_AD_REGIONS[i][0] else i+1}"))
+        rows.append(row)
+    rows.append([ib("✅ Hammasi", "adreg_all"), ib("❌ Tozalash", "adreg_clear")])
+    rows.append([ib("▶️ Davom etish →", "adreg_next"), ib("◀️ Orqaga", "adreg_back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+@router.callback_query(F.data == "ad_start")
+async def ad_start(call: CallbackQuery, state: FSMContext):
+    uid = call.from_user.id
+    u   = await get_user(uid)
+    bal = u["balance"] or 0
+    await state.set_state(AdState.audience)
+    await state.update_data(ad_audiences=[], ad_regions=[])
+    await call.message.answer(
+        f"📢 *E'lon berish*\n\n"
+        f"💰 Sizning balansingiz: *{bal:.1f} ball*\n\n"
+        f"*1-qadam: Kimga e'lon berasiz?*\n"
+        f"_(Bir nechta tanlash mumkin)_",
+        reply_markup=_ad_audience_kb([])
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("adaud_"), AdState.audience)
+async def ad_audience_toggle(call: CallbackQuery, state: FSMContext):
+    d    = await state.get_data()
+    sel  = d.get("ad_audiences", [])
+    key  = call.data[6:]  # aud_clinic, aud_zubtex, aud_seller
+    if key in sel:
+        sel.remove(key)
+    else:
+        sel.append(key)
+    await state.update_data(ad_audiences=sel)
+    await call.message.edit_reply_markup(reply_markup=_ad_audience_kb(sel))
+    await call.answer()
+
+@router.callback_query(F.data == "adaud_next", AdState.audience)
+async def ad_audience_next(call: CallbackQuery, state: FSMContext):
+    d   = await state.get_data()
+    sel = d.get("ad_audiences", [])
+    if not sel:
+        await call.answer("⚠️ Kamida 1 ta auditoriya tanlang!", show_alert=True)
+        return
+    await state.set_state(AdState.regions)
+    await call.message.answer(
+        f"📍 *2-qadam: Qaysi viloyatlar?*\n\n"
+        f"_(Toshkent shahri = 200 ball, boshqalar = 50 ball)_\n"
+        f"_Ikki auditoriya tanlasangiz narx 2x bo\'ladi_",
+        reply_markup=_ad_regions_kb([])
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("adreg_"), AdState.regions)
+async def ad_region_toggle(call: CallbackQuery, state: FSMContext):
+    d   = await state.get_data()
+    sel = d.get("ad_regions", [])
+    key = call.data[6:]
+
+    if key == "all":
+        sel = [r for r, _ in _AD_REGIONS]
+    elif key == "clear":
+        sel = []
+    elif key == "next":
+        if not sel:
+            await call.answer("⚠️ Kamida 1 ta viloyat tanlang!", show_alert=True)
+            return
+        await state.update_data(ad_regions=sel)
+        await state.set_state(AdState.content)
+        audiences = d.get("ad_audiences", [])
+        total, reason = _calc_ad_price(audiences, sel)
+        aud_names = {"aud_clinic":"Klinikalar","aud_zubtex":"Zubtexniklar","aud_seller":"Sotuvchilar"}
+        aud_txt = ", ".join(aud_names.get(a,"?") for a in audiences)
+        await call.message.answer(
+            f"✍️ *3-qadam: E'lon mazmunini yuboring*\n\n"
+            f"Quyidagilardan birini yuboring:\n"
+            f"• Matn (reklama matni)\n"
+            f"• Rasm + izoh\n"
+            f"• Matn + link\n\n"
+            f"📊 *Hisob-kitob:*\n"
+            f"👥 Auditoriya: {aud_txt}\n"
+            f"📍 {len(sel)} ta viloyat\n"
+            f"💡 Sabab: {reason}\n"
+            f"💰 *Jami: {total} ball*",
+            reply_markup=ik([ib("◀️ Orqaga", "adreg_back")])
+        )
+        await call.answer()
+        return
+    elif key == "back":
+        await state.set_state(AdState.audience)
+        d2   = await state.get_data()
+        sel2 = d2.get("ad_audiences", [])
+        await call.message.answer(
+            "*1-qadam: Kimga e'lon berasiz?*",
+            reply_markup=_ad_audience_kb(sel2)
+        )
+        await call.answer()
+        return
+    else:
+        try:
+            idx  = int(key)
+            reg  = _AD_REGIONS[idx][0]
+            if reg in sel: sel.remove(reg)
+            else: sel.append(reg)
+        except Exception:
+            pass
+
+    await state.update_data(ad_regions=sel)
+    await call.message.edit_reply_markup(reply_markup=_ad_regions_kb(sel))
+    await call.answer()
+
+@router.message(AdState.content, F.text | F.photo | F.document)
+async def ad_content(msg: Message, state: FSMContext):
+    d          = await state.get_data()
+    audiences  = d.get("ad_audiences", [])
+    regions    = d.get("ad_regions", [])
+    total, reason = _calc_ad_price(audiences, regions)
+
+    uid = msg.from_user.id
+    u   = await get_user(uid)
+    bal = u["balance"] or 0
+
+    # Content saqlaymiz
+    if msg.photo:
+        await state.update_data(ad_photo=msg.photo[-1].file_id, ad_text=msg.caption or "")
+    else:
+        await state.update_data(ad_photo=None, ad_text=msg.text or "")
+
+    aud_names = {"aud_clinic":"🏥 Klinikalar","aud_zubtex":"🔬 Zubtexniklar","aud_seller":"🛒 Sotuvchilar"}
+    aud_txt   = ", ".join(aud_names.get(a,"?") for a in audiences)
+    reg_txt   = ", ".join(regions[:3]) + (f" va yana {len(regions)-3} ta" if len(regions)>3 else "")
+
+    preview = (
+        f"📢 *E'lon ko\'rib chiqish*\n\n"
+        f"👥 {aud_txt}\n"
+        f"📍 {reg_txt}\n\n"
+        f"💰 Narx: *{total} ball*\n"
+        f"💡 Sabab: {reason}\n"
+        f"Sizda: {bal:.1f} ball\n\n"
+    )
+    if bal < total:
+        preview += f"⚠️ *Balansingiz yetarli emas!*\n+{total-bal:.0f} ball kerak\n"
+        kb = ik(
+            [ib("➕ Hisob to'ldirish", "topup")],
+            [ib("◀️ Orqaga", "ad_edit")],
+        )
+    else:
+        kb = ik(
+            [ib("✅ Roziman — yuborish", "ad_confirm")],
+            [ib("✏️ Tahrirlash", "ad_edit")],
+            [ib("◀️ Bekor qilish", "ad_cancel")],
+        )
+    await state.set_state(AdState.confirm)
+    await msg.answer(preview, reply_markup=kb)
+
+@router.callback_query(F.data == "ad_confirm", AdState.confirm)
+async def ad_confirm(call: CallbackQuery, state: FSMContext):
+    d         = await state.get_data()
+    audiences = d.get("ad_audiences", [])
+    regions   = d.get("ad_regions", [])
+    total, _  = _calc_ad_price(audiences, regions)
+    uid       = call.from_user.id
+    u         = await get_user(uid)
+    bal       = u["balance"] or 0
+
+    if bal < total:
+        await call.answer("⚠️ Balansingiz yetarli emas!", show_alert=True)
+        return
+
+    # Baldan ayiramiz
+    await db_run("UPDATE users SET balance=balance-? WHERE id=?", (total, uid))
+
+    # Qabul qiluvchilarni topamiz
+    aud_roles = {
+        "aud_clinic": ("clinic", "zubtex"),
+        "aud_zubtex": ("zubtex",),
+        "aud_seller": ("seller",),
+    }
+    roles = []
+    for a in audiences:
+        roles.extend(aud_roles.get(a, []))
+    roles = list(set(roles))
+
+    # Viloyat filtri
+    placeholders = ",".join(["?" for _ in regions])
+    if regions:
+        recipients = await db_all(
+            f"SELECT id FROM users WHERE role IN ({','.join(['?' for _ in roles])}) "
+            f"AND region IN ({placeholders}) AND is_blocked=0 AND id!=?",
+            (*roles, *regions, uid)
+        )
+    else:
+        recipients = await db_all(
+            f"SELECT id FROM users WHERE role IN ({','.join(['?' for _ in roles])}) "
+            f"AND is_blocked=0 AND id!=?",
+            (*roles, uid)
+        )
+
+    # Yuboramiz
+    photo   = d.get("ad_photo")
+    text    = d.get("ad_text", "")
+    ad_txt  = f"📢 *Reklama*\n\n{text}"
+    sent    = 0
+    for r in recipients:
+        try:
+            if photo:
+                await bot.send_photo(r["id"], photo, caption=ad_txt)
+            else:
+                await bot.send_message(r["id"], ad_txt)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass
+
+    await state.clear()
+    await call.message.edit_text(
+        f"✅ *E'lon yuborildi!*\n\n"
+        f"📨 {sent} ta foydalanuvchiga\n"
+        f"💰 -{total} ball sarflandi\n"
+        f"Qolgan balans: {bal-total:.1f} ball"
+    )
+    await call.answer("✅")
+
+@router.callback_query(F.data == "ad_edit")
+async def ad_edit(call: CallbackQuery, state: FSMContext):
+    await state.set_state(AdState.content)
+    await call.message.answer(
+        "✍️ *Yangi mazmunni yuboring:*\n\n"
+        "Matn, rasm yoki rasm+izoh",
+        reply_markup=ik([ib("◀️ Orqaga", "adreg_back")])
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "ad_cancel")
+async def ad_cancel(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.edit_text("❌ E'lon bekor qilindi.")
     await call.answer()
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
