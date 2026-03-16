@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Takliflar taqqoslash</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--tg-theme-bg-color,#f2f2f7);
+  color:var(--tg-theme-text-color,#000);padding-bottom:100px}
+.hdr{background:var(--tg-theme-secondary-bg-color,#fff);
+  padding:14px 16px 10px;position:sticky;top:0;z-index:20;
+  border-bottom:1px solid rgba(0,0,0,.08)}
+.hdr h1{font-size:17px;font-weight:600}
+.hdr p{font-size:12px;opacity:.55;margin-top:2px}
+
+/* Sotuvchi kartochkalar */
+.sellers{display:flex;gap:8px;padding:12px 16px;overflow-x:auto;
+  background:var(--tg-theme-secondary-bg-color,#fff);
+  border-bottom:1px solid rgba(0,0,0,.08);
+  position:sticky;top:56px;z-index:10;
+  scrollbar-width:none}
+.sellers::-webkit-scrollbar{display:none}
+.seller-card{flex-shrink:0;padding:8px 14px;border-radius:20px;
+  border:2px solid rgba(0,0,0,.10);font-size:13px;font-weight:600;
+  cursor:pointer;background:var(--tg-theme-bg-color,#f2f2f7);
+  color:var(--tg-theme-text-color,#000);
+  transition:all .15s;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.seller-card.sel{
+  background:var(--tg-theme-button-color,#007aff);
+  color:var(--tg-theme-button-text-color,#fff);border-color:transparent}
+.seller-card.best{border-color:#3B6D11}
+.seller-total{font-size:10px;opacity:.7;display:block;margin-top:2px;font-weight:400}
+
+/* Jadval */
+.table-wrap{overflow-x:auto;padding:0;margin:12px 12px 0}
+.table-wrap::-webkit-scrollbar{height:3px}
+.table-wrap::-webkit-scrollbar-thumb{background:rgba(0,0,0,.2);border-radius:2px}
+table{width:100%;border-collapse:collapse;background:var(--tg-theme-secondary-bg-color,#fff);
+  border-radius:12px;overflow:hidden;font-size:13px}
+th{padding:10px 12px;text-align:left;font-size:11px;font-weight:600;
+  color:var(--tg-theme-hint-color,#888);background:var(--tg-theme-secondary-bg-color,#f8f8f8);
+  white-space:nowrap;border-bottom:1px solid rgba(0,0,0,.07)}
+th.seller-th{text-align:center;min-width:90px}
+td{padding:10px 12px;border-bottom:1px solid rgba(0,0,0,.05);vertical-align:middle}
+td.prod{font-weight:600;font-size:14px}
+td.qty-cell{font-size:12px;color:var(--tg-theme-hint-color,#888);white-space:nowrap}
+td.price-cell{text-align:center;font-size:13px;white-space:nowrap}
+td.price-cell.best-price{color:#3B6D11;font-weight:700}
+td.price-cell.unav{color:var(--tg-theme-hint-color,#aaa);font-size:11px}
+td.price-cell.empty{color:var(--tg-theme-hint-color,#ccc);font-size:11px}
+.total-row td{font-weight:700;background:rgba(0,0,0,.02);border-top:2px solid rgba(0,0,0,.08)}
+.total-row td.price-cell.best-price{color:#3B6D11;font-size:14px}
+
+/* Qabul tugmalari */
+.accept-section{padding:12px 16px}
+.accept-title{font-size:13px;font-weight:600;margin-bottom:10px;
+  color:var(--tg-theme-text-color,#000)}
+.accept-grid{display:flex;flex-direction:column;gap:8px}
+
+/* Har mahsulot uchun qabul */
+.prod-accept{background:var(--tg-theme-secondary-bg-color,#fff);
+  border-radius:12px;padding:12px 14px}
+.pa-name{font-size:14px;font-weight:600;margin-bottom:8px}
+.pa-btns{display:flex;flex-wrap:wrap;gap:6px}
+.pa-btn{padding:7px 12px;border-radius:10px;border:none;
+  font-size:12px;font-weight:500;cursor:pointer;
+  background:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  color:var(--tg-theme-text-color,#000);
+  -webkit-tap-highlight-color:transparent;transition:all .15s}
+.pa-btn:active{opacity:.7}
+.pa-btn.best-btn{background:#E2EFDA;color:#3B6D11;border:1px solid #3B6D11}
+.pa-btn.sel-btn{background:var(--tg-theme-button-color,#007aff);
+  color:#fff;transform:scale(1.02)}
+
+/* Hammasini bitta do'kondan */
+.bulk-section{padding:0 16px 12px}
+.bulk-title{font-size:13px;font-weight:600;margin-bottom:8px;
+  color:var(--tg-theme-text-color,#000)}
+.bulk-btns{display:flex;flex-wrap:wrap;gap:8px}
+.bulk-btn{padding:10px 16px;border-radius:12px;border:none;
+  font-size:13px;font-weight:600;cursor:pointer;
+  background:var(--tg-theme-secondary-bg-color,#fff);
+  color:var(--tg-theme-text-color,#000);
+  border:1.5px solid rgba(0,0,0,.10);
+  -webkit-tap-highlight-color:transparent;transition:all .15s}
+.bulk-btn:active{opacity:.7}
+.bulk-btn.best-bulk{background:#E2EFDA;color:#3B6D11;border-color:#3B6D11}
+
+/* Bottom */
+.bot{position:fixed;bottom:0;left:0;right:0;
+  padding:10px 16px 14px;
+  background:var(--tg-theme-bg-color,#f2f2f7);
+  border-top:1px solid rgba(0,0,0,.08);z-index:30}
+.bot-info{font-size:12px;color:var(--tg-theme-hint-color,#888);
+  text-align:center;margin-bottom:8px}
+.bot-info b{color:var(--tg-theme-button-color,#007aff)}
+.confirm-btn{width:100%;padding:14px;border:none;border-radius:12px;
+  background:var(--tg-theme-button-color,#007aff);
+  color:var(--tg-theme-button-text-color,#fff);
+  font-size:16px;font-weight:600;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+.confirm-btn:active{opacity:.85}
+.confirm-btn:disabled{opacity:.35;cursor:not-allowed}
+
+.loading{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:60px 16px;gap:14px;
+  color:var(--tg-theme-hint-color,#888);font-size:14px}
+.spin{width:30px;height:30px;
+  border:3px solid var(--tg-theme-secondary-bg-color,#eee);
+  border-top-color:var(--tg-theme-button-color,#007aff);
+  border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.errmsg{padding:40px 20px;text-align:center;
+  color:var(--tg-theme-hint-color,#888);font-size:14px;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>📊 Takliflar taqqoslash</h1>
+  <p id="sub">Yuklanmoqda...</p>
+</div>
+
+<div id="sellers-row" class="sellers" style="display:none"></div>
+
+<div id="main"><div class="loading"><div class="spin"></div>Yuklanmoqda...</div></div>
+
+<div class="bot">
+  <div class="bot-info" id="bot-info"></div>
+  <button class="confirm-btn" id="confirm-btn" onclick="confirmAll()" disabled>
+    Tanlang
+  </button>
+</div>
+
+<script>
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+var batchId = 0;
+var userId  = 0;
+var needs   = [];     // [{id,name,qty,unit}]
+var sellers = {};     // {seller_id: {id,name,offers:{need_id:offer}}}
+var selected = {};    // {need_id: {offer_id, seller_id, price}}  — har mahsulot uchun tanlangan taklif
+var bulkSeller = 0;   // Hammasini bitta do'kondan
+
+// batch_id olish
+(function(){
+  var parts = window.location.pathname.split('/');
+  for (var i=0; i<parts.length; i++) {
+    if (parts[i]==='compare' && parts[i+1]) { batchId=parseInt(parts[i+1])||0; break; }
+  }
+  var q = new URLSearchParams(window.location.search);
+  if (!batchId) batchId = parseInt(q.get('batch_id')||'0')||0;
+})();
+
+if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+  userId = tg.initDataUnsafe.user.id;
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(n){ return Math.round(n).toLocaleString(); }
+
+// ── Yuklash ──────────────────────────────────────────────────────────────────
+async function load() {
+  if (!batchId) { showErr('Buyurtma ID topilmadi'); return; }
+  try {
+    // Needs
+    var r1 = await fetch('/api/needs/' + batchId);
+    if (!r1.ok) throw new Error('needs: HTTP ' + r1.status);
+    needs = await r1.json();
+    if (!needs || !needs.length) { showErr('Mahsulotlar topilmadi'); return; }
+
+    // Offers
+    var r2 = await fetch('/api/offers/' + batchId);
+    if (!r2.ok) throw new Error('offers: HTTP ' + r2.status);
+    var offersRaw = await r2.json();
+
+    // sellers tuzamiz: {seller_id: {id, name, offers: {need_id: {offer_id, price, unit, note}}}}
+    sellers = {};
+    offersRaw.forEach(function(o) {
+      if (!sellers[o.seller_id]) {
+        sellers[o.seller_id] = { id: o.seller_id, name: o.seller_name, offers: {} };
+      }
+      sellers[o.seller_id].offers[o.need_id] = {
+        offer_id: o.id,
+        price:    o.price,
+        unit:     o.unit,
+        note:     o.note || '',
+        unavail:  o.unavail || false
+      };
+    });
+
+    document.getElementById('sub').textContent =
+      needs.length + ' ta mahsulot, ' + Object.keys(sellers).length + ' ta sotuvchi';
+
+    render();
+  } catch(e) {
+    showErr('Yuklab bo\'lmadi: ' + e.message);
+  }
+}
+
+function showErr(msg) {
+  document.getElementById('main').innerHTML = '<div class="errmsg">' + esc(msg) + '</div>';
+  document.getElementById('sub').textContent = 'Xato';
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  var sellerList = Object.values(sellers);
+  if (!sellerList.length) {
+    showErr('Hali taklif kelmagan');
+    return;
+  }
+
+  // Har sotuvchi uchun jami hisoblash
+  sellerList.forEach(function(s) {
+    var total = 0;
+    needs.forEach(function(n) {
+      var o = s.offers[n.id];
+      if (o && !o.unavail && o.price > 0) total += o.price * n.qty;
+    });
+    s.total = total;
+  });
+  // Arzondan qimmatga
+  sellerList.sort(function(a,b){ return a.total - b.total; });
+
+  // Har need uchun eng arzon topamiz
+  var bestPrices = {}; // need_id -> min_price
+  needs.forEach(function(n) {
+    var min = null;
+    sellerList.forEach(function(s) {
+      var o = s.offers[n.id];
+      if (o && !o.unavail && o.price > 0) {
+        if (min === null || o.price < min) min = o.price;
+      }
+    });
+    bestPrices[n.id] = min;
+  });
+
+  // Sotuvchi kartochkalar
+  var srow = document.getElementById('sellers-row');
+  srow.style.display = 'flex';
+  srow.innerHTML = '';
+  sellerList.forEach(function(s, i) {
+    var div = document.createElement('div');
+    div.className = 'seller-card' + (i===0?' best':'');
+    div.setAttribute('data-sid', s.id);
+    div.innerHTML = esc(s.name) +
+      '<span class="seller-total">' + (s.total>0 ? fmt(s.total)+' so\'m' : '—') + '</span>';
+    srow.appendChild(div);
+  });
+
+  // Jadval
+  var thead = '<tr><th>Mahsulot</th><th>Kerak</th>';
+  sellerList.forEach(function(s) {
+    thead += '<th class="seller-th">' + esc(s.name) + '</th>';
+  });
+  thead += '</tr>';
+
+  var tbody = '';
+  needs.forEach(function(n) {
+    tbody += '<tr><td class="prod">' + esc(n.name) + '</td>';
+    tbody += '<td class="qty-cell">' + n.qty + ' ' + n.unit + '</td>';
+    sellerList.forEach(function(s) {
+      var o = s.offers[n.id];
+      if (!o) {
+        tbody += '<td class="price-cell empty">—</td>';
+      } else if (o.unavail || o.price === 0) {
+        tbody += '<td class="price-cell unav">yo\'q</td>';
+      } else {
+        var isBest = o.price === bestPrices[n.id];
+        var total  = o.price * n.qty;
+        var cls    = 'price-cell' + (isBest?' best-price':'');
+        tbody += '<td class="' + cls + '">' +
+          fmt(o.price) + '<br>' +
+          '<small style="opacity:.65">' + fmt(total) + '</small>' +
+        '</td>';
+      }
+    });
+    tbody += '</tr>';
+  });
+
+  // Jami qator
+  tbody += '<tr class="total-row"><td class="prod">Jami</td><td></td>';
+  sellerList.forEach(function(s) {
+    var minTotal = s.total;
+    var isBest   = s === sellerList[0];
+    tbody += '<td class="price-cell' + (isBest?' best-price':'') + '">' +
+      (minTotal>0 ? fmt(minTotal) : '—') + '</td>';
+  });
+  tbody += '</tr>';
+
+  var tableHtml = '<div class="table-wrap"><table><thead>' + thead +
+    '</thead><tbody>' + tbody + '</tbody></table></div>';
+
+  // Har mahsulot uchun qabul tugmalari
+  var acceptHtml = '<div class="accept-section"><div class="accept-title">✅ Har mahsulot uchun tanlang:</div><div class="accept-grid">';
+  needs.forEach(function(n) {
+    acceptHtml += '<div class="prod-accept"><div class="pa-name">' + esc(n.name) +
+      ' <span style="font-weight:400;opacity:.6;font-size:12px">(' + n.qty + ' ' + n.unit + ')</span></div>' +
+      '<div class="pa-btns" id="pa-' + n.id + '">';
+    var hasBest = bestPrices[n.id] !== null;
+    sellerList.forEach(function(s) {
+      var o = s.offers[n.id];
+      if (!o || o.unavail || o.price === 0) return;
+      var isBest = o.price === bestPrices[n.id];
+      var cls = 'pa-btn' + (isBest?' best-btn':'');
+      acceptHtml += '<button class="' + cls + '" ' +
+        'onclick="selProd(' + n.id + ',' + o.offer_id + ',' + s.id + ',' + o.price + ',this)">' +
+        esc(s.name) + '<br><b>' + fmt(o.price) + '</b>' +
+      '</button>';
+    });
+    acceptHtml += '</div></div>';
+  });
+  acceptHtml += '</div></div>';
+
+  // Hammasini bitta do'kondan
+  var bulkHtml = '<div class="bulk-section"><div class="bulk-title">🛍 Hammasini bitta do\'kondan:</div>' +
+    '<div class="bulk-btns">';
+  sellerList.forEach(function(s, i) {
+    var cls = 'bulk-btn' + (i===0?' best-bulk':'');
+    var covCount = 0;
+    needs.forEach(function(n) {
+      var o = s.offers[n.id];
+      if (o && !o.unavail && o.price>0) covCount++;
+    });
+    bulkHtml += '<button class="' + cls + '" onclick="selBulk(' + s.id + ',this)">' +
+      esc(s.name) + '<br>' +
+      '<span style="font-size:11px;opacity:.7">' + fmt(s.total) + ' so\'m (' + covCount + '/' + needs.length + ')</span>' +
+    '</button>';
+  });
+  bulkHtml += '</div></div>';
+
+  document.getElementById('main').innerHTML = tableHtml + acceptHtml + bulkHtml;
+  refreshBot();
+}
+
+// ── Tanlash ──────────────────────────────────────────────────────────────────
+function selProd(needId, offerId, sellerId, price, btn) {
+  // Bulk tanlashni bekor qilish
+  bulkSeller = 0;
+  document.querySelectorAll('.bulk-btn').forEach(function(b){ b.classList.remove('sel-btn'); });
+
+  selected[needId] = { offer_id: offerId, seller_id: sellerId, price: price };
+  // Tugmalarni yangilash
+  var container = document.getElementById('pa-' + needId);
+  if (container) {
+    container.querySelectorAll('.pa-btn').forEach(function(b){ b.classList.remove('sel-btn'); });
+    btn.classList.add('sel-btn');
+  }
+  tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred('light');
+  refreshBot();
+}
+
+function selBulk(sellerId, btn) {
+  bulkSeller = sellerId;
+  // Bulk tugmalarni yangilash
+  document.querySelectorAll('.bulk-btn').forEach(function(b){ b.classList.remove('sel-btn'); });
+  btn.classList.add('sel-btn');
+  // Individual tanlovlarni tozalash
+  selected = {};
+  document.querySelectorAll('.pa-btn').forEach(function(b){ b.classList.remove('sel-btn'); });
+  // Shu sotuvchining takliflarini tanlaymiz
+  var s = sellers[sellerId];
+  if (s) {
+    needs.forEach(function(n) {
+      var o = s.offers[n.id];
+      if (o && !o.unavail && o.price > 0) {
+        selected[n.id] = { offer_id: o.offer_id, seller_id: sellerId, price: o.price };
+        // Tugmani ham belgilaymiz
+        var container = document.getElementById('pa-' + n.id);
+        if (container) {
+          container.querySelectorAll('.pa-btn').forEach(function(pb){
+            if (pb.onclick && pb.onclick.toString().includes(',' + sellerId + ',')) {
+              pb.classList.add('sel-btn');
+            }
+          });
+        }
+      }
+    });
+  }
+  tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged();
+  refreshBot();
+}
+
+function refreshBot() {
+  var count = Object.keys(selected).length;
+  var total = 0;
+  Object.values(selected).forEach(function(s) {
+    var n = needs.find(function(x){ return x.id == Object.keys(selected).find(function(k){ return selected[k]===s; }); });
+    total += s.price * (n ? n.qty : 1);
+  });
+  // To'g'ri total hisoblash
+  total = 0;
+  needs.forEach(function(n) {
+    if (selected[n.id]) total += selected[n.id].price * n.qty;
+  });
+
+  var btn  = document.getElementById('confirm-btn');
+  var info = document.getElementById('bot-info');
+
+  if (count === 0) {
+    info.innerHTML = 'Mahsulotni tanlang';
+    btn.textContent = 'Tanlang';
+    btn.disabled = true;
+  } else {
+    info.innerHTML = '<b>' + count + '/' + needs.length + '</b> tanlandi · Jami: <b>' + fmt(total) + ' so\'m</b>';
+    btn.textContent = '✅ ' + count + ' ta taklifni qabul qilish';
+    btn.disabled = false;
+  }
+}
+
+// ── Yuborish ─────────────────────────────────────────────────────────────────
+function confirmAll() {
+  var toAccept = [];
+  needs.forEach(function(n) {
+    if (selected[n.id]) toAccept.push(selected[n.id].offer_id);
+  });
+  if (!toAccept.length) return;
+
+  var btn = document.getElementById('confirm-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Yuklanmoqda...';
+
+  fetch('/api/accept_offers', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      batch_id:  batchId,
+      offer_ids: toAccept,
+      user_id:   userId,
+      init_data: tg ? tg.initData : ''
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(res) {
+    if (res.ok) {
+      btn.textContent = '✅ Qabul qilindi!';
+      setTimeout(function(){ if(tg) tg.close(); }, 1500);
+    } else {
+      btn.disabled = false;
+      btn.textContent = '✅ Qabul qilish';
+      alert('Xato: ' + (res.error || 'nomalum'));
+    }
+  })
+  .catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '✅ Qabul qilish';
+    alert('Tarmoq xatosi: ' + e.message);
+  });
+}
+
+load();
+</script>
+</body>
+</html>
