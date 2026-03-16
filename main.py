@@ -1726,11 +1726,222 @@ async def handle_api_products(request):
         headers={"Access-Control-Allow-Origin": "*"},
     )
 
+# offer.html inline (fayl topilmasa ham ishlaydi)
+_OFFER_HTML_PATH = os.path.join(BASE_DIR, "webapp", "offer.html")
+
 async def handle_offer_page(request):
-    path = os.path.join(BASE_DIR, "webapp", "offer.html")
-    if not os.path.exists(path):
-        return _web.Response(text="offer.html topilmadi", status=404)
-    return _web.FileResponse(path)
+    path = _OFFER_HTML_PATH
+    if os.path.exists(path):
+        return _web.FileResponse(path)
+    # Fallback — inline HTML
+    log.warning(f"offer.html topilmadi: {path}, inline version ishlatilmoqda")
+    return _web.Response(
+        text=_get_offer_html_inline(),
+        content_type="text/html",
+        charset="utf-8",
+    )
+
+def _get_offer_html_inline():
+    """offer.html inline version — fayl yo'q bo'lsa ishlatiladi."""
+    return """<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Narx kiriting</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000);padding-bottom:90px}
+.hdr{background:var(--tg-theme-secondary-bg-color,#f2f2f7);padding:14px 16px 10px;
+  position:sticky;top:0;z-index:10;border-bottom:1px solid rgba(0,0,0,.08)}
+.hdr h1{font-size:17px;font-weight:600}.hdr p{font-size:12px;opacity:.55;margin-top:2px}
+.pb{height:3px;background:var(--tg-theme-secondary-bg-color,#f2f2f7)}
+.pf{height:100%;background:var(--tg-theme-button-color,#007aff);transition:width .3s}
+.spin{display:flex;align-items:center;justify-content:center;padding:60px 16px;
+  flex-direction:column;gap:12px;color:var(--tg-theme-hint-color,#888);font-size:14px}
+.sp{width:28px;height:28px;border:2.5px solid var(--tg-theme-secondary-bg-color,#ddd);
+  border-top-color:var(--tg-theme-button-color,#007aff);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.item{border-bottom:1px solid rgba(0,0,0,.07);padding:12px 16px}
+.item.unav{opacity:.45}
+.ih{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.num{width:26px;height:26px;border-radius:50%;background:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  color:var(--tg-theme-hint-color,#888);font-size:11px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.num.done{background:#E2EFDA;color:#3B6D11}
+.nm{font-size:15px;font-weight:600;flex:1}
+.qty{font-size:12px;color:var(--tg-theme-hint-color,#888);white-space:nowrap}
+.pr{display:flex;align-items:center;gap:8px}
+.pw{flex:1;position:relative}
+.pi{width:100%;height:40px;border:1.5px solid rgba(0,0,0,.12);border-radius:10px;
+  font-size:16px;font-weight:500;padding:0 52px 0 12px;
+  background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000);
+  outline:none;-webkit-appearance:none}
+.pi:focus{border-color:var(--tg-theme-button-color,#007aff)}
+.pi.ok{border-color:#3B6D11}
+.ps{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  font-size:11px;color:var(--tg-theme-hint-color,#888);pointer-events:none}
+.hint{font-size:12px;color:#3B6D11;margin-top:4px;font-weight:500;display:none}
+.ub{height:40px;padding:0 10px;border:1.5px solid rgba(0,0,0,.10);border-radius:10px;
+  font-size:12px;background:transparent;color:var(--tg-theme-hint-color,#888);
+  cursor:pointer;white-space:nowrap;flex-shrink:0}
+.ub.on{background:#FCEBEB;border-color:#F09595;color:#A32D2D}
+.ni{width:100%;margin-top:8px;border:1.5px solid rgba(0,0,0,.08);border-radius:10px;
+  font-size:14px;padding:8px 12px;background:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  color:var(--tg-theme-text-color,#000);outline:none;resize:none;font-family:inherit;min-height:36px}
+.dlr{padding:10px 16px;border-bottom:1px solid rgba(0,0,0,.07)}
+.dll{font-size:13px;opacity:.55;margin-bottom:8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:6px 14px;border-radius:16px;border:1px solid rgba(0,0,0,.12);
+  font-size:13px;font-weight:500;cursor:pointer;background:transparent;
+  color:var(--tg-theme-text-color,#000)}
+.chip.sel{background:var(--tg-theme-button-color,#007aff);color:#fff;border-color:transparent}
+.bot{position:fixed;bottom:0;left:0;right:0;padding:8px 16px 12px;
+  background:var(--tg-theme-bg-color,#fff);border-top:1px solid rgba(0,0,0,.08);z-index:20}
+.bi{display:flex;justify-content:space-between;font-size:12px;
+  color:var(--tg-theme-hint-color,#888);margin-bottom:8px}
+.ts{font-weight:600;color:var(--tg-theme-button-color,#007aff)}
+.sb{width:100%;padding:14px;border:none;border-radius:12px;
+  background:var(--tg-theme-button-color,#007aff);color:#fff;
+  font-size:16px;font-weight:600;cursor:pointer}
+.sb:disabled{opacity:.35;cursor:not-allowed}
+</style>
+</head>
+<body>
+<div class="hdr"><h1>💰 Narx kiriting</h1><p id="sub">Yuklanmoqda...</p></div>
+<div class="pb"><div class="pf" id="pf" style="width:0%"></div></div>
+<div id="ct"><div class="spin"><div class="sp"></div>Yuklanmoqda...</div></div>
+<div class="dlr">
+  <div class="dll">🚚 Yetkazib berish muddati:</div>
+  <div class="chips">
+    <button class="chip sel" data-val="2" onclick="sDl(this)">⚡️ 2 soat</button>
+    <button class="chip" data-val="24" onclick="sDl(this)">🕐 24 soat</button>
+    <button class="chip" data-val="48" onclick="sDl(this)">📅 2 kun</button>
+    <button class="chip" data-val="168" onclick="sDl(this)">🗓 1 hafta</button>
+  </div>
+</div>
+<div class="bot">
+  <div class="bi"><span id="fc">0/0</span><span class="ts" id="tt"></span></div>
+  <button class="sb" id="sb" onclick="send()" disabled>Narx kiriting</button>
+</div>
+<script>
+var tg=window.Telegram&&window.Telegram.WebApp;
+var bId=0,dlv=2,nds=[];
+var pts=window.location.pathname.split('/');
+for(var i=0;i<pts.length;i++){var n=parseInt(pts[i]);if(n>0){bId=n;break;}}
+var qp=new URLSearchParams(window.location.search);
+if(!bId&&qp.get('batch_id'))bId=parseInt(qp.get('batch_id'));
+if(tg){tg.ready();tg.expand();}
+function load(){
+  if(!bId){showE("Buyurtma ID topilmadi");return;}
+  fetch('/api/needs/'+bId).then(function(r){return r.json();})
+  .then(function(d){
+    if(!d||!d.length){showE("Mahsulot yo'q yoki muddati tugagan");return;}
+    nds=d;render();
+  }).catch(function(e){showE("Yuklab bo'lmadi: "+e.message);});
+}
+function showE(m){document.getElementById('ct').innerHTML='<div class="spin">'+m+'</div>';document.getElementById('sub').textContent='Xato';}
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function render(){
+  document.getElementById('sub').textContent=nds.length+' ta mahsulot';
+  var h='';
+  for(var i=0;i<nds.length;i++){
+    var n=nds[i];
+    h+='<div class="item" id="it-'+n.id+'">'+
+      '<div class="ih">'+
+        '<div class="num" id="nm-'+n.id+'">'+(i+1)+'</div>'+
+        '<div class="nm">'+esc(n.name)+'</div>'+
+        '<div class="qty">Kerak: '+n.qty+' '+n.unit+'</div>'+
+      '</div>'+
+      '<div class="pr">'+
+        '<div class="pw">'+
+          '<input class="pi" id="pi-'+n.id+'" type="number" inputmode="numeric" '+
+            'placeholder="1 '+n.unit+' narxi..." min="0" '+
+            'oninput="oP('+n.id+','+n.qty+',\''+n.unit+'\')">'+
+          '<span class="ps">so'm/'+n.unit+'</span>'+
+        '</div>'+
+        '<button class="ub" id="ub-'+n.id+'" onclick="tU('+n.id+')">Mavjud emas</button>'+
+      '</div>'+
+      '<div class="hint" id="ht-'+n.id+'"></div>'+
+      '<textarea class="ni" id="ni-'+n.id+'" placeholder="Izoh..." rows="1"></textarea>'+
+    '</div>';
+  }
+  document.getElementById('ct').innerHTML=h;
+  ref();
+}
+function oP(id,qty,unit){
+  var v=parseFloat(document.getElementById('pi-'+id).value)||0;
+  var ht=document.getElementById('ht-'+id);
+  var pi=document.getElementById('pi-'+id);
+  if(v>0){
+    pi.classList.add('ok');
+    document.getElementById('ub-'+id).classList.remove('on');
+    document.getElementById('it-'+id).classList.remove('unav');
+    if(ht){ht.textContent=qty+' '+unit+' x '+v.toLocaleString()+' = '+(v*qty).toLocaleString()+" so'm";ht.style.display='block';}
+  }else{pi.classList.remove('ok');if(ht)ht.style.display='none';}
+  ref();
+}
+function tU(id){
+  var b=document.getElementById('ub-'+id);
+  var p=document.getElementById('pi-'+id);
+  var it=document.getElementById('it-'+id);
+  var ht=document.getElementById('ht-'+id);
+  var on=b.classList.toggle('on');
+  if(on){p.value='';p.classList.remove('ok');p.disabled=true;it.classList.add('unav');if(ht)ht.style.display='none';}
+  else{p.disabled=false;it.classList.remove('unav');p.focus();}
+  ref();
+}
+function ref(){
+  var f=0,t=0;
+  for(var i=0;i<nds.length;i++){
+    var n=nds[i];
+    var p=parseFloat((document.getElementById('pi-'+n.id)||{}).value)||0;
+    var u=(document.getElementById('ub-'+n.id)||{}).classList&&document.getElementById('ub-'+n.id).classList.contains('on');
+    var nm=document.getElementById('nm-'+n.id);
+    if(u){f++;if(nm){nm.textContent='—';nm.classList.add('done');}}
+    else if(p>0){f++;t+=p*n.qty;if(nm)nm.classList.add('done');}
+    else{if(nm){nm.textContent=i+1;nm.classList.remove('done');}}
+  }
+  var pct=nds.length>0?Math.round(f/nds.length*100):0;
+  document.getElementById('pf').style.width=pct+'%';
+  document.getElementById('fc').textContent=f+'/'+nds.length+" to'ldirildi";
+  document.getElementById('tt').textContent=t>0?'Jami: '+t.toLocaleString()+" so'm":'';
+  var sb=document.getElementById('sb');
+  sb.disabled=f===0;
+  sb.textContent=f>0?('✅ '+f+' ta taklif yuborish'):'Narx kiriting';
+}
+function sDl(el){document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});el.classList.add('sel');dlv=parseInt(el.dataset.val);}
+function send(){
+  var offs=[];
+  for(var i=0;i<nds.length;i++){
+    var n=nds[i];
+    var pv=parseFloat((document.getElementById('pi-'+n.id)||{}).value)||0;
+    var uv=(document.getElementById('ub-'+n.id)||{}).classList&&document.getElementById('ub-'+n.id).classList.contains('on');
+    var nt=((document.getElementById('ni-'+n.id)||{}).value||'').trim();
+    if(uv)offs.push({need_id:n.id,price:0,unavailable:true,note:nt});
+    else if(pv>0)offs.push({need_id:n.id,price:pv,unavailable:false,note:nt});
+  }
+  if(!offs.length)return;
+  var sb=document.getElementById('sb');
+  sb.disabled=true;sb.textContent='⏳ Yuklanmoqda...';
+  var uid=0;
+  if(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user)uid=tg.initDataUnsafe.user.id;
+  fetch('/api/submit_offer',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({payload:JSON.stringify({type:'offer',batch_id:bId,offers:offs,delivery:dlv}),user_id:uid,init_data:tg?tg.initData:''})
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res.ok){sb.textContent='✅ Yuborildi!';setTimeout(function(){if(tg)tg.close();},1500);}
+    else{sb.disabled=false;sb.textContent='✅ Taklif yuborish';alert('Xato: '+(res.error||'nomalum'));}
+  }).catch(function(e){sb.disabled=false;sb.textContent='✅ Taklif yuborish';alert('Tarmoq xatosi: '+e.message);});
+}
+load();
+</script>
+</body>
+</html>"""
+
 
 async def handle_api_needs(request):
     """GET /api/needs/{batch_id} — batch dagi ehtiyojlar"""
