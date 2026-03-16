@@ -2117,7 +2117,22 @@ async def start_webserver():
     app.router.add_get("/order",                  handle_order_page)
     app.router.add_get("/offer/{batch_id}",        handle_offer_page)
     app.router.add_get("/api/products/{uid}",      handle_api_products)
-    app.router.add_get("/api/needs/{batch_id}",    handle_api_needs)
+    async def _api_needs(req):
+        try: bid = int(req.match_info.get("batch_id",0))
+        except: bid = 0
+        if bid <= 0:
+            return _web.Response(text="[]", content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
+        rows = await db_all(
+            "SELECT id,product_name,quantity,unit FROM needs WHERE batch_id=? AND status!='cancelled' ORDER BY id",
+            (bid,))
+        import json as _j
+        data = [{"id":r["id"],"name":r["product_name"],"qty":r["quantity"],"unit":r["unit"]} for r in rows]
+        log.info(f"API needs: batch={bid} -> {len(data)} ta")
+        return _web.Response(text=_j.dumps(data, ensure_ascii=False),
+                             content_type="application/json",
+                             headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/needs/{batch_id}", _api_needs)
     app.router.add_post("/api/submit_order",       handle_submit_order)
     app.router.add_post("/api/submit_offer",       handle_submit_offer)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
