@@ -2114,27 +2114,160 @@ loadNeeds();
 
 async def start_webserver():
     app = _web.Application()
-    app.router.add_get("/order",                  handle_order_page)
-    app.router.add_get("/offer/{batch_id}",        handle_offer_page)
-    app.router.add_get("/api/products/{uid}",      handle_api_products)
+    # ── GET /order ────────────────────────────────────────────────────
+    app.router.add_get("/order", handle_order_page)
+    app.router.add_get("/offer/{batch_id}", handle_offer_page)
+    app.router.add_get("/api/products/{uid}", handle_api_products)
+
+    # ── GET /api/needs/{batch_id} ──────────────────────────────────
     async def _api_needs(req):
-        try: bid = int(req.match_info.get("batch_id",0))
+        try: bid = int(req.match_info.get("batch_id", 0))
         except: bid = 0
         if bid <= 0:
             return _web.Response(text="[]", content_type="application/json",
-                                 headers={"Access-Control-Allow-Origin":"*"})
+                                 headers={"Access-Control-Allow-Origin": "*"})
         rows = await db_all(
-            "SELECT id,product_name,quantity,unit FROM needs WHERE batch_id=? AND status!='cancelled' ORDER BY id",
-            (bid,))
-        import json as _j
-        data = [{"id":r["id"],"name":r["product_name"],"qty":r["quantity"],"unit":r["unit"]} for r in rows]
+            "SELECT id, product_name, quantity, unit FROM needs "
+            "WHERE batch_id=? AND status != 'cancelled' ORDER BY id", (bid,))
+        data = [{"id": r["id"], "name": r["product_name"],
+                 "qty": r["quantity"], "unit": r["unit"]} for r in rows]
         log.info(f"API needs: batch={bid} -> {len(data)} ta")
-        return _web.Response(text=_j.dumps(data, ensure_ascii=False),
+        return _web.Response(text=_json.dumps(data, ensure_ascii=False),
                              content_type="application/json",
-                             headers={"Access-Control-Allow-Origin":"*"})
+                             headers={"Access-Control-Allow-Origin": "*"})
     app.router.add_get("/api/needs/{batch_id}", _api_needs)
-    app.router.add_post("/api/submit_order",       handle_submit_order)
-    app.router.add_post("/api/submit_offer",       handle_submit_offer)
+
+    # ── POST /api/submit_order ─────────────────────────────────────
+    async def _submit_order(req):
+        try:
+            body    = await req.json()
+            payload = body.get("payload", "")
+            user_id = body.get("user_id")
+            if not payload or not user_id:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
+                    content_type="application/json")
+            data     = _json.loads(payload)
+            items    = data.get("items", [])
+            deadline = int(data.get("deadline", 24))
+            uid      = int(user_id)
+            if not items:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "items bo'sh"}),
+                    content_type="application/json")
+            u = await get_user(uid)
+            if not u:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
+                    content_type="application/json")
+            room    = await get_or_create_room(uid)
+            expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
+            batch_id = await db_insert(
+                "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+                (uid, deadline, expires))
+            saved = []
+            for item in items:
+                nid = await db_insert(
+                    "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (batch_id, room["id"], uid, item["name"],
+                     float(item["qty"]), item.get("unit","dona"), deadline, expires))
+                need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+                saved.append(dict(need))
+            mid = await post_batch_to_channel(batch_id, saved, dict(u))
+            if mid:
+                for n in saved:
+                    await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
+            dl_map  = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+            preview = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in saved[:5]])
+            chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
+            link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else ""
+            try:
+                await bot.send_message(uid,
+                    f"✅ *{len(saved)} ta mahsulot joylashtirildi!*{link}\n\n"
+                    f"{preview}\n\n⏱ {dl_map.get(deadline,str(deadline)+' soat')} ichida")
+            except Exception as e:
+                log.error(f"Buyurtmachiga xabar xato: {e}")
+            asyncio.create_task(notify_sellers_batch(batch_id, uid))
+            return _web.Response(
+                text=_json.dumps({"ok": True, "batch_id": batch_id, "count": len(saved)}),
+                content_type="application/json")
+        except Exception as e:
+            log.error(f"submit_order xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": str(e)}),
+                content_type="application/json", status=500)
+    app.router.add_post("/api/submit_order", _submit_order)
+
+    # ── POST /api/submit_offer ─────────────────────────────────────
+    async def _submit_offer(req):
+        try:
+            body     = await req.json()
+            payload  = body.get("payload", "")
+            user_id  = body.get("user_id")
+            if not payload or not user_id:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
+                    content_type="application/json")
+            data     = _json.loads(payload)
+            offers   = data.get("offers", [])
+            batch_id = int(data.get("batch_id", 0))
+            delivery = int(data.get("delivery", 24))
+            uid      = int(user_id)
+            u = await get_user(uid)
+            if not u:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
+                    content_type="application/json")
+            shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=? AND status='active'", (uid,))
+            sname = (shop["shop_name"] if shop else None) or u["clinic_name"] or u["full_name"] or "Sotuvchi"
+            saved = 0
+            unavail_c = 0
+            for offer in offers:
+                nid    = int(offer.get("need_id", 0))
+                price  = float(offer.get("price", 0))
+                is_unav= bool(offer.get("unavailable", False))
+                note   = offer.get("note", "") or ""
+                if not nid: continue
+                nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+                if not nd: continue
+                ex = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
+                if ex: continue
+                if is_unav:
+                    await db_insert(
+                        "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                        "VALUES(?,?,?,?,?,?,?,?)",
+                        (nid, batch_id, uid, nd["product_name"], 0, nd["unit"], delivery, "mavjud_emas"))
+                    unavail_c += 1
+                elif price > 0:
+                    await db_insert(
+                        "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
+                        "VALUES(?,?,?,?,?,?,?,?)",
+                        (nid, batch_id, uid, nd["product_name"], price, nd["unit"], delivery, note))
+                    saved += 1
+            if saved > 0:
+                owners = await db_all("SELECT DISTINCT owner_id FROM needs WHERE batch_id=?", (batch_id,))
+                dl_map = {2:"2 soat",24:"24 soat",48:"2 kun",168:"1 hafta"}
+                for row in owners:
+                    try:
+                        await bot.send_message(row["owner_id"],
+                            f"📩 *Yangi taklif!*\n\n🏪 {sname}\n"
+                            f"📦 {saved} ta mahsulotga narx berdi\n"
+                            f"🚚 {dl_map.get(delivery,str(delivery)+' soat')} ichida",
+                            reply_markup=ik([ib("📩 Takliflarni ko'rish", f"view_batch_{batch_id}")]))
+                    except Exception: pass
+            parts = []
+            if saved: parts.append(f"{saved} ta narx")
+            if unavail_c: parts.append(f"{unavail_c} ta mavjud emas")
+            return _web.Response(
+                text=_json.dumps({"ok": True, "result": " | ".join(parts) if parts else "0"}),
+                content_type="application/json")
+        except Exception as e:
+            log.error(f"submit_offer xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": str(e)}),
+                content_type="application/json", status=500)
+    app.router.add_post("/api/submit_offer", _submit_offer)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
         app.router.add_static("/static", webapp_dir)
