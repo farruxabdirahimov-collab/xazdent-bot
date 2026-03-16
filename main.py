@@ -281,7 +281,7 @@ async def cmd_start(msg: Message, state: FSMContext):
     u = await get_user(uid)
     if not u:
         await db_run(
-            "INSERT OR IGNORE INTO users(id,username,full_name) VALUES(?,?,?)",
+            "INSERT INTO users(id,username,full_name) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING",
             (uid, msg.from_user.username, msg.from_user.full_name),
         )
         u = await get_user(uid)
