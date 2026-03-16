@@ -1,200 +1,178 @@
-import aiosqlite
+import os
 import random
+import asyncpg
 
-DB_PATH = "xazdent.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+_pool = None
 
+async def get_pool():
+    global _pool
+    if _pool is None:
+        _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+    return _pool
+
+class Row(dict):
+    pass
+
+def _row(r):
+    return Row(dict(r)) if r else None
+
+def _rows(rs):
+    return [Row(dict(r)) for r in rs]
+
+def _q(query):
+    """SQLite ? → PostgreSQL $1,$2..."""
+    out, n, i = [], 0, 0
+    while i < len(query):
+        if query[i] == '?':
+            n += 1
+            out.append(f"${n}")
+        else:
+            out.append(query[i])
+        i += 1
+    q = "".join(out)
+    q = q.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+    q = q.replace("INSERT OR REPLACE INTO", "INSERT INTO")
+    q = q.replace("datetime('now')", "to_char(now(),'YYYY-MM-DD HH24:MI:SS')")
+    return q
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY,
-                username TEXT,
-                full_name TEXT,
-                phone TEXT,
-                role TEXT DEFAULT 'none',
-                lang TEXT DEFAULT 'uz',
-                clinic_name TEXT,
-                region TEXT,
-                address TEXT,
-                latitude REAL,
-                longitude REAL,
-                balance REAL DEFAULT 0,
-                is_blocked INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS rooms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_code TEXT UNIQUE NOT NULL,
-                room_type TEXT NOT NULL,
-                owner_id INTEGER,
-                status TEXT DEFAULT 'active',
-                max_needs INTEGER NOT NULL,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            -- Ehtiyoj to'plami (bir sessiyada bir nechta ehtiyoj)
-            CREATE TABLE IF NOT EXISTS batches (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER NOT NULL,
-                status TEXT DEFAULT 'active',
-                deadline_hours INTEGER DEFAULT 24,
-                created_at TEXT DEFAULT (datetime('now')),
-                expires_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS needs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                batch_id INTEGER,
-                room_id INTEGER,
-                owner_id INTEGER,
-                product_name TEXT NOT NULL,
-                quantity REAL NOT NULL,
-                unit TEXT NOT NULL DEFAULT 'dona',
-                budget REAL,
-                deadline_hours INTEGER NOT NULL DEFAULT 24,
-                extra_note TEXT,
-                status TEXT DEFAULT 'active',
-                channel_message_id INTEGER,
-                created_at TEXT DEFAULT (datetime('now')),
-                expires_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS offers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                need_id INTEGER,
-                batch_id INTEGER,
-                seller_id INTEGER,
-                product_name TEXT NOT NULL,
-                price REAL NOT NULL,
-                unit TEXT DEFAULT 'dona',
-                delivery_hours INTEGER NOT NULL,
-                note TEXT,
-                status TEXT DEFAULT 'pending',
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS shops (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                shop_name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                phone TEXT,
-                region TEXT,
-                status TEXT DEFAULT 'pending',
-                rating REAL DEFAULT 0,
-                total_deals INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                shop_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                price REAL NOT NULL,
-                unit TEXT NOT NULL,
-                description TEXT,
-                is_active INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                amount REAL NOT NULL,
-                balls REAL NOT NULL,
-                type TEXT NOT NULL,
-                status TEXT DEFAULT 'pending',
-                receipt_file_id TEXT,
-                confirmed_by INTEGER,
-                note TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS clinic_products (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                unit TEXT DEFAULT 'dona',
-                sort_order INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            INSERT OR IGNORE INTO settings VALUES ('ball_price', '1000');
-            INSERT OR IGNORE INTO settings VALUES ('elon_price', '0');
-            INSERT OR IGNORE INTO settings VALUES ('card_number', '9860020138100068');
-        """)
-        await db.commit()
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGINT PRIMARY KEY, username TEXT, full_name TEXT, phone TEXT,
+            role TEXT DEFAULT 'none', lang TEXT DEFAULT 'uz', clinic_name TEXT,
+            region TEXT, address TEXT, latitude REAL, longitude REAL,
+            balance REAL DEFAULT 0, is_blocked INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS rooms (
+            id SERIAL PRIMARY KEY, room_code TEXT UNIQUE NOT NULL,
+            room_type TEXT NOT NULL, owner_id BIGINT, status TEXT DEFAULT 'active',
+            max_needs INTEGER NOT NULL,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS batches (
+            id SERIAL PRIMARY KEY, owner_id BIGINT NOT NULL,
+            status TEXT DEFAULT 'active', deadline_hours INTEGER DEFAULT 24,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
+            expires_at TEXT
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS needs (
+            id SERIAL PRIMARY KEY, batch_id INTEGER, room_id INTEGER,
+            owner_id BIGINT, product_name TEXT NOT NULL, quantity REAL NOT NULL,
+            unit TEXT NOT NULL DEFAULT 'dona', budget REAL,
+            deadline_hours INTEGER NOT NULL DEFAULT 24, extra_note TEXT,
+            status TEXT DEFAULT 'active', channel_message_id BIGINT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
+            expires_at TEXT
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS offers (
+            id SERIAL PRIMARY KEY, need_id INTEGER, batch_id INTEGER,
+            seller_id BIGINT, product_name TEXT NOT NULL, price REAL NOT NULL,
+            unit TEXT DEFAULT 'dona', delivery_hours INTEGER NOT NULL,
+            note TEXT, status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS shops (
+            id SERIAL PRIMARY KEY, owner_id BIGINT, shop_name TEXT NOT NULL,
+            category TEXT NOT NULL, phone TEXT, region TEXT,
+            status TEXT DEFAULT 'pending', rating REAL DEFAULT 0,
+            total_deals INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id SERIAL PRIMARY KEY, shop_id INTEGER NOT NULL,
+            name TEXT NOT NULL, price REAL NOT NULL, unit TEXT NOT NULL,
+            description TEXT, is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY, user_id BIGINT, amount REAL NOT NULL,
+            balls REAL NOT NULL, type TEXT NOT NULL, status TEXT DEFAULT 'pending',
+            receipt_file_id TEXT, confirmed_by BIGINT, note TEXT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS clinic_products (
+            id SERIAL PRIMARY KEY, owner_id BIGINT NOT NULL,
+            name TEXT NOT NULL, unit TEXT DEFAULT 'dona',
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+        await c.execute("""
+        INSERT INTO settings(key,value) VALUES
+            ('ball_price','1000'),('elon_price','0'),('card_number','9860020138100068')
+        ON CONFLICT(key) DO NOTHING""")
     print("✅ Database tayyor!")
 
+async def db_get(query, params=()):
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        return _row(await c.fetchrow(_q(query), *params))
 
-async def db_get(query: str, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(query, params) as cursor:
-            return await cursor.fetchone()
+async def db_all(query, params=()):
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        return _rows(await c.fetch(_q(query), *params))
 
+async def db_run(query, params=()):
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        await c.execute(_q(query), *params)
 
-async def db_all(query: str, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(query, params) as cursor:
-            return await cursor.fetchall()
+async def db_insert(query, params=()):
+    q = _q(query)
+    if "RETURNING" not in q.upper():
+        q = q.rstrip(";") + " RETURNING id"
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        row = await c.fetchrow(q, *params)
+        return row["id"] if row else None
 
-
-async def db_run(query: str, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(query, params)
-        await db.commit()
-
-
-async def db_insert(query: str, params=()):
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(query, params)
-        await db.commit()
-        return cursor.lastrowid
-
-
-async def get_user(uid: int):
+async def get_user(uid):
     return await db_get("SELECT * FROM users WHERE id=?", (uid,))
 
-
-async def get_setting(key: str):
+async def get_setting(key):
     row = await db_get("SELECT value FROM settings WHERE key=?", (key,))
     return row["value"] if row else None
 
+async def update_setting(key, value):
+    pool = await get_pool()
+    async with pool.acquire() as c:
+        await c.execute(
+            "INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=$2",
+            key, value)
 
-async def update_setting(key: str, value: str):
-    await db_run("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, value))
-
-
-async def add_balance(user_id: int, balls: float):
+async def add_balance(user_id, balls):
     await db_run("UPDATE users SET balance=balance+? WHERE id=?", (balls, user_id))
 
-
-async def get_next_room_code(room_type: str) -> str:
+async def get_next_room_code(room_type):
     rows = await db_all("SELECT room_code FROM rooms")
     existing = {r["room_code"] for r in rows}
     for building in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         for _ in range(300):
             if room_type == "small":
-                digits = random.sample(range(1, 10), 3)
+                digits = random.sample(range(1,10), 3)
             elif room_type == "standard":
-                d1 = random.randint(1, 9)
-                d2 = random.randint(1, 9)
-                while d2 == d1:
-                    d2 = random.randint(1, 9)
-                digits = random.choice([[d1, d1, d2], [d1, d2, d2]])
+                d1 = random.randint(1,9)
+                d2 = random.randint(1,9)
+                while d2 == d1: d2 = random.randint(1,9)
+                digits = random.choice([[d1,d1,d2],[d1,d2,d2]])
             else:
-                d = random.randint(1, 9)
-                digits = [d, d, d]
-            code = f"{building}-{''.join(map(str, digits))}"
+                d = random.randint(1,9)
+                digits = [d,d,d]
+            code = f"{building}-{''.join(map(str,digits))}"
             if code not in existing:
                 return code
     return None
