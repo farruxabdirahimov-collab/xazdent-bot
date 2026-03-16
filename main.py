@@ -1565,7 +1565,134 @@ async def adm_rej(call: CallbackQuery):
     await call.answer("❌")
 
 # ── /debug ───────────────────────────────────────────────────────────────────
-@router.message(Command('debug'))
+# ── ADMIN BUYRUQLAR ───────────────────────────────────────────────────────────
+@router.message(Command("admin"))
+async def admin_panel(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
+    now       = datetime.now().strftime("%d.%m.%Y %H:%M")
+    total_u   = (await db_get("SELECT COUNT(*) as c FROM users", ()))["c"]
+    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='clinic'", ()))["c"]
+    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'", ()))["c"]
+    active_n  = (await db_get("SELECT COUNT(*) as c FROM needs WHERE status='active'", ()))["c"]
+    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs", ()))["c"]
+    pending_t = (await db_get("SELECT COUNT(*) as c FROM transactions WHERE status='pending'", ()))["c"]
+    pending_s = (await db_get("SELECT COUNT(*) as c FROM shops WHERE status='pending'", ()))["c"]
+    rev       = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'", ())
+    revenue   = rev["s"] if rev else 0
+    await msg.answer(
+        f"👨‍💼 *XAZDENT Admin*\n_{now}_\n\n"
+        f"👥 Foydalanuvchilar: *{total_u}*\n"
+        f"  ├ 🏥 Klinikalar: {clinics}\n"
+        f"  └ 🛒 Sotuvchilar: {sellers}\n\n"
+        f"📋 E'lonlar: *{total_n}* (🟢 {active_n} aktiv)\n\n"
+        f"⏳ Kutmoqda: 💳 {pending_t} chek | 🏪 {pending_s} do'kon\n\n"
+        f"💰 Jami daromad: *{revenue:,.0f} so'm*",
+        reply_markup=ik(
+            [ib("💳 Kutayotgan cheklar", "adm_pending_tx")],
+            [ib("🏪 Kutayotgan do'konlar", "adm_pending_shops")],
+            [ib("📢 Xabar yuborish", "adm_broadcast")],
+            [ib("⚙️ Sozlamalar", "adm_settings")],
+        )
+    )
+
+@router.callback_query(F.data == "adm_pending_tx")
+async def adm_pending_tx(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    txs = await db_all(
+        "SELECT t.*, u.full_name, u.clinic_name FROM transactions t "
+        "JOIN users u ON t.user_id=u.id WHERE t.status='pending' ORDER BY t.created_at DESC LIMIT 10"
+    )
+    if not txs:
+        await call.message.answer("✅ Kutayotgan cheklar yo'q.")
+        await call.answer(); return
+    for tx in txs:
+        name = tx["clinic_name"] or tx["full_name"] or str(tx["user_id"])
+        if tx["receipt_file_id"]:
+            try:
+                await call.message.answer_photo(tx["receipt_file_id"],
+                    caption=f"💳 *Chek #{tx['id']}*\n👤 {name}\n💰 {tx['amount']:,.0f} so'm → {tx['balls']:.1f} ball",
+                    reply_markup=ik(
+                        [ib("✅ Tasdiqlash", f"adm_ok_{tx['id']}_{tx['user_id']}_{tx['balls']}"),
+                         ib("❌ Rad", f"adm_rej_{tx['id']}_{tx['user_id']}")]))
+            except Exception: pass
+    await call.answer()
+
+@router.callback_query(F.data == "adm_pending_shops")
+async def adm_pending_shops(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    shops = await db_all(
+        "SELECT s.*, u.full_name, u.phone FROM shops s "
+        "JOIN users u ON s.owner_id=u.id WHERE s.status='pending'"
+    )
+    if not shops:
+        await call.message.answer("✅ Kutayotgan do'konlar yo'q.")
+        await call.answer(); return
+    for s in shops:
+        await call.message.answer(
+            f"🏪 *{s['shop_name']}*\n📂 {s['category']}\n👤 {s['full_name']}\n📞 {s['phone']}",
+            reply_markup=ik([ib("✅ Tasdiqlash", f"shopok_{s['owner_id']}"),
+                             ib("❌ Rad", f"shoprej_{s['owner_id']}")]))
+    await call.answer()
+
+@router.callback_query(F.data == "adm_settings")
+async def adm_settings(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    ball_price = await get_setting("ball_price") or "1000"
+    card       = await get_setting("card_number") or "—"
+    await call.message.answer(
+        f"⚙️ *Sozlamalar*\n\n💰 1 ball = *{ball_price} so'm*\n💳 Karta: `{card}`\n\n"
+        f"`/setball 2000` — ball narxi\n`/setcard 9860...` — karta")
+    await call.answer()
+
+@router.callback_query(F.data == "adm_broadcast")
+async def adm_broadcast_btn(call: CallbackQuery, state: FSMContext):
+    if call.from_user.id not in ADMIN_IDS: return
+    await state.set_state(TopupState.receipt)  # placeholder state
+    await call.message.answer("📢 Yubormoqchi bo'lgan xabarni yozing:\n_(Bekor qilish: /cancel)_")
+    await state.update_data(broadcast_mode=True)
+    await call.answer()
+
+@router.message(Command("setball"))
+async def cmd_setball(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("ball_price", val)
+        await msg.answer(f"✅ 1 ball = *{val} so'm*")
+    except Exception:
+        await msg.answer("❌ Format: /setball 2000")
+
+@router.message(Command("setcard"))
+async def cmd_setcard(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("card_number", val)
+        await msg.answer(f"✅ Karta: `{val}`")
+    except Exception:
+        await msg.answer("❌ Format: /setcard 9860020138100068")
+
+@router.message(Command("broadcast"))
+async def cmd_broadcast(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await msg.answer("❌ Format: /broadcast Xabar matni")
+        return
+    text  = parts[1]
+    users = await db_all("SELECT id FROM users WHERE is_blocked=0")
+    sent, fail = 0, 0
+    for u in users:
+        try:
+            await bot.send_message(u["id"], text)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            fail += 1
+    await msg.answer(f"📢 Yuborildi: *{sent}* | Xato: *{fail}*")
+
+@router.message(Command("debug"))
 async def debug_cmd(msg: Message):
     if msg.from_user.id not in ADMIN_IDS:
         return
