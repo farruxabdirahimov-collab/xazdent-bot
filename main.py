@@ -1742,7 +1742,7 @@ async def handle_offer_page(request):
     )
 
 def _get_offer_html_inline():
-    """offer.html inline version — fayl yo'q bo'lsa ishlatiladi."""
+    """offer.html inline — fayl yo\'q bo\'lsa ishlatiladi."""
     return """<!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -1756,412 +1756,335 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000);padding-bottom:90px}
 .hdr{background:var(--tg-theme-secondary-bg-color,#f2f2f7);padding:14px 16px 10px;
   position:sticky;top:0;z-index:10;border-bottom:1px solid rgba(0,0,0,.08)}
-.hdr h1{font-size:17px;font-weight:600}.hdr p{font-size:12px;opacity:.55;margin-top:2px}
+.hdr h1{font-size:17px;font-weight:600}
+.hdr p{font-size:12px;opacity:.55;margin-top:2px}
 .pb{height:3px;background:var(--tg-theme-secondary-bg-color,#f2f2f7)}
-.pf{height:100%;background:var(--tg-theme-button-color,#007aff);transition:width .3s}
-.spin{display:flex;align-items:center;justify-content:center;padding:60px 16px;
-  flex-direction:column;gap:12px;color:var(--tg-theme-hint-color,#888);font-size:14px}
-.sp{width:28px;height:28px;border:2.5px solid var(--tg-theme-secondary-bg-color,#ddd);
-  border-top-color:var(--tg-theme-button-color,#007aff);border-radius:50%;animation:sp .7s linear infinite}
-@keyframes sp{to{transform:rotate(360deg)}}
-.item{border-bottom:1px solid rgba(0,0,0,.07);padding:12px 16px}
-.item.unav{opacity:.45}
-.ih{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.num{width:26px;height:26px;border-radius:50%;background:var(--tg-theme-secondary-bg-color,#f2f2f7);
-  color:var(--tg-theme-hint-color,#888);font-size:11px;font-weight:600;
+.pf{height:100%;background:var(--tg-theme-button-color,#007aff);transition:width .3s;width:0%}
+.item{border-bottom:1px solid rgba(0,0,0,.07);padding:14px 16px}
+.item.unav{opacity:.4}
+.irow{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.num{width:28px;height:28px;border-radius:50%;
+  background:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  color:var(--tg-theme-hint-color,#888);font-size:12px;font-weight:600;
   display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .num.done{background:#E2EFDA;color:#3B6D11}
-.nm{font-size:15px;font-weight:600;flex:1}
-.qty{font-size:12px;color:var(--tg-theme-hint-color,#888);white-space:nowrap}
-.pr{display:flex;align-items:center;gap:8px}
-.pw{flex:1;position:relative}
-.pi{width:100%;height:40px;border:1.5px solid rgba(0,0,0,.12);border-radius:10px;
-  font-size:16px;font-weight:500;padding:0 52px 0 12px;
+.iname{font-size:15px;font-weight:600;flex:1}
+.iqty{font-size:12px;color:var(--tg-theme-hint-color,#888);white-space:nowrap;
+  background:var(--tg-theme-secondary-bg-color,#f2f2f7);padding:3px 8px;border-radius:8px}
+.prow{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.pwrap{flex:1;position:relative}
+.pinput{width:100%;height:42px;border:1.5px solid rgba(0,0,0,.12);border-radius:10px;
+  font-size:17px;font-weight:600;padding:0 52px 0 12px;
   background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#000);
-  outline:none;-webkit-appearance:none}
-.pi:focus{border-color:var(--tg-theme-button-color,#007aff)}
-.pi.ok{border-color:#3B6D11}
-.ps{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  outline:none;-webkit-appearance:none;appearance:none}
+.pinput:focus{border-color:var(--tg-theme-button-color,#007aff)}
+.pinput.ok{border-color:#3B6D11;background:#f8fff5}
+.psuffix{position:absolute;right:10px;top:50%;transform:translateY(-50%);
   font-size:11px;color:var(--tg-theme-hint-color,#888);pointer-events:none}
-.hint{font-size:12px;color:#3B6D11;margin-top:4px;font-weight:500;display:none}
-.ub{height:40px;padding:0 10px;border:1.5px solid rgba(0,0,0,.10);border-radius:10px;
+.ubtn{height:42px;padding:0 12px;border:1.5px solid rgba(0,0,0,.10);border-radius:10px;
   font-size:12px;background:transparent;color:var(--tg-theme-hint-color,#888);
-  cursor:pointer;white-space:nowrap;flex-shrink:0}
-.ub.on{background:#FCEBEB;border-color:#F09595;color:#A32D2D}
-.ni{width:100%;margin-top:8px;border:1.5px solid rgba(0,0,0,.08);border-radius:10px;
-  font-size:14px;padding:8px 12px;background:var(--tg-theme-secondary-bg-color,#f2f2f7);
-  color:var(--tg-theme-text-color,#000);outline:none;resize:none;font-family:inherit;min-height:36px}
-.dlr{padding:10px 16px;border-bottom:1px solid rgba(0,0,0,.07)}
-.dll{font-size:13px;opacity:.55;margin-bottom:8px}
+  cursor:pointer;white-space:nowrap;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.ubtn.on{background:#FCEBEB;border-color:#E24B4A;color:#A32D2D}
+.hint{font-size:12px;color:#3B6D11;font-weight:500;margin-bottom:6px;padding-left:2px}
+.noteinp{width:100%;border:1px solid rgba(0,0,0,.08);border-radius:8px;
+  font-size:13px;padding:7px 10px;background:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  color:var(--tg-theme-text-color,#000);outline:none;resize:none;font-family:inherit}
+.dlrow{padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.07)}
+.dllabel{font-size:13px;opacity:.55;margin-bottom:8px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
-.chip{padding:6px 14px;border-radius:16px;border:1px solid rgba(0,0,0,.12);
+.chip{padding:7px 14px;border-radius:20px;border:1.5px solid rgba(0,0,0,.12);
   font-size:13px;font-weight:500;cursor:pointer;background:transparent;
-  color:var(--tg-theme-text-color,#000)}
-.chip.sel{background:var(--tg-theme-button-color,#007aff);color:#fff;border-color:transparent}
-.bot{position:fixed;bottom:0;left:0;right:0;padding:8px 16px 12px;
+  color:var(--tg-theme-text-color,#000);-webkit-tap-highlight-color:transparent}
+.chip.sel{background:var(--tg-theme-button-color,#007aff);
+  color:var(--tg-theme-button-text-color,#fff);border-color:transparent}
+.bot{position:fixed;bottom:0;left:0;right:0;padding:10px 16px 14px;
   background:var(--tg-theme-bg-color,#fff);border-top:1px solid rgba(0,0,0,.08);z-index:20}
-.bi{display:flex;justify-content:space-between;font-size:12px;
+.binfo{display:flex;justify-content:space-between;font-size:13px;
   color:var(--tg-theme-hint-color,#888);margin-bottom:8px}
-.ts{font-weight:600;color:var(--tg-theme-button-color,#007aff)}
-.sb{width:100%;padding:14px;border:none;border-radius:12px;
-  background:var(--tg-theme-button-color,#007aff);color:#fff;
-  font-size:16px;font-weight:600;cursor:pointer}
-.sb:disabled{opacity:.35;cursor:not-allowed}
+.btotal{font-weight:600;color:var(--tg-theme-button-color,#007aff)}
+.sbtn{width:100%;padding:14px;border:none;border-radius:12px;
+  background:var(--tg-theme-button-color,#007aff);
+  color:var(--tg-theme-button-text-color,#fff);
+  font-size:16px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.sbtn:active{opacity:.85}
+.sbtn:disabled{opacity:.35;cursor:not-allowed}
+.errmsg{padding:24px 16px;text-align:center;color:var(--tg-theme-hint-color,#888);
+  font-size:14px;line-height:1.6}
+.loading{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:60px 16px;gap:14px;
+  color:var(--tg-theme-hint-color,#888);font-size:14px}
+.spin{width:30px;height:30px;border:3px solid var(--tg-theme-secondary-bg-color,#eee);
+  border-top-color:var(--tg-theme-button-color,#007aff);
+  border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div class="hdr"><h1>💰 Narx kiriting</h1><p id="sub">Yuklanmoqda...</p></div>
-<div class="pb"><div class="pf" id="pf" style="width:0%"></div></div>
-<div id="ct"><div class="spin"><div class="sp"></div>Yuklanmoqda...</div></div>
-<div class="dlr">
-  <div class="dll">🚚 Yetkazib berish muddati:</div>
+
+<div class="hdr">
+  <h1>💰 Narx kiriting</h1>
+  <p id="sub">Yuklanmoqda...</p>
+</div>
+<div class="pb"><div class="pf" id="pf"></div></div>
+
+<div id="ct"><div class="loading"><div class="spin"></div>Yuklanmoqda...</div></div>
+
+<div class="dlrow">
+  <div class="dllabel">🚚 Yetkazib berish muddati:</div>
   <div class="chips">
-    <button class="chip sel" data-val="2" onclick="sDl(this)">⚡️ 2 soat</button>
-    <button class="chip" data-val="24" onclick="sDl(this)">🕐 24 soat</button>
-    <button class="chip" data-val="48" onclick="sDl(this)">📅 2 kun</button>
-    <button class="chip" data-val="168" onclick="sDl(this)">🗓 1 hafta</button>
+    <button class="chip sel" data-val="2"   onclick="sDl(this)">⚡️ 2 soat</button>
+    <button class="chip"     data-val="24"  onclick="sDl(this)">🕐 24 soat</button>
+    <button class="chip"     data-val="48"  onclick="sDl(this)">📅 2 kun</button>
+    <button class="chip"     data-val="168" onclick="sDl(this)">🗓 1 hafta</button>
   </div>
 </div>
+
 <div class="bot">
-  <div class="bi"><span id="fc">0/0</span><span class="ts" id="tt"></span></div>
-  <button class="sb" id="sb" onclick="send()" disabled>Narx kiriting</button>
+  <div class="binfo">
+    <span id="fc">0/0 to'ldirildi</span>
+    <span class="btotal" id="tt"></span>
+  </div>
+  <button class="sbtn" id="sb" onclick="doSend()" disabled>Narx kiriting</button>
 </div>
+
 <script>
-var tg=window.Telegram&&window.Telegram.WebApp;
-var bId=0,dlv=2,nds=[];
-// batch_id ni URL path dan olish: /offer/42 yoki /offer/42?...
-var _path=window.location.pathname;
-var _parts2=_path.split('/');for(var _i=0;_i<_parts2.length-1;_i++){if(_parts2[_i]==='offer'){var _n=parseInt(_parts2[_i+1]);if(_n>0){bId=_n;break;}}}
-// Query params dan ham tekshir
-var qp=new URLSearchParams(window.location.search);
-if(!bId&&qp.get('batch_id'))bId=parseInt(qp.get('batch_id'));
-if(!bId&&qp.get('bid'))bId=parseInt(qp.get('bid'));
-console.log('offer.html: bId='+bId+' path='+_path);
-if(tg){tg.ready();tg.expand();}
-function load(){
-  if(!bId){showE("Buyurtma ID topilmadi (URL: "+window.location.href+")");return;}
-  fetch('/api/needs/'+bId)
-  .then(function(r){
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
-  })
-  .then(function(d){
-    if(!d||!d.length){
-      showE("Mahsulot topilmadi (batch #"+bId+"). Buyurtma muddati tugagan bo'lishi mumkin.");
-      return;
+var tg  = window.Telegram && window.Telegram.WebApp;
+var dlv = 2;
+var nds = [];
+var bId = 0;
+
+if (tg) { tg.ready(); tg.expand(); }
+
+// batch_id ni URL dan olish
+(function() {
+  var path  = window.location.pathname;
+  var parts = path.split('/');
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i] === 'offer' && parts[i+1]) {
+      var n = parseInt(parts[i+1]);
+      if (n > 0) { bId = n; break; }
     }
-    nds=d;render();
+  }
+  if (!bId) {
+    var q = new URLSearchParams(window.location.search);
+    bId = parseInt(q.get('batch_id') || q.get('bid') || '0') || 0;
+  }
+})();
+
+// user_id
+var userId = 0;
+if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+  userId = tg.initDataUnsafe.user.id;
+}
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Yuklash ──────────────────────────────────────────────────────────────────
+function loadNeeds() {
+  if (!bId) {
+    showErr('Buyurtma raqami topilmadi.\\nURL: ' + window.location.href);
+    return;
+  }
+  fetch('/api/needs/' + bId)
+    .then(function(r) {
+      if (!r.ok) throw new Error('Server xatosi: ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      if (!data || data.length === 0) {
+        showErr('Bu buyurtmada mahsulot topilmadi.\\n(batch #' + bId + ')');
+        return;
+      }
+      nds = data;
+      renderList();
+    })
+    .catch(function(e) {
+      showErr('Yuklab bo\\'lmadi:\\n' + e.message);
+    });
+}
+
+function showErr(msg) {
+  document.getElementById('ct').innerHTML =
+    '<div class="errmsg">' + msg.replace(/\\n/g,'<br>') + '</div>';
+  document.getElementById('sub').textContent = 'Xato';
+}
+
+// ── Ro'yxatni ko'rsatish ─────────────────────────────────────────────────────
+function renderList() {
+  document.getElementById('sub').textContent = nds.length + ' ta mahsulot';
+  var html = '';
+  for (var i = 0; i < nds.length; i++) {
+    var n = nds[i];
+    html +=
+      '<div class="item" id="row'+n.id+'">' +
+        '<div class="irow">' +
+          '<div class="num" id="num'+n.id+'">' + (i+1) + '</div>' +
+          '<div class="iname">' + esc(n.name) + '</div>' +
+          '<div class="iqty">' + n.qty + ' ' + n.unit + '</div>' +
+        '</div>' +
+        '<div class="prow">' +
+          '<div class="pwrap">' +
+            '<input class="pinput" id="p'+n.id+'" type="number" inputmode="decimal" ' +
+              'placeholder="1 ' + n.unit + ' narxi..." min="0" step="any" ' +
+              'oninput="onP('+n.id+','+n.qty+',\\''+n.unit+'\\')">' +
+            '<span class="psuffix">so\\'m/' + n.unit + '</span>' +
+          '</div>' +
+          '<button class="ubtn" id="u'+n.id+'" onclick="togU('+n.id+')">' +
+            'Mavjud emas' +
+          '</button>' +
+        '</div>' +
+        '<div class="hint" id="h'+n.id+'" style="display:none"></div>' +
+        '<textarea class="noteinp" id="nt'+n.id+'" rows="1" ' +
+          'placeholder="Izoh (brend, sifat, muddati...)"></textarea>' +
+      '</div>';
+  }
+  document.getElementById('ct').innerHTML = html;
+  refreshBot();
+}
+
+// ── Narx o'zgarganda ─────────────────────────────────────────────────────────
+function onP(id, qty, unit) {
+  var inp = document.getElementById('p'+id);
+  var hnt = document.getElementById('h'+id);
+  var ub  = document.getElementById('u'+id);
+  var v   = parseFloat(inp.value) || 0;
+
+  if (v > 0) {
+    inp.classList.add('ok');
+    ub.classList.remove('on');
+    ub.disabled = false;
+    document.getElementById('row'+id).classList.remove('unav');
+    if (hnt) {
+      var total = v * qty;
+      hnt.textContent = qty + ' ' + unit + ' × ' + fnum(v) + ' = ' + fnum(total) + ' so\\'m';
+      hnt.style.display = 'block';
+    }
+  } else {
+    inp.classList.remove('ok');
+    if (hnt) hnt.style.display = 'none';
+  }
+  refreshBot();
+  if (tg && tg.HapticFeedback && v > 0) tg.HapticFeedback.selectionChanged();
+}
+
+// ── Mavjud emas ───────────────────────────────────────────────────────────────
+function togU(id) {
+  var ub  = document.getElementById('u'+id);
+  var inp = document.getElementById('p'+id);
+  var row = document.getElementById('row'+id);
+  var hnt = document.getElementById('h'+id);
+  var on  = ub.classList.toggle('on');
+  if (on) {
+    inp.value = ''; inp.classList.remove('ok'); inp.disabled = true;
+    row.classList.add('unav');
+    if (hnt) hnt.style.display = 'none';
+  } else {
+    inp.disabled = false; row.classList.remove('unav');
+    inp.focus();
+  }
+  refreshBot();
+}
+
+function fnum(n) {
+  return Math.round(n).toLocaleString('uz-UZ');
+}
+
+// ── Pastki panel yangilash ────────────────────────────────────────────────────
+function refreshBot() {
+  var filled = 0;
+  var total  = 0;
+  for (var i = 0; i < nds.length; i++) {
+    var n   = nds[i];
+    var inp = document.getElementById('p'+n.id);
+    var ub  = document.getElementById('u'+n.id);
+    var num = document.getElementById('num'+n.id);
+    var isU = ub && ub.classList.contains('on');
+    var v   = inp ? (parseFloat(inp.value)||0) : 0;
+    if (isU) {
+      filled++;
+      if (num) { num.textContent = '—'; num.classList.add('done'); }
+    } else if (v > 0) {
+      filled++;
+      total += v * n.qty;
+      if (num) num.classList.add('done');
+    } else {
+      if (num) { num.textContent = i+1; num.classList.remove('done'); }
+    }
+  }
+  var pct = nds.length > 0 ? Math.round(filled/nds.length*100) : 0;
+  document.getElementById('pf').style.width = pct + '%';
+  document.getElementById('fc').textContent = filled + '/' + nds.length + ' to\\'ldirildi';
+  var tt = document.getElementById('tt');
+  tt.textContent = total > 0 ? 'Jami: ' + fnum(total) + ' so\\'m' : '';
+  var sb = document.getElementById('sb');
+  sb.disabled = filled === 0;
+  sb.textContent = filled > 0 ? ('✅ ' + filled + ' ta taklif yuborish') : 'Narx kiriting';
+}
+
+function sDl(el) {
+  document.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('sel'); });
+  el.classList.add('sel');
+  dlv = parseInt(el.dataset.val);
+}
+
+// ── Yuborish ─────────────────────────────────────────────────────────────────
+function doSend() {
+  var offers = [];
+  for (var i = 0; i < nds.length; i++) {
+    var n   = nds[i];
+    var inp = document.getElementById('p'+n.id);
+    var ub  = document.getElementById('u'+n.id);
+    var nt  = document.getElementById('nt'+n.id);
+    var v   = inp ? (parseFloat(inp.value)||0) : 0;
+    var isU = ub && ub.classList.contains('on');
+    var note= nt ? (nt.value||'').trim() : '';
+    if (isU) {
+      offers.push({need_id:n.id, price:0, unavailable:true, note:note});
+    } else if (v > 0) {
+      offers.push({need_id:n.id, price:v, unavailable:false, note:note});
+    }
+  }
+  if (!offers.length) return;
+
+  var sb = document.getElementById('sb');
+  sb.disabled = true;
+  sb.textContent = '⏳ Yuklanmoqda...';
+
+  fetch('/api/submit_offer', {
+    method:  'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      payload:   JSON.stringify({type:'offer', batch_id:bId, offers:offers, delivery:dlv}),
+      user_id:   userId,
+      init_data: tg ? tg.initData : ''
+    })
   })
-  .catch(function(e){showE("Yuklab bo'lmadi (batch #"+bId+"): "+e.message);});
+  .then(function(r){ return r.json(); })
+  .then(function(res){
+    if (res.ok) {
+      sb.textContent = '✅ Yuborildi!';
+      if (tg) setTimeout(function(){ tg.close(); }, 1500);
+    } else {
+      sb.disabled = false;
+      sb.textContent = '✅ Taklif yuborish';
+      alert('Xato: ' + (res.error || 'nomalum'));
+    }
+  })
+  .catch(function(e){
+    sb.disabled = false;
+    sb.textContent = '✅ Taklif yuborish';
+    alert('Tarmoq xatosi: ' + e.message);
+  });
 }
-function showE(m){document.getElementById('ct').innerHTML='<div class="spin">'+m+'</div>';document.getElementById('sub').textContent='Xato';}
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function render(){
-  document.getElementById('sub').textContent=nds.length+' ta mahsulot';
-  var h='';
-  for(var i=0;i<nds.length;i++){
-    var n=nds[i];
-    h+='<div class="item" id="it-'+n.id+'">'+
-      '<div class="ih">'+
-        '<div class="num" id="nm-'+n.id+'">'+(i+1)+'</div>'+
-        '<div class="nm">'+esc(n.name)+'</div>'+
-        '<div class="qty">Kerak: '+n.qty+' '+n.unit+'</div>'+
-      '</div>'+
-      '<div class="pr">'+
-        '<div class="pw">'+
-          '<input class="pi" id="pi-'+n.id+'" type="number" inputmode="numeric" '+
-            'placeholder="1 '+n.unit+' narxi..." min="0" '+
-            'oninput="oP('+n.id+','+n.qty+',\''+n.unit+'\')">'+
-          '<span class="ps">so'm/'+n.unit+'</span>'+
-        '</div>'+
-        '<button class="ub" id="ub-'+n.id+'" onclick="tU('+n.id+')">Mavjud emas</button>'+
-      '</div>'+
-      '<div class="hint" id="ht-'+n.id+'"></div>'+
-      '<textarea class="ni" id="ni-'+n.id+'" placeholder="Izoh..." rows="1"></textarea>'+
-    '</div>';
-  }
-  document.getElementById('ct').innerHTML=h;
-  ref();
-}
-function oP(id,qty,unit){
-  var v=parseFloat(document.getElementById('pi-'+id).value)||0;
-  var ht=document.getElementById('ht-'+id);
-  var pi=document.getElementById('pi-'+id);
-  if(v>0){
-    pi.classList.add('ok');
-    document.getElementById('ub-'+id).classList.remove('on');
-    document.getElementById('it-'+id).classList.remove('unav');
-    if(ht){ht.textContent=qty+' '+unit+' x '+v.toLocaleString()+' = '+(v*qty).toLocaleString()+" so'm";ht.style.display='block';}
-  }else{pi.classList.remove('ok');if(ht)ht.style.display='none';}
-  ref();
-}
-function tU(id){
-  var b=document.getElementById('ub-'+id);
-  var p=document.getElementById('pi-'+id);
-  var it=document.getElementById('it-'+id);
-  var ht=document.getElementById('ht-'+id);
-  var on=b.classList.toggle('on');
-  if(on){p.value='';p.classList.remove('ok');p.disabled=true;it.classList.add('unav');if(ht)ht.style.display='none';}
-  else{p.disabled=false;it.classList.remove('unav');p.focus();}
-  ref();
-}
-function ref(){
-  var f=0,t=0;
-  for(var i=0;i<nds.length;i++){
-    var n=nds[i];
-    var p=parseFloat((document.getElementById('pi-'+n.id)||{}).value)||0;
-    var u=(document.getElementById('ub-'+n.id)||{}).classList&&document.getElementById('ub-'+n.id).classList.contains('on');
-    var nm=document.getElementById('nm-'+n.id);
-    if(u){f++;if(nm){nm.textContent='—';nm.classList.add('done');}}
-    else if(p>0){f++;t+=p*n.qty;if(nm)nm.classList.add('done');}
-    else{if(nm){nm.textContent=i+1;nm.classList.remove('done');}}
-  }
-  var pct=nds.length>0?Math.round(f/nds.length*100):0;
-  document.getElementById('pf').style.width=pct+'%';
-  document.getElementById('fc').textContent=f+'/'+nds.length+" to'ldirildi";
-  document.getElementById('tt').textContent=t>0?'Jami: '+t.toLocaleString()+" so'm":'';
-  var sb=document.getElementById('sb');
-  sb.disabled=f===0;
-  sb.textContent=f>0?('✅ '+f+' ta taklif yuborish'):'Narx kiriting';
-}
-function sDl(el){document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});el.classList.add('sel');dlv=parseInt(el.dataset.val);}
-function send(){
-  var offs=[];
-  for(var i=0;i<nds.length;i++){
-    var n=nds[i];
-    var pv=parseFloat((document.getElementById('pi-'+n.id)||{}).value)||0;
-    var uv=(document.getElementById('ub-'+n.id)||{}).classList&&document.getElementById('ub-'+n.id).classList.contains('on');
-    var nt=((document.getElementById('ni-'+n.id)||{}).value||'').trim();
-    if(uv)offs.push({need_id:n.id,price:0,unavailable:true,note:nt});
-    else if(pv>0)offs.push({need_id:n.id,price:pv,unavailable:false,note:nt});
-  }
-  if(!offs.length)return;
-  var sb=document.getElementById('sb');
-  sb.disabled=true;sb.textContent='⏳ Yuklanmoqda...';
-  var uid=0;
-  if(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user)uid=tg.initDataUnsafe.user.id;
-  fetch('/api/submit_offer',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({payload:JSON.stringify({type:'offer',batch_id:bId,offers:offs,delivery:dlv}),user_id:uid,init_data:tg?tg.initData:''})
-  }).then(function(r){return r.json();}).then(function(res){
-    if(res.ok){sb.textContent='✅ Yuborildi!';setTimeout(function(){if(tg)tg.close();},1500);}
-    else{sb.disabled=false;sb.textContent='✅ Taklif yuborish';alert('Xato: '+(res.error||'nomalum'));}
-  }).catch(function(e){sb.disabled=false;sb.textContent='✅ Taklif yuborish';alert('Tarmoq xatosi: '+e.message);});
-}
-load();
+
+loadNeeds();
 </script>
 </body>
-</html>"""
+</html>
+"""
 
-
-async def handle_api_needs(request):
-    """GET /api/needs/{batch_id} — batch dagi ehtiyojlar"""
-    try:
-        batch_id = int(request.match_info.get("batch_id", 0))
-    except Exception:
-        batch_id = 0
-
-    if batch_id <= 0:
-        return _web.Response(
-            text=_json.dumps({"error": "batch_id noto'g'ri", "batch_id": batch_id}),
-            content_type="application/json",
-            headers={"Access-Control-Allow-Origin": "*"},
-        )
-
-    # status filtrini olib tashlaymiz — done/paused ehtiyojlar ham ko'rinsin
-    needs = await db_all(
-        "SELECT id, product_name, quantity, unit, status FROM needs WHERE batch_id=? ORDER BY id",
-        (batch_id,),
-    )
-
-    log.info(f"API /api/needs/{batch_id} -> {len(needs)} ta ehtiyoj")
-
-    data = [
-        {"id": n["id"], "name": n["product_name"], "qty": n["quantity"], "unit": n["unit"]}
-        for n in needs
-        if n["status"] not in ("cancelled",)
-    ]
-    return _web.Response(
-        text=_json.dumps(data, ensure_ascii=False),
-        content_type="application/json",
-        headers={"Access-Control-Allow-Origin": "*"},
-    )
-
-async def handle_submit_order(request):
-    """order.html dan kelgan buyurtma — API orqali."""
-    try:
-        body    = await request.json()
-        payload = body.get("payload", "")
-        user_id = body.get("user_id")
-        if not payload or not user_id:
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
-                content_type="application/json",
-            )
-        data     = _json.loads(payload)
-        items    = data.get("items", [])
-        deadline = int(data.get("deadline", 24))
-        uid      = int(user_id)
-
-        if not items:
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "items bo'sh"}),
-                content_type="application/json",
-            )
-
-        u = await get_user(uid)
-        if not u:
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
-                content_type="application/json",
-            )
-
-        room    = await get_or_create_room(uid)
-        expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
-
-        batch_id = await db_insert(
-            "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
-            (uid, deadline, expires),
-        )
-
-        saved_needs = []
-        for item in items:
-            nid = await db_insert(
-                "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (batch_id, room["id"], uid,
-                 item["name"], float(item["qty"]), item.get("unit","dona"),
-                 deadline, expires),
-            )
-            need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
-            saved_needs.append(dict(need))
-
-        mid = await post_batch_to_channel(batch_id, saved_needs, dict(u))
-        if mid:
-            for n in saved_needs:
-                await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
-
-        # Botda ham xabar yuboramiz
-        dl_map   = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
-        preview  = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in saved_needs[:5]])
-        chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
-        link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else ""
-        try:
-            await bot.send_message(
-                uid,
-                f"✅ *{len(saved_needs)} ta mahsulot joylashtirildi!*{link}\n\n"
-                f"{preview}\n\n"
-                f"⏱ {dl_map.get(deadline, str(deadline)+' soat')} ichida",
-            )
-        except Exception as e:
-            log.error(f"Buyurtmachi ga xabar xato: {e}")
-
-        asyncio.create_task(notify_sellers_batch(batch_id, uid))
-
-        return _web.Response(
-            text=_json.dumps({"ok": True, "batch_id": batch_id, "count": len(saved_needs)}),
-            content_type="application/json",
-        )
-    except Exception as e:
-        log.error(f"submit_order xato: {e}")
-        return _web.Response(
-            text=_json.dumps({"ok": False, "error": str(e)}),
-            content_type="application/json", status=500,
-        )
-
-async def handle_submit_offer(request):
-    """Kanal orqali kelgan taklif — API orqali saqlanadi."""
-    try:
-        body     = await request.json()
-        payload  = body.get("payload", "")
-        user_id  = body.get("user_id")
-        if not payload or not user_id:
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "payload yoki user_id yo'q"}),
-                content_type="application/json",
-            )
-        data = _json.loads(payload)
-        if data.get("type") != "offer":
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "noto'g'ri type"}),
-                content_type="application/json",
-            )
-
-        uid      = int(user_id)
-        offers   = data.get("offers", [])
-        batch_id = int(data.get("batch_id", 0))
-        delivery = int(data.get("delivery", 24))
-        u        = await get_user(uid)
-        if not u:
-            return _web.Response(
-                text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
-                content_type="application/json",
-            )
-
-        shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=? AND status='active'", (uid,))
-        sname = (shop["shop_name"] if shop else None) or u["clinic_name"] or u["full_name"] or "Sotuvchi"
-
-        saved = 0
-        unavail_count = 0
-        for offer in offers:
-            nid     = int(offer.get("need_id", 0))
-            price   = float(offer.get("price", 0))
-            unavail = bool(offer.get("unavailable", False))
-            note    = offer.get("note", "") or ""
-            if not nid:
-                continue
-            nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
-            if not nd:
-                continue
-            exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
-            if exists:
-                continue
-            if unavail:
-                await db_insert(
-                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
-                    "VALUES(?,?,?,?,?,?,?,?)",
-                    (nid, batch_id, uid, nd["product_name"], 0, nd["unit"], delivery, "mavjud_emas"),
-                )
-                unavail_count += 1
-            elif price > 0:
-                await db_insert(
-                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
-                    "VALUES(?,?,?,?,?,?,?,?)",
-                    (nid, batch_id, uid, nd["product_name"], price, nd["unit"], delivery, note),
-                )
-                saved += 1
-
-        if saved > 0:
-            owner_rows = await db_all("SELECT DISTINCT owner_id FROM needs WHERE batch_id=?", (batch_id,))
-            dl_map = {2:"2 soat",24:"24 soat",48:"2 kun",168:"1 hafta"}
-            for row in owner_rows:
-                try:
-                    await bot.send_message(
-                        row["owner_id"],
-                        f"📩 *Yangi taklif!*\n\n"
-                        f"🏪 {sname}\n"
-                        f"📦 {saved} ta mahsulotga narx berdi\n"
-                        f"🚚 {dl_map.get(delivery, str(delivery)+' soat')} ichida yetkazadi",
-                        reply_markup=ik([ib("📩 Takliflarni ko'rish", f"view_batch_{batch_id}")]),
-                    )
-                except Exception:
-                    pass
-
-        parts = []
-        if saved > 0: parts.append(f"{saved} ta narx")
-        if unavail_count > 0: parts.append(f"{unavail_count} ta mavjud emas")
-        return _web.Response(
-            text=_json.dumps({"ok": True, "result": " | ".join(parts) if parts else "0"}),
-            content_type="application/json",
-        )
-    except Exception as e:
-        log.error(f"submit_offer xato: {e}")
-        return _web.Response(
-            text=_json.dumps({"ok": False, "error": str(e)}),
-            content_type="application/json",
-            status=500,
-        )
 
 async def start_webserver():
     app = _web.Application()
