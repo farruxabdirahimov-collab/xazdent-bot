@@ -48,6 +48,9 @@ class RegState(StatesGroup):
     addr     = State()
     location = State()
 
+class AdminState(StatesGroup):
+    setting_input = State()
+
 class NeedState(StatesGroup):
     product  = State()
     qty      = State()
@@ -1589,9 +1592,11 @@ async def admin_panel(msg: Message):
         f"⏳ Kutmoqda: 💳 {pending_t} chek | 🏪 {pending_s} do'kon\n\n"
         f"💰 Jami daromad: *{revenue:,.0f} so'm*",
         reply_markup=ik(
+            [ib("📊 Batafsil statistika", "adm_stats")],
+            [ib("📥 Excel hisobot", "adm_excel")],
             [ib("💳 Kutayotgan cheklar", "adm_pending_tx")],
             [ib("🏪 Kutayotgan do'konlar", "adm_pending_shops")],
-            [ib("📢 Xabar yuborish", "adm_broadcast")],
+            [ib("📢 Broadcast", "adm_broadcast")],
             [ib("⚙️ Sozlamalar", "adm_settings")],
         )
     )
@@ -1635,15 +1640,342 @@ async def adm_pending_shops(call: CallbackQuery):
                              ib("❌ Rad", f"shoprej_{s['owner_id']}")]))
     await call.answer()
 
+@router.callback_query(F.data == "adm_stats")
+async def adm_stats(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    await call.answer("⏳ Hisoblanmoqda...")
+
+    now   = datetime.now()
+    month = now.strftime("%Y-%m")
+    week_ago = (now - timedelta(days=7)).isoformat()
+
+    # ── Asosiy raqamlar ──────────────────────────────────────────
+    total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+    new_week  = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (week_ago,)))["c"]
+    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
+    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
+
+    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
+    month_n   = (await db_get("SELECT COUNT(*) as c FROM needs WHERE created_at LIKE ?", (f"{month}%",)))["c"]
+    acc_off   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
+    month_off = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
+
+    rev_all   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
+    rev_month = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
+
+    # ── Hudud bo'yicha ────────────────────────────────────────────
+    regions = await db_all(
+        "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(n.id) as needs "
+        "FROM users u LEFT JOIN needs n ON n.owner_id=u.id "
+        "WHERE u.role IN ('clinic','zubtex') AND u.region IS NOT NULL "
+        "GROUP BY u.region ORDER BY needs DESC LIMIT 8"
+    )
+
+    # ── Top mahsulotlar ───────────────────────────────────────────
+    top_prods = await db_all(
+        "SELECT product_name, COUNT(*) as cnt, "
+        "AVG(o.price) as avg_price, MIN(o.price) as min_price, MAX(o.price) as max_price "
+        "FROM needs n LEFT JOIN offers o ON o.need_id=n.id AND o.status='accepted' "
+        "GROUP BY product_name ORDER BY cnt DESC LIMIT 10"
+    )
+
+    # ── Top sotuvchilar ────────────────────────────────────────────
+    top_sellers = await db_all(
+        "SELECT u.clinic_name, u.full_name, s.shop_name, "
+        "COUNT(o.id) as offers, "
+        "SUM(CASE WHEN o.status='accepted' THEN 1 ELSE 0 END) as accepted, "
+        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price ELSE 0 END),0) as revenue "
+        "FROM users u "
+        "LEFT JOIN shops s ON s.owner_id=u.id "
+        "LEFT JOIN offers o ON o.seller_id=u.id "
+        "WHERE u.role='seller' "
+        "GROUP BY u.id ORDER BY accepted DESC LIMIT 8"
+    )
+
+    # ── Matn ──────────────────────────────────────────────────────
+    txt = (
+        f"📊 *Batafsil statistika*\n_{now.strftime('%d.%m.%Y %H:%M')}_\n\n"
+        f"👥 *Foydalanuvchilar:* {total_u} (bu hafta +{new_week})\n"
+        f"  🏥 Klinikalar: {clinics} | 🛒 Sotuvchilar: {sellers}\n\n"
+        f"📋 *Buyurtmalar:* {total_n} (bu oy: {month_n})\n"
+        f"✅ *Bitimlar:* {acc_off} (bu oy: {month_off})\n\n"
+        f"💰 *Daromad:*\n"
+        f"  Jami: {(rev_all['s'] if rev_all else 0):,.0f} so'm\n"
+        f"  Bu oy: {(rev_month['s'] if rev_month else 0):,.0f} so'm\n\n"
+    )
+
+    if regions:
+        txt += "📍 *Hudud bo'yicha:*\n"
+        for r in regions:
+            reg = r["region"] or "Noma'lum"
+            txt += f"  {reg}: {r['users']} klinika, {r['needs']} buyurtma\n"
+        txt += "\n"
+
+    if top_prods:
+        txt += "🦷 *Top 5 mahsulot:*\n"
+        for i, p in enumerate(top_prods[:5], 1):
+            avg = f"{p['avg_price']:,.0f}" if p.get("avg_price") else "—"
+            txt += f"  {i}. {p['product_name']} ({p['cnt']} ta, o'rta: {avg} so'm)\n"
+        txt += "\n"
+
+    if top_sellers:
+        txt += "🏪 *Top sotuvchilar:*\n"
+        for s in top_sellers[:5]:
+            name = s["shop_name"] or s["clinic_name"] or s["full_name"] or "—"
+            rate = f"{s['accepted']/s['offers']*100:.0f}%" if s["offers"] else "—"
+            txt += f"  {name}: {s['accepted']} qabul ({rate})\n"
+
+    await call.message.answer(txt, reply_markup=ik([ib("📥 Excel yuklab olish", "adm_excel")]))
+
+@router.callback_query(F.data == "adm_excel")
+async def adm_excel(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    await call.answer("⏳ Excel tayyorlanmoqda...")
+    path = await build_admin_excel()
+    if not path:
+        await call.message.answer("❌ Excel yaratib bo'lmadi")
+        return
+    import aiofiles
+    async with aiofiles.open(path, "rb") as f:
+        data = await f.read()
+    fname = f"xazdent_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    await call.message.answer_document(
+        document=(fname, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        caption=f"📊 XAZDENT hisobot — {datetime.now().strftime('%d.%m.%Y')}"
+    )
+    try:
+        import os as _os; _os.remove(path)
+    except Exception:
+        pass
+
+async def build_admin_excel() -> str:
+    """Admin uchun to'liq Excel hisobot."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        return None
+
+    wb  = openpyxl.Workbook()
+    now = datetime.now()
+
+    def hdr(ws, row, cols, color="4472C4"):
+        fill = PatternFill("solid", fgColor=color)
+        font = Font(bold=True, color="FFFFFF")
+        for col, val in enumerate(cols, 1):
+            c = ws.cell(row=row, column=col, value=val)
+            c.fill = fill; c.font = font
+            c.alignment = Alignment(horizontal="center")
+
+    def autowidth(ws):
+        for col in ws.columns:
+            w = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(w + 4, 45)
+
+    # ── 1. Umumiy ────────────────────────────────────────────────
+    ws1 = wb.active; ws1.title = "Umumiy"
+    hdr(ws1, 1, ["Ko'rsatkich", "Qiymat"])
+    total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
+    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
+    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
+    acc_off   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
+    rev       = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
+    rows1 = [
+        ("Jami foydalanuvchilar", total_u),
+        ("Klinikalar", clinics),
+        ("Sotuvchilar", sellers),
+        ("Jami buyurtmalar", total_n),
+        ("Qabul qilingan takliflar", acc_off),
+        ("Jami daromad (so'm)", rev["s"] if rev else 0),
+        ("Hisobot sanasi", now.strftime("%d.%m.%Y %H:%M")),
+    ]
+    for i, (k, v) in enumerate(rows1, 2):
+        ws1.cell(row=i, column=1, value=k)
+        ws1.cell(row=i, column=2, value=v)
+    autowidth(ws1)
+
+    # ── 2. Hudud bo'yicha ─────────────────────────────────────────
+    ws2 = wb.create_sheet("Hudud bo'yicha")
+    hdr(ws2, 1, ["Hudud", "Klinikalar", "Buyurtmalar", "Bitimlar", "Daromad (so'm)"])
+    regions = await db_all(
+        "SELECT u.region, "
+        "COUNT(DISTINCT u.id) as users, "
+        "COUNT(DISTINCT n.id) as needs, "
+        "COUNT(DISTINCT CASE WHEN o.status='accepted' THEN o.id END) as deals, "
+        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n2.quantity ELSE 0 END),0) as revenue "
+        "FROM users u "
+        "LEFT JOIN needs n ON n.owner_id=u.id "
+        "LEFT JOIN needs n2 ON n2.owner_id=u.id "
+        "LEFT JOIN offers o ON o.need_id=n2.id AND o.status='accepted' "
+        "WHERE u.role IN ('clinic','zubtex') "
+        "GROUP BY u.region ORDER BY needs DESC"
+    )
+    for i, r in enumerate(regions, 2):
+        ws2.cell(row=i, column=1, value=r["region"] or "Noma'lum")
+        ws2.cell(row=i, column=2, value=r["users"])
+        ws2.cell(row=i, column=3, value=r["needs"])
+        ws2.cell(row=i, column=4, value=r["deals"])
+        ws2.cell(row=i, column=5, value=r["revenue"])
+    autowidth(ws2)
+
+    # ── 3. Mahsulotlar bo'yicha ───────────────────────────────────
+    ws3 = wb.create_sheet("Mahsulotlar")
+    hdr(ws3, 1, ["Mahsulot", "Buyurtmalar", "O'rtacha narx", "Min narx", "Max narx", "Jami aylanma"])
+    products = await db_all(
+        "SELECT n.product_name, COUNT(DISTINCT n.id) as cnt, "
+        "AVG(CASE WHEN o.status='accepted' THEN o.price END) as avg_p, "
+        "MIN(CASE WHEN o.status='accepted' THEN o.price END) as min_p, "
+        "MAX(CASE WHEN o.status='accepted' THEN o.price END) as max_p, "
+        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n.quantity END),0) as total "
+        "FROM needs n LEFT JOIN offers o ON o.need_id=n.id "
+        "GROUP BY n.product_name ORDER BY cnt DESC LIMIT 100"
+    )
+    for i, p in enumerate(products, 2):
+        ws3.cell(row=i, column=1, value=p["product_name"])
+        ws3.cell(row=i, column=2, value=p["cnt"])
+        ws3.cell(row=i, column=3, value=round(p["avg_p"], 0) if p["avg_p"] else "—")
+        ws3.cell(row=i, column=4, value=p["min_p"] or "—")
+        ws3.cell(row=i, column=5, value=p["max_p"] or "—")
+        ws3.cell(row=i, column=6, value=p["total"])
+    autowidth(ws3)
+
+    # ── 4. Sotuvchilar bo'yicha ────────────────────────────────────
+    ws4 = wb.create_sheet("Sotuvchilar")
+    hdr(ws4, 1, ["Do'kon", "Ism", "Hudud", "Takliflar", "Qabul", "Rad", "Qabul %", "Daromad (so'm)"])
+    sellers = await db_all(
+        "SELECT COALESCE(s.shop_name, u.clinic_name, u.full_name) as name, "
+        "u.full_name, u.region, "
+        "COUNT(o.id) as total_off, "
+        "SUM(CASE WHEN o.status='accepted' THEN 1 ELSE 0 END) as acc, "
+        "SUM(CASE WHEN o.status='rejected' THEN 1 ELSE 0 END) as rej, "
+        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price ELSE 0 END),0) as rev "
+        "FROM users u "
+        "LEFT JOIN shops s ON s.owner_id=u.id "
+        "LEFT JOIN offers o ON o.seller_id=u.id "
+        "WHERE u.role='seller' "
+        "GROUP BY u.id ORDER BY acc DESC LIMIT 100"
+    )
+    for i, s in enumerate(sellers, 2):
+        rate = f"{s['acc']/s['total_off']*100:.0f}%" if s["total_off"] else "—"
+        ws4.cell(row=i, column=1, value=s["name"] or "—")
+        ws4.cell(row=i, column=2, value=s["full_name"] or "—")
+        ws4.cell(row=i, column=3, value=s["region"] or "—")
+        ws4.cell(row=i, column=4, value=s["total_off"])
+        ws4.cell(row=i, column=5, value=s["acc"])
+        ws4.cell(row=i, column=6, value=s["rej"])
+        ws4.cell(row=i, column=7, value=rate)
+        ws4.cell(row=i, column=8, value=s["rev"])
+    autowidth(ws4)
+
+    # ── 5. Klinikalar bo'yicha ─────────────────────────────────────
+    ws5 = wb.create_sheet("Klinikalar")
+    hdr(ws5, 1, ["Klinika", "Hudud", "Telefon", "Buyurtmalar", "Bitimlar", "Jami xarid (so'm)"])
+    clinics = await db_all(
+        "SELECT COALESCE(u.clinic_name, u.full_name) as name, u.region, u.phone, "
+        "COUNT(DISTINCT n.id) as needs, "
+        "COUNT(DISTINCT CASE WHEN o.status='accepted' THEN o.id END) as deals, "
+        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n.quantity END),0) as total "
+        "FROM users u "
+        "LEFT JOIN needs n ON n.owner_id=u.id "
+        "LEFT JOIN offers o ON o.need_id=n.id "
+        "WHERE u.role IN ('clinic','zubtex') "
+        "GROUP BY u.id ORDER BY total DESC LIMIT 100"
+    )
+    for i, cl in enumerate(clinics, 2):
+        ws5.cell(row=i, column=1, value=cl["name"] or "—")
+        ws5.cell(row=i, column=2, value=cl["region"] or "—")
+        ws5.cell(row=i, column=3, value=cl["phone"] or "—")
+        ws5.cell(row=i, column=4, value=cl["needs"])
+        ws5.cell(row=i, column=5, value=cl["deals"])
+        ws5.cell(row=i, column=6, value=cl["total"])
+    autowidth(ws5)
+
+    # ── 6. Oylik aylanma ──────────────────────────────────────────
+    ws6 = wb.create_sheet("Oylik aylanma")
+    hdr(ws6, 1, ["Oy", "Yangi foydalanuvchilar", "Buyurtmalar", "Bitimlar", "Daromad (so'm)"])
+    monthly = await db_all(
+        "SELECT SUBSTR(created_at,1,7) as month, COUNT(*) as cnt "
+        "FROM needs GROUP BY month ORDER BY month DESC LIMIT 12"
+    )
+    for i, m in enumerate(monthly, 2):
+        month = m["month"]
+        new_u = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at LIKE ?", (f"{month}%",)))["c"]
+        deals = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
+        rev   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
+        ws6.cell(row=i, column=1, value=month)
+        ws6.cell(row=i, column=2, value=new_u)
+        ws6.cell(row=i, column=3, value=m["cnt"])
+        ws6.cell(row=i, column=4, value=deals)
+        ws6.cell(row=i, column=5, value=rev["s"] if rev else 0)
+    autowidth(ws6)
+
+    path = os.path.join(BASE_DIR, f"admin_report_{now.strftime('%Y%m%d_%H%M')}.xlsx")
+    wb.save(path)
+    return path
+
 @router.callback_query(F.data == "adm_settings")
 async def adm_settings(call: CallbackQuery):
     if call.from_user.id not in ADMIN_IDS: return
-    ball_price = await get_setting("ball_price") or "1000"
-    card       = await get_setting("card_number") or "—"
+    ball_price  = await get_setting("ball_price") or "1000"
+    elon_price  = await get_setting("elon_price") or "0"
+    card        = await get_setting("card_number") or "—"
     await call.message.answer(
-        f"⚙️ *Sozlamalar*\n\n💰 1 ball = *{ball_price} so'm*\n💳 Karta: `{card}`\n\n"
-        f"`/setball 2000` — ball narxi\n`/setcard 9860...` — karta")
+        f"⚙️ *Sozlamalar*\n\n"
+        f"💰 1 ball = *{ball_price} so'm*\n"
+        f"📋 1 e'lon = *{elon_price} ball* (0 = bepul)\n"
+        f"💳 Karta: `{card}`\n\n"
+        f"*Buyruqlar:*\n"
+        f"`/setball 2000` — ball narxi\n"
+        f"`/setelon 1` — e'lon narxi (ball)\n"
+        f"`/setcard 9860...` — karta raqami",
+        reply_markup=ik(
+            [ib("💰 Ball narxini o'zgartirish", "set_ball_price")],
+            [ib("📋 E'lon narxini o'zgartirish", "set_elon_price")],
+        )
+    )
     await call.answer()
+
+@router.callback_query(F.data == "set_ball_price")
+async def set_ball_price_btn(call: CallbackQuery, state: FSMContext):
+    if call.from_user.id not in ADMIN_IDS: return
+    await state.update_data(setting_key="ball_price")
+    await state.set_state(AdminState.setting_input)
+    await call.message.answer("💰 Yangi ball narxini kiriting (so'mda):\n_Masalan: 2000_")
+    await call.answer()
+
+@router.callback_query(F.data == "set_elon_price")
+async def set_elon_price_btn(call: CallbackQuery, state: FSMContext):
+    if call.from_user.id not in ADMIN_IDS: return
+    await state.update_data(setting_key="elon_price")
+    await state.set_state(AdminState.setting_input)
+    await call.message.answer("📋 Yangi e'lon narxini kiriting (ball):\n_0 = bepul, 1 = 1 ball_")
+    await call.answer()
+
+@router.message(AdminState.setting_input)
+async def admin_setting_input(msg: Message, state: FSMContext):
+    if msg.from_user.id not in ADMIN_IDS:
+        await state.clear(); return
+    d   = await state.get_data()
+    key = d.get("setting_key", "")
+    val = msg.text.strip()
+    if not val.replace(".", "").isdigit():
+        await msg.answer("❌ Faqat raqam kiriting!")
+        return
+    await update_setting(key, val)
+    await state.clear()
+    labels = {"ball_price": f"1 ball = {val} so'm", "elon_price": f"1 e'lon = {val} ball"}
+    await msg.answer(f"✅ *{labels.get(key, key+' = '+val)}* — saqlandi!")
+
+@router.message(Command("setelon"))
+async def cmd_setelon(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("elon_price", val)
+        await msg.answer(f"✅ 1 e'lon = *{val} ball*")
+    except Exception:
+        await msg.answer("❌ Format: /setelon 1")
 
 @router.callback_query(F.data == "adm_broadcast")
 async def adm_broadcast_btn(call: CallbackQuery, state: FSMContext):
