@@ -784,6 +784,31 @@ async def new_need_btn(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("view_batch_"))
 async def view_batch_offers(call: CallbackQuery):
     batch_id = int(call.data[11:])
+    # Taklif soni
+    cnt = (await db_get(
+        "SELECT COUNT(DISTINCT seller_id) as c FROM offers WHERE batch_id=? AND price>0",
+        (batch_id,)))["c"] or 0
+    if cnt == 0:
+        await call.message.answer("📭 Hali taklif kelmagan. Kutishda davom eting.")
+        await call.answer()
+        return
+    # Mini App bor bo'lsa — jadval sahifasi
+    if WEBAPP_URL:
+        url = f"{WEBAPP_URL}/compare/{batch_id}"
+        await call.message.answer(
+            f"📊 *{cnt} ta sotuvchidan taklif keldi!*\n\nJadvalda taqqoslang:",
+            reply_markup=ik(
+                [ib("📊 Jadval ko'rish →", web_app=WebAppInfo(url=url))],
+                [ib("📋 Bot ichida ko'rish", f"batch_text_{batch_id}")],
+            )
+        )
+    else:
+        await _show_batch_table(call.message, batch_id)
+    await call.answer()
+
+@router.callback_query(F.data.startswith("batch_text_"))
+async def batch_text_view(call: CallbackQuery):
+    batch_id = int(call.data[11:])
     await _show_batch_table(call.message, batch_id)
     await call.answer()
 
@@ -919,7 +944,7 @@ async def accept_offer(call: CallbackQuery):
         f"✅ *Qabul qilindi!*\n\n🏪 {name}\n📞 {phone}\n\n_Sotuvchi siz bilan bog'lanadi._"
     )
 
-    # Sotuvchiga klinika ma'lumoti
+    # G'olib sotuvchiga klinika ma'lumoti
     clinic = await get_user(call.from_user.id)
     if clinic:
         try:
@@ -933,6 +958,87 @@ async def accept_offer(call: CallbackQuery):
             )
         except Exception:
             pass
+
+    # Yutqazgan sotuvchilarga — faqat narx, ma'lumot emas
+    nd = await db_get("SELECT * FROM needs WHERE id=?", (o["need_id"],))
+    if nd:
+        other_offs = await db_all(
+            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
+            (o["need_id"], o["seller_id"]),
+        )
+        for loser in other_offs:
+            try:
+                await bot.send_message(
+                    loser["seller_id"],
+                    f"📊 *{nd['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
+                    f"Qabul qilingan narx: *{o['price']:,.0f} so'm/{nd['unit']}*\n"
+                    f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{nd['unit']}*\n\n"
+                    f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._"
+                )
+            except Exception:
+                pass
+    await call.answer("✅")
+
+@router.callback_query(F.data.startswith("acc_batch_"))
+async def accept_batch_offer(call: CallbackQuery):
+    """Bitta do'kondan hamma narsani qabul qilish."""
+    parts    = call.data[10:].split("_")
+    batch_id = int(parts[0])
+    seller_id= int(parts[1])
+
+    needs = await db_all(
+        "SELECT * FROM needs WHERE batch_id=? AND status='active'", (batch_id,)
+    )
+    accepted = 0
+    for n in needs:
+        best = await db_get(
+            "SELECT * FROM offers WHERE need_id=? AND seller_id=? AND price>0",
+            (n["id"], seller_id),
+        )
+        if not best:
+            continue
+        await db_run("UPDATE offers SET status='accepted' WHERE id=?", (best["id"],))
+        await db_run("UPDATE needs SET status='paused' WHERE id=?", (n["id"],))
+        # Yutqazganlarga narx xabari
+        others = await db_all(
+            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
+            (n["id"], seller_id),
+        )
+        for loser in others:
+            try:
+                await bot.send_message(
+                    loser["seller_id"],
+                    f"📊 *{n['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
+                    f"Qabul qilingan narx: *{best['price']:,.0f} so'm/{n['unit']}*\n"
+                    f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{n['unit']}*\n\n"
+                    f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._"
+                )
+            except Exception:
+                pass
+        accepted += 1
+
+    # G'olib sotuvchiga klinika ma'lumoti
+    clinic = await get_user(call.from_user.id)
+    seller_info = await db_get(
+        "SELECT clinic_name, full_name FROM users WHERE id=?", (seller_id,)
+    )
+    sname = (seller_info["clinic_name"] or seller_info["full_name"] if seller_info else None) or "Sotuvchi"
+    if clinic and accepted > 0:
+        try:
+            await bot.send_message(
+                seller_id,
+                f"🎉 *{accepted} ta taklifingiz qabul qilindi!*\n\n"
+                f"🏥 {clinic['clinic_name'] or clinic['full_name'] or 'Klinika'}\n"
+                f"📞 {clinic['phone'] or '—'}\n"
+                f"📍 {clinic['region'] or '—'}\n"
+                f"🏠 {clinic['address'] or '—'}",
+            )
+        except Exception:
+            pass
+
+    await call.message.edit_text(
+        f"✅ *{sname} dan {accepted} ta taklif qabul qilindi!*\n\nSotuvchi siz bilan bog'lanadi."
+    )
     await call.answer("✅")
 
 @router.callback_query(F.data.startswith("repost_"))
@@ -2112,6 +2218,74 @@ loadNeeds();
 """
 
 
+async def _accept_offers_handler(req):
+    """POST /api/accept_offers"""
+    try:
+        body      = await req.json()
+        offer_ids = body.get("offer_ids", [])
+        batch_id  = int(body.get("batch_id", 0))
+        user_id   = int(body.get("user_id", 0))
+        if not offer_ids or not user_id:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "offer_ids yoki user_id yo'q"}),
+                content_type="application/json")
+        clinic = await get_user(user_id)
+        if not clinic:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "foydalanuvchi topilmadi"}),
+                content_type="application/json")
+
+        accepted_by_seller = {}
+        need_winners = {}
+
+        for oid in offer_ids:
+            o = await db_get("SELECT * FROM offers WHERE id=?", (oid,))
+            if not o:
+                continue
+            await db_run("UPDATE offers SET status='accepted' WHERE id=?", (oid,))
+            await db_run("UPDATE needs SET status='paused' WHERE id=?", (o["need_id"],))
+            need_winners[o["need_id"]] = (oid, o["price"], o["seller_id"])
+            accepted_by_seller.setdefault(o["seller_id"], []).append(o["need_id"])
+
+        cname   = clinic["clinic_name"] or clinic["full_name"] or "Klinika"
+        cphone  = clinic["phone"] or "—"
+        cregion = clinic["region"] or "—"
+        caddr   = clinic["address"] or "—"
+
+        for sid, nids in accepted_by_seller.items():
+            try:
+                await bot.send_message(sid,
+                    f"🎉 *{len(nids)} ta taklifingiz qabul qilindi!*\n\n"
+                    f"🏥 {cname}\n📞 {cphone}\n📍 {cregion}\n🏠 {caddr}")
+            except Exception:
+                pass
+
+        for need_id, (win_oid, win_price, win_sid) in need_winners.items():
+            nd = await db_get("SELECT * FROM needs WHERE id=?", (need_id,))
+            if not nd:
+                continue
+            losers = await db_all(
+                "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
+                (need_id, win_sid))
+            for loser in losers:
+                try:
+                    await bot.send_message(loser["seller_id"],
+                        f"📊 *{nd['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
+                        f"Qabul qilingan narx: *{win_price:,.0f} so'm/{nd['unit']}*\n"
+                        f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{nd['unit']}*\n\n"
+                        f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._")
+                except Exception:
+                    pass
+
+        return _web.Response(
+            text=_json.dumps({"ok": True, "accepted": len(offer_ids)}),
+            content_type="application/json")
+    except Exception as e:
+        log.error(f"accept_offers xato: {e}")
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": str(e)}),
+            content_type="application/json", status=500)
+
 async def start_webserver():
     app = _web.Application()
     # ── GET /order ────────────────────────────────────────────────────
@@ -2136,6 +2310,38 @@ async def start_webserver():
                              content_type="application/json",
                              headers={"Access-Control-Allow-Origin": "*"})
     app.router.add_get("/api/needs/{batch_id}", _api_needs)
+
+    # ── GET /compare/{batch_id} ────────────────────────────────────
+    async def _compare_page(req):
+        path = os.path.join(BASE_DIR, "webapp", "compare.html")
+        if os.path.exists(path):
+            return _web.FileResponse(path)
+        return _web.Response(text="compare.html topilmadi", status=404,
+                             content_type="text/html")
+    app.router.add_get("/compare/{batch_id}", _compare_page)
+
+    # ── GET /api/offers/{batch_id} ─────────────────────────────────
+    async def _api_offers(req):
+        try: bid = int(req.match_info.get("batch_id", 0))
+        except: bid = 0
+        rows = await db_all(
+            "SELECT o.id, o.need_id, o.seller_id, o.price, o.unit, o.note, "
+            "       COALESCE(s.shop_name, u.clinic_name, u.full_name, \'Sotuvchi\') as seller_name, "
+            "       CASE WHEN o.note=\'mavjud_emas\' THEN 1 ELSE 0 END as unavail "
+            "FROM offers o "
+            "JOIN users u ON o.seller_id=u.id "
+            "LEFT JOIN shops s ON s.owner_id=o.seller_id AND s.status=\'active\' "
+            "WHERE o.batch_id=? ORDER BY o.seller_id, o.need_id",
+            (bid,))
+        data = [{"id":r["id"],"need_id":r["need_id"],"seller_id":r["seller_id"],
+                 "price":r["price"],"unit":r["unit"],"note":r["note"] or "",
+                 "seller_name":r["seller_name"],"unavail":bool(r["unavail"])} for r in rows]
+        return _web.Response(text=_json.dumps(data, ensure_ascii=False),
+                             content_type="application/json",
+                             headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/offers/{batch_id}", _api_offers)
+
+
 
     # ── POST /api/submit_order ─────────────────────────────────────
     async def _submit_order(req):
@@ -2268,6 +2474,7 @@ async def start_webserver():
                 text=_json.dumps({"ok": False, "error": str(e)}),
                 content_type="application/json", status=500)
     app.router.add_post("/api/submit_offer", _submit_offer)
+    app.router.add_post("/api/accept_offers", _accept_offers_handler)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
         app.router.add_static("/static", webapp_dir)
