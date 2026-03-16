@@ -1712,6 +1712,32 @@ async def handle_order_page(request):
         return _web.Response(text="order.html topilmadi", status=404)
     return _web.FileResponse(path)
 
+async def handle_api_needs(request):
+    """GET /api/needs/{batch_id}"""
+    try:
+        batch_id = int(request.match_info.get("batch_id", 0))
+    except Exception:
+        batch_id = 0
+    if batch_id <= 0:
+        return _web.Response(
+            text=_json.dumps([]),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    needs = await db_all(
+        "SELECT id, product_name, quantity, unit FROM needs "
+        "WHERE batch_id=? AND status != 'cancelled' ORDER BY id",
+        (batch_id,),
+    )
+    log.info(f"API needs: batch={batch_id} -> {len(needs)} ta")
+    data = [{"id": n["id"], "name": n["product_name"],
+             "qty": n["quantity"], "unit": n["unit"]} for n in needs]
+    return _web.Response(
+        text=_json.dumps(data, ensure_ascii=False),
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
 async def handle_api_products(request):
     """GET /api/products/{uid} — klinikaning mahsulotlar ro'yxati"""
     uid      = int(request.match_info.get("uid", 0))
