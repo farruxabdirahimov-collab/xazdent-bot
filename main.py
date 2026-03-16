@@ -1011,60 +1011,44 @@ async def accept_offer(call: CallbackQuery):
         await call.answer("Taklif topilmadi", show_alert=True)
         return
 
-    await db_run("UPDATE offers SET status='accepted' WHERE id=?", (oid,))
-    await db_run("UPDATE needs SET status='paused' WHERE id=?", (o["need_id"],))
+    await db_run("UPDATE offers SET status=\'accepted\' WHERE id=?", (oid,))
+    await db_run("UPDATE needs SET status=\'paused\' WHERE id=?", (o["need_id"],))
 
-    name  = o["clinic_name"] or o["full_name"] or "Sotuvchi"
+    sname = o["clinic_name"] or o["full_name"] or "Sotuvchi"
     phone = o["phone"] or "—"
     await call.message.edit_text(
-        f"✅ *Qabul qilindi!*\n\n🏪 {name}\n📞 {phone}\n\n_Sotuvchi siz bilan bog'lanadi._"
+        f"✅ *Qabul qilindi!*\n\n🏪 {sname}\n📞 {phone}\n\n_Sotuvchi siz bilan bog\'lanadi._"
     )
 
-    # G'olib sotuvchiga klinika ma'lumoti
     clinic = await get_user(call.from_user.id)
-    if clinic:
-        try:
-            await bot.send_message(
-                o["seller_id"],
-                f"🎉 *Taklifingiz qabul qilindi!*\n\n"
-                f"🏥 {clinic['clinic_name'] or clinic['full_name'] or 'Klinika'}\n"
-                f"📞 {clinic['phone'] or '—'}\n"
-                f"📍 {clinic['region'] or '—'}\n"
-                f"🏠 {clinic['address'] or '—'}",
-            )
-        except Exception:
-            pass
-
-    # Yutqazgan sotuvchilarga — faqat narx, ma'lumot emas
-    nd = await db_get("SELECT * FROM needs WHERE id=?", (o["need_id"],))
-    if nd:
-        other_offs = await db_all(
-            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
-            (o["need_id"], o["seller_id"]),
+    nd     = await db_get("SELECT * FROM needs WHERE id=?", (o["need_id"],))
+    if clinic and nd:
+        await _notify_winner(
+            seller_id=o["seller_id"],
+            clinic=clinic,
+            items=[(nd["product_name"], nd["quantity"], nd["unit"], o["price"])],
         )
-        for loser in other_offs:
-            try:
-                await bot.send_message(
-                    loser["seller_id"],
-                    f"📊 *{nd['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
-                    f"Qabul qilingan narx: *{o['price']:,.0f} so'm/{nd['unit']}*\n"
-                    f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{nd['unit']}*\n\n"
-                    f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._"
-                )
-            except Exception:
-                pass
+    # Yutqazganlarga
+    if nd:
+        for loser in await db_all(
+            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
+            (nd["id"], o["seller_id"])
+        ):
+            await _notify_loser(loser["seller_id"], nd["product_name"], o["price"], loser["price"], nd["unit"])
     await call.answer("✅")
 
 @router.callback_query(F.data.startswith("acc_batch_"))
 async def accept_batch_offer(call: CallbackQuery):
     """Bitta do'kondan hamma narsani qabul qilish."""
-    parts    = call.data[10:].split("_")
-    batch_id = int(parts[0])
-    seller_id= int(parts[1])
+    parts     = call.data[10:].split("_")
+    batch_id  = int(parts[0])
+    seller_id = int(parts[1])
+    clinic    = await get_user(call.from_user.id)
 
     needs = await db_all(
-        "SELECT * FROM needs WHERE batch_id=? AND status='active'", (batch_id,)
+        "SELECT * FROM needs WHERE batch_id=? AND status=\'active\'", (batch_id,)
     )
+    winner_items = []
     accepted = 0
     for n in needs:
         best = await db_get(
@@ -1073,47 +1057,26 @@ async def accept_batch_offer(call: CallbackQuery):
         )
         if not best:
             continue
-        await db_run("UPDATE offers SET status='accepted' WHERE id=?", (best["id"],))
-        await db_run("UPDATE needs SET status='paused' WHERE id=?", (n["id"],))
-        # Yutqazganlarga narx xabari
-        others = await db_all(
-            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
-            (n["id"], seller_id),
-        )
-        for loser in others:
-            try:
-                await bot.send_message(
-                    loser["seller_id"],
-                    f"📊 *{n['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
-                    f"Qabul qilingan narx: *{best['price']:,.0f} so'm/{n['unit']}*\n"
-                    f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{n['unit']}*\n\n"
-                    f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._"
-                )
-            except Exception:
-                pass
+        await db_run("UPDATE offers SET status=\'accepted\' WHERE id=?", (best["id"],))
+        await db_run("UPDATE needs SET status=\'paused\' WHERE id=?", (n["id"],))
+        winner_items.append((n["product_name"], n["quantity"], n["unit"], best["price"]))
         accepted += 1
+        # Yutqazganlarga
+        for loser in await db_all(
+            "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
+            (n["id"], seller_id)
+        ):
+            await _notify_loser(loser["seller_id"], n["product_name"],
+                                best["price"], loser["price"], n["unit"])
 
-    # G'olib sotuvchiga klinika ma'lumoti
-    clinic = await get_user(call.from_user.id)
-    seller_info = await db_get(
-        "SELECT clinic_name, full_name FROM users WHERE id=?", (seller_id,)
-    )
+    seller_info = await db_get("SELECT clinic_name, full_name FROM users WHERE id=?", (seller_id,))
     sname = (seller_info["clinic_name"] or seller_info["full_name"] if seller_info else None) or "Sotuvchi"
-    if clinic and accepted > 0:
-        try:
-            await bot.send_message(
-                seller_id,
-                f"🎉 *{accepted} ta taklifingiz qabul qilindi!*\n\n"
-                f"🏥 {clinic['clinic_name'] or clinic['full_name'] or 'Klinika'}\n"
-                f"📞 {clinic['phone'] or '—'}\n"
-                f"📍 {clinic['region'] or '—'}\n"
-                f"🏠 {clinic['address'] or '—'}",
-            )
-        except Exception:
-            pass
+
+    if clinic and winner_items:
+        await _notify_winner(seller_id, clinic, winner_items)
 
     await call.message.edit_text(
-        f"✅ *{sname} dan {accepted} ta taklif qabul qilindi!*\n\nSotuvchi siz bilan bog'lanadi."
+        f"✅ *{sname} dan {accepted} ta taklif qabul qilindi!*\n\n_Sotuvchi siz bilan bog\'lanadi._"
     )
     await call.answer("✅")
 
@@ -1647,1124 +1610,79 @@ def calc_ad_price(regions: list, audiences: list) -> tuple:
             details.append(f"{reg}: {price} ball")
     return total, details
 
-@router.callback_query(F.data == "ad_start")
-async def ad_start(call: CallbackQuery, state: FSMContext):
-    u = await get_user(call.from_user.id)
-    if not u:
-        await call.answer("Avval ro'yxatdan o'ting", show_alert=True)
-        return
-    balls = u["balance"] or 0
-    await state.set_state(AdState.audience)
-    await state.update_data(ad_audiences=[], ad_regions=[])
-    await call.message.answer(
-        f"📢 *Reklama e'lon berish*\n\n"
-        f"💰 Balansingiz: *{balls:.1f} ball*\n\n"
-        f"1️⃣ *Kimga ko'rinsin?* (bir yoki bir nechta)\n"
-        f"_(Hammasini bosing, keyin ✅ Davom etish)_",
-        reply_markup=ik(
-            [ib("🏥 Vrach / Klinika", "ad_aud_clinic")],
-            [ib("🔬 Zubtexnik",        "ad_aud_zubtex")],
-            [ib("🛒 Sotuvchi",          "ad_aud_seller")],
-            [ib("✅ Davom etish →",     "ad_aud_done")],
-            [ib("❌ Bekor",             "cancel_ad")],
-        )
-    )
-    await call.answer()
-
-@router.callback_query(F.data.startswith("ad_aud_"), AdState.audience)
-async def ad_audience(call: CallbackQuery, state: FSMContext):
-    d    = await state.get_data()
-    auds = d.get("ad_audiences", [])
-    key  = call.data[7:]  # clinic / zubtex / seller
-
-    if key == "done":
-        if not auds:
-            await call.answer("Kamida 1 ta tanlang!", show_alert=True)
-            return
-        await state.set_state(AdState.regions)
-        # Viloyat tanlash
-        from texts import REGIONS
-        rows = []
-        for i in range(0, len(REGIONS), 2):
-            row = [ib(REGIONS[i], f"ad_reg_{i}")]
-            if i+1 < len(REGIONS):
-                row.append(ib(REGIONS[i+1], f"ad_reg_{i+1}"))
-            rows.append(row)
-        rows.append([ib("🌍 Barcha viloyatlar", "ad_reg_all")])
-        rows.append([ib("✅ Davom etish →",     "ad_reg_done")])
-        rows.append([ib("⬅️ Orqaga",            "ad_back_aud")])
-        aud_names = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
-        selected  = ", ".join(aud_names.get(a,"?") for a in auds)
-        await call.message.edit_text(
-            f"📢 *Reklama e'lon berish*\n\n"
-            f"✅ Auditoriya: *{selected}*\n\n"
-            f"2️⃣ *Qaysi viloyatlarga?*\n"
-            f"_(Galochka qo'yib, ✅ Davom etish bosing)_",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows)
-        )
-        await call.answer()
-        return
-
-    # Toggle audience
-    if key in auds:
-        auds.remove(key)
-        await call.answer(f"Olib tashlandi")
-    else:
-        auds.append(key)
-        await call.answer(f"✅ Qo'shildi")
-    await state.update_data(ad_audiences=auds)
-
-    # Tugmalarni yangilaymiz — tanlangan ko'rinsin
-    aud_names = {"clinic":"🏥 Vrach/Klinika","zubtex":"🔬 Zubtexnik","seller":"🛒 Sotuvchi"}
-    rows = []
-    for ak, alabel in aud_names.items():
-        mark = "✅ " if ak in auds else ""
-        rows.append([ib(f"{mark}{alabel}", f"ad_aud_{ak}")])
-    rows.append([ib("✅ Davom etish →", "ad_aud_done")])
-    rows.append([ib("❌ Bekor", "cancel_ad")])
-    try:
-        await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-    except Exception:
-        pass
-
-@router.callback_query(F.data.startswith("ad_reg_"), AdState.regions)
-async def ad_region(call: CallbackQuery, state: FSMContext):
-    from texts import REGIONS
-    d    = await state.get_data()
-    regs = list(d.get("ad_regions", []))
-    key  = call.data[7:]  # 0..13, all, done
-
-    if key == "done":
-        if not regs:
-            await call.answer("Kamida 1 ta viloyat tanlang!", show_alert=True)
-            return
-        await state.set_state(AdState.content)
-        # Narx hisoblash
-        auds  = d.get("ad_audiences", [])
-        total, details = calc_ad_price(regs, auds)
-        u     = await get_user(call.from_user.id)
-        balls = u["balance"] or 0
-        detail_txt = "\n".join(f"  • {d}" for d in details)
-        aud_names  = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
-        aud_txt    = ", ".join(aud_names.get(a,"?") for a in auds)
-        if len(auds) >= 2:
-            detail_txt += f"\n  _(2 auditoriya × 2 = 2x narx)_"
-        await call.message.edit_text(
-            f"📢 *Reklama e'lon berish*\n\n"
-            f"✅ Auditoriya: *{aud_txt}*\n"
-            f"✅ Viloyatlar: *{len(regs)} ta*\n\n"
-            f"💰 *Narx tahlili:*\n{detail_txt}\n\n"
-            f"*Jami: {total} ball*\n"
-            f"Balansingiz: {balls:.1f} ball\n\n"
-            f"3️⃣ *Reklama kontentini yuboring:*\n"
-            f"_(Rasm, matn yoki ikkalasi. Link ham yozishingiz mumkin)_",
-            reply_markup=ik(
-                [ib("⬅️ Orqaga", "ad_back_reg")],
-                [ib("❌ Bekor",   "cancel_ad")],
-            )
-        )
-        await state.update_data(ad_total=total, ad_details=details)
-        await call.answer()
-        return
-
-    if key == "all":
-        reg_names = [r.split(" ",1)[1] for r in REGIONS]
-        regs = reg_names
-        await call.answer("✅ Barcha viloyatlar tanlandi")
-    else:
-        idx      = int(key)
-        reg_name = REGIONS[idx].split(" ",1)[1]
-        if reg_name in regs:
-            regs.remove(reg_name)
-            await call.answer("Olib tashlandi")
-        else:
-            regs.append(reg_name)
-            await call.answer("✅ Qo'shildi")
-
-    await state.update_data(ad_regions=regs)
-
-    # Tugmalar yangilanadi
-    rows = []
-    for i in range(0, len(REGIONS), 2):
-        rn1  = REGIONS[i].split(" ",1)[1]
-        m1   = "✅ " if rn1 in regs else ""
-        row  = [ib(f"{m1}{REGIONS[i]}", f"ad_reg_{i}")]
-        if i+1 < len(REGIONS):
-            rn2 = REGIONS[i+1].split(" ",1)[1]
-            m2  = "✅ " if rn2 in regs else ""
-            row.append(ib(f"{m2}{REGIONS[i+1]}", f"ad_reg_{i+1}"))
-        rows.append(row)
-    rows.append([ib("🌍 Barcha viloyatlar", "ad_reg_all")])
-    rows.append([ib(f"✅ Davom etish ({len(regs)} ta) →", "ad_reg_done")])
-    rows.append([ib("⬅️ Orqaga", "ad_back_aud")])
-    try:
-        await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-    except Exception:
-        pass
-
-@router.message(AdState.content, F.photo | F.text)
-async def ad_content(msg: Message, state: FSMContext):
-    d     = await state.get_data()
-    total = d.get("ad_total", 0)
-    u     = await get_user(msg.from_user.id)
-    balls = u["balance"] or 0
-
-    if total > balls:
-        await msg.answer(
-            f"❌ *Balans yetarli emas!*\n\n"
-            f"Kerak: *{total} ball*\nBalansingiz: *{balls:.1f} ball*\n\n"
-            f"Hisob to'ldirish uchun: 💰 *Hisobim*",
-            reply_markup=ik([ib("❌ Bekor", "cancel_ad")])
-        )
-        return
-
-    # Kontent saqlash
-    if msg.photo:
-        await state.update_data(ad_photo=msg.photo[-1].file_id, ad_text=msg.caption or "")
-    else:
-        await state.update_data(ad_photo=None, ad_text=msg.text)
-
-    await state.set_state(AdState.confirm)
-    d     = await state.get_data()
-    auds  = d.get("ad_audiences", [])
-    regs  = d.get("ad_regions", [])
-    details = d.get("ad_details", [])
-    aud_names = {"clinic":"Vrach/Klinika","zubtex":"Zubtexnik","seller":"Sotuvchi"}
-    aud_txt   = ", ".join(aud_names.get(a,"?") for a in auds)
-    detail_txt= "\n".join(f"  • {x}" for x in details)
-
-    preview = f"📢 *Reklama ko'rinishi:*\n\n"
-    if d.get("ad_text"):
-        preview += d["ad_text"]
-
-    await msg.answer(
-        f"✅ *Tasdiqlang:*\n\n"
-        f"👥 Auditoriya: *{aud_txt}*\n"
-        f"📍 Viloyatlar: *{len(regs)} ta*\n"
-        f"💰 Narx: *{total} ball*\n"
-        f"  _(Sababi: {', '.join(details[:2])}{'...' if len(details)>2 else ''})_\n\n"
-        f"{preview}",
-        reply_markup=ik(
-            [ib("✅ Roziman — yuborish", "ad_confirm")],
-            [ib("✏️ Tahrirlash",         "ad_back_reg")],
-            [ib("❌ Bekor",              "cancel_ad")],
-        )
-    )
-
-@router.callback_query(F.data == "ad_confirm", AdState.confirm)
-async def ad_confirm(call: CallbackQuery, state: FSMContext):
-    d     = await state.get_data()
-    uid   = call.from_user.id
-    u     = await get_user(uid)
-    total = d.get("ad_total", 0)
-    balls = u["balance"] or 0
-
-    if total > balls:
-        await call.answer("Balans yetarli emas!", show_alert=True)
-        return
-
-    # Balansdan ayirish
-    await db_run("UPDATE users SET balance=balance-? WHERE id=?", (total, uid))
-
-    # Kimga yuboramiz
-    auds  = d.get("ad_audiences", [])
-    regs  = d.get("ad_regions", [])
-    photo = d.get("ad_photo")
-    text  = d.get("ad_text", "")
-    ad_text = f"📢 *Reklama*\n\n{text}" if text else "📢 *Reklama*"
-
-    # Foydalanuvchilar
-    role_filter = "','".join(auds)
-    targets = await db_all(
-        f"SELECT id FROM users WHERE role IN ('{role_filter}') AND is_blocked=0"
-    )
-    reg_set = set(regs)
-    sent = 0
-    for t in targets:
-        tu = await get_user(t["id"])
-        if tu and tu.get("region") and tu["region"] in reg_set:
-            try:
-                if photo:
-                    await bot.send_photo(t["id"], photo, caption=ad_text)
-                else:
-                    await bot.send_message(t["id"], ad_text)
-                sent += 1
-                import asyncio as _a; await _a.sleep(0.05)
-            except Exception:
-                pass
-
-    await state.clear()
-    await call.message.edit_text(
-        f"✅ *Reklama yuborildi!*\n\n"
-        f"📤 {sent} ta foydalanuvchiga yetkazildi\n"
-        f"💰 Balansingizdan *{total} ball* ayirildi"
-    )
-    await call.answer("✅")
-
-@router.callback_query(F.data == "cancel_ad")
-async def cancel_ad(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    try: await call.message.delete()
-    except Exception: pass
-    await call.answer("Bekor qilindi")
-
-@router.callback_query(F.data == "ad_back_aud")
-async def ad_back_aud(call: CallbackQuery, state: FSMContext):
-    await state.set_state(AdState.audience)
-    d    = await state.get_data()
-    auds = d.get("ad_audiences", [])
-    aud_names = {"clinic":"🏥 Vrach/Klinika","zubtex":"🔬 Zubtexnik","seller":"🛒 Sotuvchi"}
-    rows = []
-    for ak, alabel in aud_names.items():
-        mark = "✅ " if ak in auds else ""
-        rows.append([ib(f"{mark}{alabel}", f"ad_aud_{ak}")])
-    rows.append([ib("✅ Davom etish →", "ad_aud_done")])
-    rows.append([ib("❌ Bekor", "cancel_ad")])
-    await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
-    await call.answer()
-
-@router.callback_query(F.data == "ad_back_reg")
-async def ad_back_reg(call: CallbackQuery, state: FSMContext):
-    await state.set_state(AdState.regions)
-    await call.answer("Viloyat tanloviga qaytildi")
-
-# ── ADMIN BUYRUQLAR ───────────────────────────────────────────────────────────
-@router.message(Command("admin"))
-async def admin_panel(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS:
-        return
-    now       = datetime.now().strftime("%d.%m.%Y %H:%M")
-    total_u   = (await db_get("SELECT COUNT(*) as c FROM users", ()))["c"]
-    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='clinic'", ()))["c"]
-    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'", ()))["c"]
-    active_n  = (await db_get("SELECT COUNT(*) as c FROM needs WHERE status='active'", ()))["c"]
-    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs", ()))["c"]
-    pending_t = (await db_get("SELECT COUNT(*) as c FROM transactions WHERE status='pending'", ()))["c"]
-    pending_s = (await db_get("SELECT COUNT(*) as c FROM shops WHERE status='pending'", ()))["c"]
-    rev       = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'", ())
-    revenue   = rev["s"] if rev else 0
-    await msg.answer(
-        f"👨‍💼 *XAZDENT Admin*\n_{now}_\n\n"
-        f"👥 Foydalanuvchilar: *{total_u}*\n"
-        f"  ├ 🏥 Klinikalar: {clinics}\n"
-        f"  └ 🛒 Sotuvchilar: {sellers}\n\n"
-        f"📋 E'lonlar: *{total_n}* (🟢 {active_n} aktiv)\n\n"
-        f"⏳ Kutmoqda: 💳 {pending_t} chek | 🏪 {pending_s} do'kon\n\n"
-        f"💰 Jami daromad: *{revenue:,.0f} so'm*",
-        reply_markup=ik(
-            [ib("📊 Batafsil statistika", "adm_stats")],
-            [ib("📥 Excel hisobot", "adm_excel")],
-            [ib("💳 Kutayotgan cheklar", "adm_pending_tx")],
-            [ib("🏪 Kutayotgan do'konlar", "adm_pending_shops")],
-            [ib("📢 Broadcast", "adm_broadcast")],
-            [ib("⚙️ Sozlamalar", "adm_settings")],
-        )
-    )
-
-@router.callback_query(F.data == "adm_pending_tx")
-async def adm_pending_tx(call: CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS: return
-    txs = await db_all(
-        "SELECT t.*, u.full_name, u.clinic_name FROM transactions t "
-        "JOIN users u ON t.user_id=u.id WHERE t.status='pending' ORDER BY t.created_at DESC LIMIT 10"
-    )
-    if not txs:
-        await call.message.answer("✅ Kutayotgan cheklar yo'q.")
-        await call.answer(); return
-    for tx in txs:
-        name = tx["clinic_name"] or tx["full_name"] or str(tx["user_id"])
-        if tx["receipt_file_id"]:
-            try:
-                await call.message.answer_photo(tx["receipt_file_id"],
-                    caption=f"💳 *Chek #{tx['id']}*\n👤 {name}\n💰 {tx['amount']:,.0f} so'm → {tx['balls']:.1f} ball",
-                    reply_markup=ik(
-                        [ib("✅ Tasdiqlash", f"adm_ok_{tx['id']}_{tx['user_id']}_{tx['balls']}"),
-                         ib("❌ Rad", f"adm_rej_{tx['id']}_{tx['user_id']}")]))
-            except Exception: pass
-    await call.answer()
-
-@router.callback_query(F.data == "adm_pending_shops")
-async def adm_pending_shops(call: CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS: return
-    shops = await db_all(
-        "SELECT s.*, u.full_name, u.phone FROM shops s "
-        "JOIN users u ON s.owner_id=u.id WHERE s.status='pending'"
-    )
-    if not shops:
-        await call.message.answer("✅ Kutayotgan do'konlar yo'q.")
-        await call.answer(); return
-    for s in shops:
-        await call.message.answer(
-            f"🏪 *{s['shop_name']}*\n📂 {s['category']}\n👤 {s['full_name']}\n📞 {s['phone']}",
-            reply_markup=ik([ib("✅ Tasdiqlash", f"shopok_{s['owner_id']}"),
-                             ib("❌ Rad", f"shoprej_{s['owner_id']}")]))
-    await call.answer()
-
-@router.callback_query(F.data == "adm_stats")
-async def adm_stats(call: CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS: return
-    await call.answer("⏳ Hisoblanmoqda...")
-
-    now   = datetime.now()
-    month = now.strftime("%Y-%m")
-    week_ago = (now - timedelta(days=7)).isoformat()
-
-    # ── Asosiy raqamlar ──────────────────────────────────────────
-    total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
-    new_week  = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (week_ago,)))["c"]
-    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
-    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
-
-    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
-    month_n   = (await db_get("SELECT COUNT(*) as c FROM needs WHERE created_at LIKE ?", (f"{month}%",)))["c"]
-    acc_off   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
-    month_off = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
-
-    rev_all   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
-    rev_month = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
-
-    # ── Hudud bo'yicha ────────────────────────────────────────────
-    regions = await db_all(
-        "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(n.id) as needs "
-        "FROM users u LEFT JOIN needs n ON n.owner_id=u.id "
-        "WHERE u.role IN ('clinic','zubtex') AND u.region IS NOT NULL "
-        "GROUP BY u.region ORDER BY needs DESC LIMIT 8"
-    )
-
-    # ── Top mahsulotlar ───────────────────────────────────────────
-    top_prods = await db_all(
-        "SELECT product_name, COUNT(*) as cnt, "
-        "AVG(o.price) as avg_price, MIN(o.price) as min_price, MAX(o.price) as max_price "
-        "FROM needs n LEFT JOIN offers o ON o.need_id=n.id AND o.status='accepted' "
-        "GROUP BY product_name ORDER BY cnt DESC LIMIT 10"
-    )
-
-    # ── Top sotuvchilar ────────────────────────────────────────────
-    top_sellers = await db_all(
-        "SELECT u.clinic_name, u.full_name, s.shop_name, "
-        "COUNT(o.id) as offers, "
-        "SUM(CASE WHEN o.status='accepted' THEN 1 ELSE 0 END) as accepted, "
-        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price ELSE 0 END),0) as revenue "
-        "FROM users u "
-        "LEFT JOIN shops s ON s.owner_id=u.id "
-        "LEFT JOIN offers o ON o.seller_id=u.id "
-        "WHERE u.role='seller' "
-        "GROUP BY u.id ORDER BY accepted DESC LIMIT 8"
-    )
-
-    # ── Matn ──────────────────────────────────────────────────────
-    txt = (
-        f"📊 *Batafsil statistika*\n_{now.strftime('%d.%m.%Y %H:%M')}_\n\n"
-        f"👥 *Foydalanuvchilar:* {total_u} (bu hafta +{new_week})\n"
-        f"  🏥 Klinikalar: {clinics} | 🛒 Sotuvchilar: {sellers}\n\n"
-        f"📋 *Buyurtmalar:* {total_n} (bu oy: {month_n})\n"
-        f"✅ *Bitimlar:* {acc_off} (bu oy: {month_off})\n\n"
-        f"💰 *Daromad:*\n"
-        f"  Jami: {(rev_all['s'] if rev_all else 0):,.0f} so'm\n"
-        f"  Bu oy: {(rev_month['s'] if rev_month else 0):,.0f} so'm\n\n"
-    )
-
-    if regions:
-        txt += "📍 *Hudud bo'yicha:*\n"
-        for r in regions:
-            reg = r["region"] or "Noma'lum"
-            txt += f"  {reg}: {r['users']} klinika, {r['needs']} buyurtma\n"
-        txt += "\n"
-
-    if top_prods:
-        txt += "🦷 *Top 5 mahsulot:*\n"
-        for i, p in enumerate(top_prods[:5], 1):
-            avg = f"{p['avg_price']:,.0f}" if p.get("avg_price") else "—"
-            txt += f"  {i}. {p['product_name']} ({p['cnt']} ta, o'rta: {avg} so'm)\n"
-        txt += "\n"
-
-    if top_sellers:
-        txt += "🏪 *Top sotuvchilar:*\n"
-        for s in top_sellers[:5]:
-            name = s["shop_name"] or s["clinic_name"] or s["full_name"] or "—"
-            rate = f"{s['accepted']/s['offers']*100:.0f}%" if s["offers"] else "—"
-            txt += f"  {name}: {s['accepted']} qabul ({rate})\n"
-
-    await call.message.answer(txt, reply_markup=ik([ib("📥 Excel yuklab olish", "adm_excel")]))
-
-@router.callback_query(F.data == "adm_excel")
-async def adm_excel(call: CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS: return
-    await call.answer("⏳ Excel tayyorlanmoqda...")
-    path = await build_admin_excel()
-    if not path:
-        await call.message.answer("❌ Excel yaratib bo'lmadi")
-        return
-    import aiofiles
-    async with aiofiles.open(path, "rb") as f:
-        data = await f.read()
-    fname = f"xazdent_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    await call.message.answer_document(
-        document=(fname, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-        caption=f"📊 XAZDENT hisobot — {datetime.now().strftime('%d.%m.%Y')}"
-    )
-    try:
-        import os as _os; _os.remove(path)
-    except Exception:
-        pass
-
-async def build_admin_excel() -> str:
-    """Admin uchun to'liq Excel hisobot."""
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    except ImportError:
-        return None
-
-    wb  = openpyxl.Workbook()
-    now = datetime.now()
-
-    def hdr(ws, row, cols, color="4472C4"):
-        fill = PatternFill("solid", fgColor=color)
-        font = Font(bold=True, color="FFFFFF")
-        for col, val in enumerate(cols, 1):
-            c = ws.cell(row=row, column=col, value=val)
-            c.fill = fill; c.font = font
-            c.alignment = Alignment(horizontal="center")
-
-    def autowidth(ws):
-        for col in ws.columns:
-            w = max((len(str(c.value or "")) for c in col), default=8)
-            ws.column_dimensions[col[0].column_letter].width = min(w + 4, 45)
-
-    # ── 1. Umumiy ────────────────────────────────────────────────
-    ws1 = wb.active; ws1.title = "Umumiy"
-    hdr(ws1, 1, ["Ko'rsatkich", "Qiymat"])
-    total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
-    clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
-    sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
-    total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
-    acc_off   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
-    rev       = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
-    rows1 = [
-        ("Jami foydalanuvchilar", total_u),
-        ("Klinikalar", clinics),
-        ("Sotuvchilar", sellers),
-        ("Jami buyurtmalar", total_n),
-        ("Qabul qilingan takliflar", acc_off),
-        ("Jami daromad (so'm)", rev["s"] if rev else 0),
-        ("Hisobot sanasi", now.strftime("%d.%m.%Y %H:%M")),
-    ]
-    for i, (k, v) in enumerate(rows1, 2):
-        ws1.cell(row=i, column=1, value=k)
-        ws1.cell(row=i, column=2, value=v)
-    autowidth(ws1)
-
-    # ── 2. Hudud bo'yicha ─────────────────────────────────────────
-    ws2 = wb.create_sheet("Hudud bo'yicha")
-    hdr(ws2, 1, ["Hudud", "Klinikalar", "Buyurtmalar", "Bitimlar", "Daromad (so'm)"])
-    regions = await db_all(
-        "SELECT u.region, "
-        "COUNT(DISTINCT u.id) as users, "
-        "COUNT(DISTINCT n.id) as needs, "
-        "COUNT(DISTINCT CASE WHEN o.status='accepted' THEN o.id END) as deals, "
-        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n2.quantity ELSE 0 END),0) as revenue "
-        "FROM users u "
-        "LEFT JOIN needs n ON n.owner_id=u.id "
-        "LEFT JOIN needs n2 ON n2.owner_id=u.id "
-        "LEFT JOIN offers o ON o.need_id=n2.id AND o.status='accepted' "
-        "WHERE u.role IN ('clinic','zubtex') "
-        "GROUP BY u.region ORDER BY needs DESC"
-    )
-    for i, r in enumerate(regions, 2):
-        ws2.cell(row=i, column=1, value=r["region"] or "Noma'lum")
-        ws2.cell(row=i, column=2, value=r["users"])
-        ws2.cell(row=i, column=3, value=r["needs"])
-        ws2.cell(row=i, column=4, value=r["deals"])
-        ws2.cell(row=i, column=5, value=r["revenue"])
-    autowidth(ws2)
-
-    # ── 3. Mahsulotlar bo'yicha ───────────────────────────────────
-    ws3 = wb.create_sheet("Mahsulotlar")
-    hdr(ws3, 1, ["Mahsulot", "Buyurtmalar", "O'rtacha narx", "Min narx", "Max narx", "Jami aylanma"])
-    products = await db_all(
-        "SELECT n.product_name, COUNT(DISTINCT n.id) as cnt, "
-        "AVG(CASE WHEN o.status='accepted' THEN o.price END) as avg_p, "
-        "MIN(CASE WHEN o.status='accepted' THEN o.price END) as min_p, "
-        "MAX(CASE WHEN o.status='accepted' THEN o.price END) as max_p, "
-        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n.quantity END),0) as total "
-        "FROM needs n LEFT JOIN offers o ON o.need_id=n.id "
-        "GROUP BY n.product_name ORDER BY cnt DESC LIMIT 100"
-    )
-    for i, p in enumerate(products, 2):
-        ws3.cell(row=i, column=1, value=p["product_name"])
-        ws3.cell(row=i, column=2, value=p["cnt"])
-        ws3.cell(row=i, column=3, value=round(p["avg_p"], 0) if p["avg_p"] else "—")
-        ws3.cell(row=i, column=4, value=p["min_p"] or "—")
-        ws3.cell(row=i, column=5, value=p["max_p"] or "—")
-        ws3.cell(row=i, column=6, value=p["total"])
-    autowidth(ws3)
-
-    # ── 4. Sotuvchilar bo'yicha ────────────────────────────────────
-    ws4 = wb.create_sheet("Sotuvchilar")
-    hdr(ws4, 1, ["Do'kon", "Ism", "Hudud", "Takliflar", "Qabul", "Rad", "Qabul %", "Daromad (so'm)"])
-    sellers = await db_all(
-        "SELECT COALESCE(s.shop_name, u.clinic_name, u.full_name) as name, "
-        "u.full_name, u.region, "
-        "COUNT(o.id) as total_off, "
-        "SUM(CASE WHEN o.status='accepted' THEN 1 ELSE 0 END) as acc, "
-        "SUM(CASE WHEN o.status='rejected' THEN 1 ELSE 0 END) as rej, "
-        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price ELSE 0 END),0) as rev "
-        "FROM users u "
-        "LEFT JOIN shops s ON s.owner_id=u.id "
-        "LEFT JOIN offers o ON o.seller_id=u.id "
-        "WHERE u.role='seller' "
-        "GROUP BY u.id ORDER BY acc DESC LIMIT 100"
-    )
-    for i, s in enumerate(sellers, 2):
-        rate = f"{s['acc']/s['total_off']*100:.0f}%" if s["total_off"] else "—"
-        ws4.cell(row=i, column=1, value=s["name"] or "—")
-        ws4.cell(row=i, column=2, value=s["full_name"] or "—")
-        ws4.cell(row=i, column=3, value=s["region"] or "—")
-        ws4.cell(row=i, column=4, value=s["total_off"])
-        ws4.cell(row=i, column=5, value=s["acc"])
-        ws4.cell(row=i, column=6, value=s["rej"])
-        ws4.cell(row=i, column=7, value=rate)
-        ws4.cell(row=i, column=8, value=s["rev"])
-    autowidth(ws4)
-
-    # ── 5. Klinikalar bo'yicha ─────────────────────────────────────
-    ws5 = wb.create_sheet("Klinikalar")
-    hdr(ws5, 1, ["Klinika", "Hudud", "Telefon", "Buyurtmalar", "Bitimlar", "Jami xarid (so'm)"])
-    clinics = await db_all(
-        "SELECT COALESCE(u.clinic_name, u.full_name) as name, u.region, u.phone, "
-        "COUNT(DISTINCT n.id) as needs, "
-        "COUNT(DISTINCT CASE WHEN o.status='accepted' THEN o.id END) as deals, "
-        "COALESCE(SUM(CASE WHEN o.status='accepted' THEN o.price*n.quantity END),0) as total "
-        "FROM users u "
-        "LEFT JOIN needs n ON n.owner_id=u.id "
-        "LEFT JOIN offers o ON o.need_id=n.id "
-        "WHERE u.role IN ('clinic','zubtex') "
-        "GROUP BY u.id ORDER BY total DESC LIMIT 100"
-    )
-    for i, cl in enumerate(clinics, 2):
-        ws5.cell(row=i, column=1, value=cl["name"] or "—")
-        ws5.cell(row=i, column=2, value=cl["region"] or "—")
-        ws5.cell(row=i, column=3, value=cl["phone"] or "—")
-        ws5.cell(row=i, column=4, value=cl["needs"])
-        ws5.cell(row=i, column=5, value=cl["deals"])
-        ws5.cell(row=i, column=6, value=cl["total"])
-    autowidth(ws5)
-
-    # ── 6. Oylik aylanma ──────────────────────────────────────────
-    ws6 = wb.create_sheet("Oylik aylanma")
-    hdr(ws6, 1, ["Oy", "Yangi foydalanuvchilar", "Buyurtmalar", "Bitimlar", "Daromad (so'm)"])
-    monthly = await db_all(
-        "SELECT SUBSTR(created_at,1,7) as month, COUNT(*) as cnt "
-        "FROM needs GROUP BY month ORDER BY month DESC LIMIT 12"
-    )
-    for i, m in enumerate(monthly, 2):
-        month = m["month"]
-        new_u = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at LIKE ?", (f"{month}%",)))["c"]
-        deals = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
-        rev   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
-        ws6.cell(row=i, column=1, value=month)
-        ws6.cell(row=i, column=2, value=new_u)
-        ws6.cell(row=i, column=3, value=m["cnt"])
-        ws6.cell(row=i, column=4, value=deals)
-        ws6.cell(row=i, column=5, value=rev["s"] if rev else 0)
-    autowidth(ws6)
-
-    path = os.path.join(BASE_DIR, f"admin_report_{now.strftime('%Y%m%d_%H%M')}.xlsx")
-    wb.save(path)
-    return path
-
-@router.callback_query(F.data == "adm_settings")
-async def adm_settings(call: CallbackQuery):
-    if call.from_user.id not in ADMIN_IDS: return
-    ball_price  = await get_setting("ball_price") or "1000"
-    elon_price  = await get_setting("elon_price") or "0"
-    card        = await get_setting("card_number") or "—"
-    await call.message.answer(
-        f"⚙️ *Sozlamalar*\n\n"
-        f"💰 1 ball = *{ball_price} so'm*\n"
-        f"📋 1 e'lon = *{elon_price} ball* (0 = bepul)\n"
-        f"💳 Karta: `{card}`\n\n"
-        f"*Buyruqlar:*\n"
-        f"`/setball 2000` — ball narxi\n"
-        f"`/setelon 1` — e'lon narxi (ball)\n"
-        f"`/setcard 9860...` — karta raqami",
-        reply_markup=ik(
-            [ib("💰 Ball narxini o'zgartirish", "set_ball_price")],
-            [ib("📋 E'lon narxini o'zgartirish", "set_elon_price")],
-        )
-    )
-    await call.answer()
-
-@router.callback_query(F.data == "set_ball_price")
-async def set_ball_price_btn(call: CallbackQuery, state: FSMContext):
-    if call.from_user.id not in ADMIN_IDS: return
-    await state.update_data(setting_key="ball_price")
-    await state.set_state(AdminState.setting_input)
-    await call.message.answer("💰 Yangi ball narxini kiriting (so'mda):\n_Masalan: 2000_")
-    await call.answer()
-
-@router.callback_query(F.data == "set_elon_price")
-async def set_elon_price_btn(call: CallbackQuery, state: FSMContext):
-    if call.from_user.id not in ADMIN_IDS: return
-    await state.update_data(setting_key="elon_price")
-    await state.set_state(AdminState.setting_input)
-    await call.message.answer("📋 Yangi e'lon narxini kiriting (ball):\n_0 = bepul, 1 = 1 ball_")
-    await call.answer()
-
-@router.message(AdminState.setting_input)
-async def admin_setting_input(msg: Message, state: FSMContext):
-    if msg.from_user.id not in ADMIN_IDS:
-        await state.clear(); return
-    d   = await state.get_data()
-    key = d.get("setting_key", "")
-    val = msg.text.strip()
-    if not val.replace(".", "").isdigit():
-        await msg.answer("❌ Faqat raqam kiriting!")
-        return
-    await update_setting(key, val)
-    await state.clear()
-    labels = {"ball_price": f"1 ball = {val} so'm", "elon_price": f"1 e'lon = {val} ball"}
-    await msg.answer(f"✅ *{labels.get(key, key+' = '+val)}* — saqlandi!")
-
-@router.message(Command("setelon"))
-async def cmd_setelon(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS: return
-    try:
-        val = msg.text.split()[1]
-        await update_setting("elon_price", val)
-        await msg.answer(f"✅ 1 e'lon = *{val} ball*")
-    except Exception:
-        await msg.answer("❌ Format: /setelon 1")
-
-@router.callback_query(F.data == "adm_broadcast")
-async def adm_broadcast_btn(call: CallbackQuery, state: FSMContext):
-    if call.from_user.id not in ADMIN_IDS: return
-    await state.set_state(TopupState.receipt)  # placeholder state
-    await call.message.answer("📢 Yubormoqchi bo'lgan xabarni yozing:\n_(Bekor qilish: /cancel)_")
-    await state.update_data(broadcast_mode=True)
-    await call.answer()
-
-@router.message(Command("setball"))
-async def cmd_setball(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS: return
-    try:
-        val = msg.text.split()[1]
-        await update_setting("ball_price", val)
-        await msg.answer(f"✅ 1 ball = *{val} so'm*")
-    except Exception:
-        await msg.answer("❌ Format: /setball 2000")
-
-@router.message(Command("setcard"))
-async def cmd_setcard(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS: return
-    try:
-        val = msg.text.split()[1]
-        await update_setting("card_number", val)
-        await msg.answer(f"✅ Karta: `{val}`")
-    except Exception:
-        await msg.answer("❌ Format: /setcard 9860020138100068")
-
-@router.message(Command("broadcast"))
-async def cmd_broadcast(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS: return
-    parts = msg.text.split(maxsplit=1)
-    if len(parts) < 2:
-        await msg.answer("❌ Format: /broadcast Xabar matni")
-        return
-    text  = parts[1]
-    users = await db_all("SELECT id FROM users WHERE is_blocked=0")
-    sent, fail = 0, 0
-    for u in users:
-        try:
-            await bot.send_message(u["id"], text)
-            sent += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail += 1
-    await msg.answer(f"📢 Yuborildi: *{sent}* | Xato: *{fail}*")
-
-@router.message(Command("debug"))
-async def debug_cmd(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS:
-        return
-    info = (
-        f'BOT_TOKEN: OK\n'
-        f'CHANNEL_ID: {CHANNEL_ID}\n'
-        f'WEBAPP_URL: {WEBAPP_URL or "YOQ!"}\n'
-        f'ADMIN_IDS: {ADMIN_IDS}\n'
-        f'BASE_DIR: {BASE_DIR}'
-    )
-    await msg.answer(info, parse_mode=None)
-
-# ── /testchannel ──────────────────────────────────────────────────────────────
-@router.message(Command("testchannel"))
-async def test_channel(msg: Message):
-    if msg.from_user.id not in ADMIN_IDS:
-        return
-    await msg.answer(str(CHANNEL_ID), parse_mode=None)
-    try:
-        m = await bot.send_message(CHANNEL_ID, 'Test xabar!')
-        await msg.answer(f'OK! msg_id={m.message_id}', parse_mode=None)
-    except Exception as e:
-        await msg.answer(str(e)[:500], parse_mode=None)
-
-# ── CANCEL ───────────────────────────────────────────────────────────────────
-@router.callback_query(F.data == "cancel")
-async def cb_cancel(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    try:
-        await call.message.delete()
-    except Exception:
-        pass
-    await call.answer("Bekor qilindi")
-
-# ── WEB APP DATA (Mini App dan kelgan) ────────────────────────────────────────
-@router.message(F.web_app_data)
-async def web_app_data(msg: Message, state: FSMContext):
-    import json
-    try:
-        data = json.loads(msg.web_app_data.data)
-    except Exception:
-        await msg.answer("❌ Ma'lumot xato.")
-        return
-
-    if data.get("type") == "bulk_order":
-        items    = data.get("items", [])
-        deadline = int(data.get("deadline", 24))
-        uid      = msg.from_user.id
-        u        = await get_user(uid)
-
-        if not items:
-            await msg.answer("❌ Buyurtma bo'sh.")
-            return
-
-        room    = await get_or_create_room(uid)
-        expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
-
-        batch_id = await db_insert(
-            "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
-            (uid, deadline, expires),
-        )
-
-        saved_needs = []
-        for item in items:
-            nid = await db_insert(
-                "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,deadline_hours,expires_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (batch_id, room["id"], uid,
-                 item["name"], float(item["qty"]), item.get("unit","dona"),
-                 deadline, expires),
-            )
-            need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
-            saved_needs.append(dict(need))
-
-        # Bitta paket post kanalga
-        mid = await post_batch_to_channel(batch_id, saved_needs, dict(u))
-        if mid:
-            for n in saved_needs:
-                await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
-
-        dl_map  = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
-        preview = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in saved_needs[:5]])
-        if len(saved_needs) > 5:
-            preview += f"\n...va yana {len(saved_needs)-5} ta"
-        chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
-        link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else ""
-        await msg.answer(
-            f"✅ *{len(saved_needs)} ta mahsulot joylashtirildi!*{link}\n\n"
-            f"{preview}\n\n"
-            f"⏱ {dl_map.get(deadline, str(deadline)+' soat')} ichida"
-        )
-        asyncio.create_task(notify_sellers_batch(batch_id, uid))
-
-    elif data.get("type") == "offer":
-        offers   = data.get("offers", [])
-        batch_id = int(data.get("batch_id", 0))
-        delivery = int(data.get("delivery", 24))
-        uid      = msg.from_user.id
-        u        = await get_user(uid)
-
-        if not offers:
-            await msg.answer("❌ Taklif bo'sh.")
-            return
-
-        shop  = await db_get("SELECT shop_name FROM shops WHERE owner_id=? AND status='active'", (uid,))
-        sname = (shop["shop_name"] if shop else None) or u["clinic_name"] or u["full_name"] or "Sotuvchi"
-
-        saved = 0
-        unavail_count = 0
-        for offer in offers:
-            nid       = int(offer.get("need_id", 0))
-            price     = float(offer.get("price", 0))
-            unavail   = bool(offer.get("unavailable", False))
-            note      = offer.get("note", "") or ""
-            if not nid:
-                continue
-            nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
-            if not nd:
-                continue
-            exists = await db_get("SELECT id FROM offers WHERE need_id=? AND seller_id=?", (nid, uid))
-            if exists:
-                continue
-            if unavail:
-                # Mavjud emas — 0 narx bilan saqlaymiz, note="mavjud_emas"
-                await db_insert(
-                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
-                    "VALUES(?,?,?,?,?,?,?,?)",
-                    (nid, batch_id, uid, nd["product_name"], 0, nd["unit"], delivery, "mavjud_emas"),
-                )
-                unavail_count += 1
-            elif price > 0:
-                await db_insert(
-                    "INSERT INTO offers(need_id,batch_id,seller_id,product_name,price,unit,delivery_hours,note) "
-                    "VALUES(?,?,?,?,?,?,?,?)",
-                    (nid, batch_id, uid, nd["product_name"], price, nd["unit"], delivery, note),
-                )
-                saved += 1
-
-        # Klinikaga xabar
-        real_saved = saved
-        if real_saved > 0:
-            owner_rows = await db_all("SELECT DISTINCT owner_id FROM needs WHERE batch_id=?", (batch_id,))
-            dl_map = {2:"2 soat",24:"24 soat",48:"2 kun",168:"1 hafta"}
-            dl_txt = dl_map.get(delivery, f"{delivery} soat")
-            for row in owner_rows:
-                try:
-                    await bot.send_message(
-                        row["owner_id"],
-                        f"📩 *Yangi taklif!*\n\n"
-                        f"🏪 {sname}\n"
-                        f"📦 {real_saved} ta mahsulotga narx berdi\n"
-                        f"🚚 {dl_txt} ichida yetkazadi",
-                        reply_markup=ik([ib("📩 Takliflarni ko'rish", f"view_batch_{batch_id}")]),
-                    )
-                except Exception:
-                    pass
-
-        parts = []
-        if saved > 0:       parts.append(f"{saved} ta narx")
-        if unavail_count > 0: parts.append(f"{unavail_count} ta mavjud emas")
-        result_txt = " | ".join(parts) if parts else "hech narsa"
-        await msg.answer(f"✅ *Yuborildi:* {result_txt}\n\n🏪 {sname}")
-
-# ── KLINIKA MAHSULOTLARI (sevimlilar ro'yxati) ────────────────────────────────
-@router.message(F.text == "📦 Mahsulotlarim")
-async def my_products(msg: Message, state: FSMContext):
-    uid      = msg.from_user.id
-    products = await db_all(
-        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id",
-        (uid,),
-    )
-    if not products:
-        await msg.answer(
-            "📦 *Mahsulotlarim ro\'yxati bo\'sh*\n\n"
-            "Ro\'yxat saqlasangiz, Mini App da avtomatik chiqadi.\n\n"
-            "Har bir mahsulotni yangi qatorda yozing:\n"
-            "_Masalan:\n"
-            "Xarizma A2\n"
-            "GC Fuji IX dona\n"
-            "Latex qo\'lqop M_",
-            reply_markup=ik([ib("✏️ Ro\'yxat kiritish", "edit_my_products")]),
-        )
-        return
-
-    txt  = f"📦 *Mahsulotlarim:* {len(products)} ta\n\n"
-    txt += "\n".join([f"{i}. {p['name']} ({p['unit']})" for i, p in enumerate(products, 1)])
-    await msg.answer(
-        txt,
-        reply_markup=ik(
-            [ib("✏️ Tahrirlash", "edit_my_products")],
-            [ib("🗑 Hammasini o\'chirish", "clear_my_products")],
-        ),
-    )
-
-@router.callback_query(F.data == "edit_my_products")
-async def edit_my_products(call: CallbackQuery, state: FSMContext):
-    uid      = call.from_user.id
-    products = await db_all(
-        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id", (uid,)
-    )
-    existing = "\n".join([p["name"] for p in products]) if products else ""
-    await state.set_state(MyProductsState.editing)
-    await call.message.answer(
-        "✏️ *Mahsulotlar ro\'yxatini kiriting*\n\n"
-        "Har bir mahsulotni yangi qatorda yozing.\n"
-        "_Birlik ham yozsa bo\'ladi: `Latex qo\'lqop M dona`_\n\n"
-        + (f"*Hozirgi ro\'yxat:*\n```\n{existing}\n```\n\n" if existing else "") +
-        "Yangi ro\'yxatni yuboring:",
-        reply_markup=ik([ib("❌ Bekor", "cancel")]),
-    )
-    await call.answer()
-
-@router.message(MyProductsState.editing)
-async def save_my_products(msg: Message, state: FSMContext):
-    uid   = msg.from_user.id
-    lines = [l.strip() for l in msg.text.strip().split("\n") if l.strip()]
-    if not lines:
-        await msg.answer("❌ Bo\'sh ro\'yxat. Qaytadan yuboring.")
-        return
-
-    # Eskilarni o\'chirib yangilarini saqlaymiz
-    await db_run("DELETE FROM clinic_products WHERE owner_id=?", (uid,))
-    for i, line in enumerate(lines):
-        parts = line.rsplit(None, 1)
-        # Oxirgi so\'z unit bo\'lishi mumkin
-        known_units = {"dona", "kg", "litr", "quti", "paket", "ml", "gr", "mm"}
-        if len(parts) == 2 and parts[1].lower() in known_units:
-            name, unit = parts[0].strip(), parts[1].lower()
-        else:
-            name, unit = line.strip(), "dona"
-        await db_insert(
-            "INSERT INTO clinic_products(owner_id,name,unit,sort_order) VALUES(?,?,?,?)",
-            (uid, name, unit, i),
-        )
-
-    await state.clear()
-    await msg.answer(
-        f"✅ *{len(lines)} ta mahsulot saqlandi!*\n\n"
-        f"Endi *Ko\'p mahsulot* bosganda Mini App da shu ro\'yxat chiqadi."
-    )
-
-@router.callback_query(F.data == "clear_my_products")
-async def clear_my_products(call: CallbackQuery):
-    await db_run("DELETE FROM clinic_products WHERE owner_id=?", (call.from_user.id,))
-    await call.message.edit_text("🗑 Ro\'yxat tozalandi.")
-    await call.answer()
-
-# ── E'LON BERISH ─────────────────────────────────────────────────────────────
-# Viloyat narxlari
-_AD_REGIONS = [
-    ("🏙 Toshkent shahri", 200),
-    ("🌆 Toshkent viloyati", 50),
-    ("🏛 Samarqand", 50),
-    ("🕌 Buxoro", 50),
-    ("🌸 Farg'ona", 50),
-    ("🏔 Andijon", 50),
-    ("🌿 Namangan", 50),
-    ("🌊 Xorazm", 50),
-    ("🌵 Qashqadaryo", 50),
-    ("🏜 Surxondaryo", 50),
-    ("🌾 Jizzax", 50),
-    ("🌱 Sirdaryo", 50),
-    ("💎 Navoiy", 50),
-    ("🏝 Qoraqalpog'iston", 50),
-]
-
-def _calc_ad_price(audiences: list, regions: list) -> tuple:
-    """Ball narxini hisoblash. (jami, izoh)"""
-    base = 0
-    for reg in regions:
-        price = next((p for r, p in _AD_REGIONS if r == reg), 50)
-        base += price
-    # Ikki auditoriya bo'lsa 2x
-    mult = 2 if len(audiences) >= 2 else 1
-    total = base * mult
-    parts = [f"{len(regions)} ta viloyat × {base//len(regions) if regions else 0} ball"]
-    if mult > 1:
-        parts.append(f"2 ta auditoriya × 2")
-    return total, ", ".join(parts)
-
-def _ad_audience_kb(selected: list) -> InlineKeyboardMarkup:
-    opts = [
-        ("🏥 Klinikalar / Vrachlar", "aud_clinic"),
-        ("🔬 Zubtexniklar",          "aud_zubtex"),
-        ("🛒 Sotuvchilar",           "aud_seller"),
-    ]
-    rows = []
-    for label, key in opts:
-        check = "✅ " if key in selected else ""
-        rows.append([ib(f"{check}{label}", f"adaud_{key}")])
-    rows.append([ib("▶️ Davom etish →", "adaud_next"), ib("◀️ Orqaga", "ad_cancel")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-def _ad_regions_kb(selected: list) -> InlineKeyboardMarkup:
-    rows = []
-    for i in range(0, len(_AD_REGIONS), 2):
-        row = []
-        for reg, price in _AD_REGIONS[i:i+2]:
-            check = "✅ " if reg in selected else ""
-            row.append(ib(f"{check}{reg} ({price}⚡)", f"adreg_{i if reg==_AD_REGIONS[i][0] else i+1}"))
-        rows.append(row)
-    rows.append([ib("✅ Hammasi", "adreg_all"), ib("❌ Tozalash", "adreg_clear")])
-    rows.append([ib("▶️ Davom etish →", "adreg_next"), ib("◀️ Orqaga", "adreg_back")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 @router.callback_query(F.data == "ad_start")
 async def ad_start(call: CallbackQuery, state: FSMContext):
     uid = call.from_user.id
     u   = await get_user(uid)
-    bal = u["balance"] or 0
+    bal = u["balance"] or 0 if u else 0
     await state.set_state(AdState.audience)
     await state.update_data(ad_audiences=[], ad_regions=[])
     await call.message.answer(
-        f"📢 *E'lon berish*\n\n"
-        f"💰 Sizning balansingiz: *{bal:.1f} ball*\n\n"
-        f"*1-qadam: Kimga e'lon berasiz?*\n"
-        f"_(Bir nechta tanlash mumkin)_",
+        f"📢 *E\'lon berish*\n\n"
+        f"💰 Balansingiz: *{bal:.0f} ball*\n\n"
+        f"*1-qadam: Kimga e\'lon berasiz?*",
         reply_markup=_ad_audience_kb([])
     )
     await call.answer()
 
 @router.callback_query(F.data.startswith("adaud_"), AdState.audience)
-async def ad_audience_toggle(call: CallbackQuery, state: FSMContext):
-    d    = await state.get_data()
-    sel  = d.get("ad_audiences", [])
-    key  = call.data[6:]  # aud_clinic, aud_zubtex, aud_seller
-    if key in sel:
-        sel.remove(key)
-    else:
-        sel.append(key)
+async def ad_aud_toggle(call: CallbackQuery, state: FSMContext):
+    key = call.data[6:]
+    d   = await state.get_data()
+    sel = list(d.get("ad_audiences", []))
+    if key in sel: sel.remove(key)
+    else: sel.append(key)
     await state.update_data(ad_audiences=sel)
     await call.message.edit_reply_markup(reply_markup=_ad_audience_kb(sel))
     await call.answer()
 
 @router.callback_query(F.data == "adaud_next", AdState.audience)
-async def ad_audience_next(call: CallbackQuery, state: FSMContext):
+async def ad_aud_next(call: CallbackQuery, state: FSMContext):
     d   = await state.get_data()
     sel = d.get("ad_audiences", [])
     if not sel:
-        await call.answer("⚠️ Kamida 1 ta auditoriya tanlang!", show_alert=True)
+        await call.answer("⚠️ Kamida 1 ta tanlang!", show_alert=True)
         return
     await state.set_state(AdState.regions)
     await call.message.answer(
-        f"📍 *2-qadam: Qaysi viloyatlar?*\n\n"
-        f"_(Toshkent shahri = 200 ball, boshqalar = 50 ball)_\n"
-        f"_Ikki auditoriya tanlasangiz narx 2x bo\'ladi_",
+        "📍 *2-qadam: Qaysi hududlar?*\n\n"
+        "_🏙 Toshkent shahri = 200 ball\n"
+        "Boshqa viloyatlar = 50 ball\n"
+        "2 auditoriya = narx × 2_",
         reply_markup=_ad_regions_kb([])
     )
     await call.answer()
 
 @router.callback_query(F.data.startswith("adreg_"), AdState.regions)
-async def ad_region_toggle(call: CallbackQuery, state: FSMContext):
-    d   = await state.get_data()
-    sel = d.get("ad_regions", [])
+async def ad_reg_toggle(call: CallbackQuery, state: FSMContext):
     key = call.data[6:]
+    d   = await state.get_data()
+    sel = list(d.get("ad_regions", []))
 
     if key == "all":
-        sel = [r for r, _ in _AD_REGIONS]
+        sel = [r for r,_ in _AD_REGIONS]
     elif key == "clear":
         sel = []
     elif key == "next":
         if not sel:
-            await call.answer("⚠️ Kamida 1 ta viloyat tanlang!", show_alert=True)
+            await call.answer("⚠️ Kamida 1 ta hudud tanlang!", show_alert=True)
             return
         await state.update_data(ad_regions=sel)
         await state.set_state(AdState.content)
-        audiences = d.get("ad_audiences", [])
-        total, reason = _calc_ad_price(audiences, sel)
-        aud_names = {"aud_clinic":"Klinikalar","aud_zubtex":"Zubtexniklar","aud_seller":"Sotuvchilar"}
-        aud_txt = ", ".join(aud_names.get(a,"?") for a in audiences)
+        auds  = d.get("ad_audiences", [])
+        total, reason = _calc_ad_price(auds, sel)
+        aud_n = {"aud_clinic":"Klinikalar","aud_zubtex":"Zubtexniklar","aud_seller":"Sotuvchilar"}
+        aud_txt = ", ".join(aud_n.get(a,"?") for a in auds)
         await call.message.answer(
-            f"✍️ *3-qadam: E'lon mazmunini yuboring*\n\n"
-            f"Quyidagilardan birini yuboring:\n"
+            f"✍️ *3-qadam: E\'lon mazmunini yuboring*\n\n"
             f"• Matn (reklama matni)\n"
             f"• Rasm + izoh\n"
-            f"• Matn + link\n\n"
-            f"📊 *Hisob-kitob:*\n"
-            f"👥 Auditoriya: {aud_txt}\n"
-            f"📍 {len(sel)} ta viloyat\n"
-            f"💡 Sabab: {reason}\n"
+            f"• @username yoki t.me/... link\n\n"
+            f"⚠️ _Faqat Telegram linklarga ruxsat_\n\n"
+            f"📊 *Narx:*\n"
+            f"👥 {aud_txt}\n"
+            f"📍 {len(sel)} ta hudud · {reason}\n"
             f"💰 *Jami: {total} ball*",
             reply_markup=ik([ib("◀️ Orqaga", "adreg_back")])
         )
@@ -2772,154 +1690,342 @@ async def ad_region_toggle(call: CallbackQuery, state: FSMContext):
         return
     elif key == "back":
         await state.set_state(AdState.audience)
-        d2   = await state.get_data()
+        d2  = await state.get_data()
         sel2 = d2.get("ad_audiences", [])
         await call.message.answer(
-            "*1-qadam: Kimga e'lon berasiz?*",
+            "*1-qadam: Kimga e\'lon berasiz?*",
             reply_markup=_ad_audience_kb(sel2)
         )
         await call.answer()
         return
     else:
-        try:
-            idx  = int(key)
-            reg  = _AD_REGIONS[idx][0]
-            if reg in sel: sel.remove(reg)
-            else: sel.append(reg)
-        except Exception:
-            pass
+        if key in sel: sel.remove(key)
+        else: sel.append(key)
 
     await state.update_data(ad_regions=sel)
     await call.message.edit_reply_markup(reply_markup=_ad_regions_kb(sel))
     await call.answer()
 
-@router.message(AdState.content, F.text | F.photo | F.document)
-async def ad_content(msg: Message, state: FSMContext):
-    d          = await state.get_data()
-    audiences  = d.get("ad_audiences", [])
-    regions    = d.get("ad_regions", [])
+@router.message(AdState.content, F.text | F.photo)
+async def ad_content_input(msg: Message, state: FSMContext):
+    d        = await state.get_data()
+    audiences= d.get("ad_audiences", [])
+    regions  = d.get("ad_regions", [])
     total, reason = _calc_ad_price(audiences, regions)
+
+    # Kontent olish
+    if msg.photo:
+        photo_id = msg.photo[-1].file_id
+        raw_text = msg.caption or ""
+    else:
+        photo_id = None
+        raw_text = msg.text or ""
+
+    # Link himoya
+    clean_text = _sanitize_ad_text(raw_text)
+    was_cleaned = clean_text != raw_text
+
+    await state.update_data(
+        ad_photo=photo_id,
+        ad_text=clean_text,
+        ad_raw_text=raw_text,
+    )
 
     uid = msg.from_user.id
     u   = await get_user(uid)
-    bal = u["balance"] or 0
+    bal = u["balance"] or 0 if u else 0
 
-    # Content saqlaymiz
-    if msg.photo:
-        await state.update_data(ad_photo=msg.photo[-1].file_id, ad_text=msg.caption or "")
-    else:
-        await state.update_data(ad_photo=None, ad_text=msg.text or "")
+    aud_n   = {"aud_clinic":"🏥 Klinikalar","aud_zubtex":"🔬 Zubtexniklar","aud_seller":"🛒 Sotuvchilar"}
+    aud_txt = ", ".join(aud_n.get(a,"?") for a in audiences)
 
-    aud_names = {"aud_clinic":"🏥 Klinikalar","aud_zubtex":"🔬 Zubtexniklar","aud_seller":"🛒 Sotuvchilar"}
-    aud_txt   = ", ".join(aud_names.get(a,"?") for a in audiences)
-    reg_txt   = ", ".join(regions[:3]) + (f" va yana {len(regions)-3} ta" if len(regions)>3 else "")
+    warn = "\n⚠️ _Xavfli linklar o\'chirildi_" if was_cleaned else ""
+    bal_warn = f"\n❌ *Balans yetarli emas!* ({bal:.0f}/{total} ball)" if bal < total else ""
 
-    preview = (
-        f"📢 *E'lon ko\'rib chiqish*\n\n"
+    preview_txt = (
+        f"👁 *Ko\'rib chiqing:*{warn}\n\n"
+        f"📢 *Reklama*\n\n"
+        f"{clean_text}\n\n"
         f"👥 {aud_txt}\n"
-        f"📍 {reg_txt}\n\n"
-        f"💰 Narx: *{total} ball*\n"
-        f"💡 Sabab: {reason}\n"
-        f"Sizda: {bal:.1f} ball\n\n"
+        f"📍 {len(regions)} ta hudud\n"
+        f"💡 {reason}\n"
+        f"💰 *{total} ball* (sizda: {bal:.0f}){bal_warn}"
     )
+
     if bal < total:
-        preview += f"⚠️ *Balansingiz yetarli emas!*\n+{total-bal:.0f} ball kerak\n"
         kb = ik(
-            [ib("➕ Hisob to'ldirish", "topup")],
-            [ib("◀️ Orqaga", "ad_edit")],
+            [ib("➕ Hisob to\'ldirish", "topup")],
+            [ib("◀️ Orqaga", "ad_edit"), ib("✖️ Bekor", "ad_cancel")],
         )
     else:
         kb = ik(
-            [ib("✅ Roziman — yuborish", "ad_confirm")],
-            [ib("✏️ Tahrirlash", "ad_edit")],
-            [ib("◀️ Bekor qilish", "ad_cancel")],
+            [ib("✅ Adminga yuborish", "ad_confirm")],
+            [ib("✏️ Tahrirlash", "ad_edit"), ib("✖️ Bekor", "ad_cancel")],
         )
+
     await state.set_state(AdState.confirm)
-    await msg.answer(preview, reply_markup=kb)
+    if photo_id:
+        await msg.answer_photo(photo_id, caption=preview_txt, reply_markup=kb)
+    else:
+        await msg.answer(preview_txt, reply_markup=kb)
 
 @router.callback_query(F.data == "ad_confirm", AdState.confirm)
 async def ad_confirm(call: CallbackQuery, state: FSMContext):
     d         = await state.get_data()
     audiences = d.get("ad_audiences", [])
     regions   = d.get("ad_regions", [])
-    total, _  = _calc_ad_price(audiences, regions)
+    total, reason = _calc_ad_price(audiences, regions)
     uid       = call.from_user.id
     u         = await get_user(uid)
-    bal       = u["balance"] or 0
+    bal       = u["balance"] or 0 if u else 0
 
     if bal < total:
-        await call.answer("⚠️ Balansingiz yetarli emas!", show_alert=True)
+        await call.answer("❌ Balans yetarli emas!", show_alert=True)
         return
+
+    photo_id = d.get("ad_photo")
+    ad_text  = d.get("ad_text", "")
+
+    aud_n   = {"aud_clinic":"Klinikalar","aud_zubtex":"Zubtexniklar","aud_seller":"Sotuvchilar"}
+    aud_txt = ", ".join(aud_n.get(a,"?") for a in audiences)
+
+    # Adminga preview + tasdiqlash tugmasi
+    ad_id = await db_insert(
+        "INSERT INTO transactions(user_id,amount,balls,type,note,status) VALUES(?,?,?,\'ad\',?,\'pending\')",
+        (uid, total, total, f"audiences:{','.join(audiences)}|regions:{','.join(regions)}")
+    )
+
+    admin_txt = (
+        f"📢 *Yangi reklama so\'rovi #{ad_id}*\n\n"
+        f"👤 {u['clinic_name'] or u['full_name'] or str(uid)}\n"
+        f"👥 {aud_txt}\n"
+        f"📍 {', '.join(regions[:3])}{'...' if len(regions)>3 else ''}\n"
+        f"💰 {total} ball\n\n"
+        f"Mazmun:\n{ad_text}"
+    )
+    admin_kb = ik(
+        [ib("✅ Tasdiqlash", f"adm_ad_ok_{ad_id}_{uid}"),
+         ib("❌ Rad etish",  f"adm_ad_rej_{ad_id}_{uid}")],
+    )
+
+    for aid in ADMIN_IDS:
+        try:
+            if photo_id:
+                await bot.send_photo(aid, photo_id, caption=admin_txt, reply_markup=admin_kb)
+            else:
+                await bot.send_message(aid, admin_txt, reply_markup=admin_kb)
+        except Exception: pass
+
+    await state.clear()
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(
+        f"⏳ *E\'lon adminga yuborildi!*\n\n"
+        f"Admin tasdiqlagandan keyin:\n"
+        f"1. @xazdent kanalga chiqadi\n"
+        f"2. Keyin {aud_txt} ga tarqatiladi\n\n"
+        f"💰 Tasdiqlanganda *{total} ball* hisobdan ayiriladi."
+    )
+    await call.answer("✅")
+
+@router.callback_query(F.data.startswith("adm_ad_ok_"))
+async def adm_ad_ok(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    parts  = call.data.split("_")
+    ad_id  = int(parts[3])
+    uid    = int(parts[4])
+
+    tx = await db_get("SELECT * FROM transactions WHERE id=?", (ad_id,))
+    if not tx:
+        await call.answer("Topilmadi", show_alert=True); return
+
+    u   = await get_user(uid)
+    bal = u["balance"] or 0 if u else 0
+    total = tx["balls"]
+
+    if bal < total:
+        await call.message.edit_caption(
+            (call.message.caption or "") + "\n\n❌ Foydalanuvchi balansi yetarli emas!",
+            reply_markup=None)
+        await call.answer(); return
 
     # Baldan ayiramiz
     await db_run("UPDATE users SET balance=balance-? WHERE id=?", (total, uid))
+    await db_run("UPDATE transactions SET status=\'confirmed\',confirmed_by=? WHERE id=?",
+                 (call.from_user.id, ad_id))
 
-    # Qabul qiluvchilarni topamiz
+    # Note dan audiences va regions olamiz
+    note  = tx["note"] or ""
+    auds  = []
+    regs  = []
+    for part in note.split("|"):
+        if part.startswith("audiences:"):
+            auds = part[10:].split(",") if part[10:] else []
+        elif part.startswith("regions:"):
+            regs = part[8:].split(",") if part[8:] else []
+
+    # Kanalga post
+    photo_id = None
+    ad_text  = ""
+    # Caption dan olamiz
+    orig_caption = call.message.caption or call.message.text or ""
+    # Mazmun qismini olamiz
+    if "Mazmun:" in orig_caption:
+        ad_text = orig_caption.split("Mazmun:")[-1].strip()
+    # Rasm bor bo'lsa
+    if call.message.photo:
+        photo_id = call.message.photo[-1].file_id
+
+    chan_txt = f"📢 *Reklama*\n\n{ad_text}\n\n_@XazdentBot orqali_"
+    chan_msg = None
+    try:
+        if photo_id:
+            chan_msg = await bot.send_photo(CHANNEL_ID, photo_id, caption=chan_txt)
+        else:
+            chan_msg = await bot.send_message(CHANNEL_ID, chan_txt)
+    except Exception as e:
+        log.error(f"Kanal reklama post xato: {e}")
+
+    chan_msg_id = chan_msg.message_id if chan_msg else None
+
+    # Kanalga borgandan keyin forward qilamiz
     aud_roles = {
         "aud_clinic": ("clinic", "zubtex"),
         "aud_zubtex": ("zubtex",),
         "aud_seller": ("seller",),
     }
-    roles = []
-    for a in audiences:
-        roles.extend(aud_roles.get(a, []))
-    roles = list(set(roles))
-
-    # Viloyat filtri
-    placeholders = ",".join(["?" for _ in regions])
-    if regions:
+    roles = list(set(r for a in auds for r in aud_roles.get(a, [])))
+    sent = 0
+    if roles and regs:
+        role_ph  = ",".join(["?" for _ in roles])
+        reg_ph   = ",".join(["?" for _ in regs])
         recipients = await db_all(
-            f"SELECT id FROM users WHERE role IN ({','.join(['?' for _ in roles])}) "
-            f"AND region IN ({placeholders}) AND is_blocked=0 AND id!=?",
-            (*roles, *regions, uid)
+            f"SELECT id FROM users WHERE role IN ({role_ph}) "
+            f"AND region IN ({reg_ph}) AND is_blocked=0 AND id!=?",
+            (*roles, *regs, uid)
         )
-    else:
-        recipients = await db_all(
-            f"SELECT id FROM users WHERE role IN ({','.join(['?' for _ in roles])}) "
-            f"AND is_blocked=0 AND id!=?",
-            (*roles, uid)
+        for r in recipients:
+            try:
+                if chan_msg:
+                    await bot.forward_message(r["id"], CHANNEL_ID, chan_msg_id)
+                else:
+                    if photo_id:
+                        await bot.send_photo(r["id"], photo_id, caption=chan_txt)
+                    else:
+                        await bot.send_message(r["id"], chan_txt)
+                sent += 1
+                await asyncio.sleep(0.05)
+            except Exception: pass
+
+    # Reklama beruvchiga xabar
+    try:
+        await bot.send_message(uid,
+            f"✅ *E\'loningiz tasdiqlandi!*\n\n"
+            f"📢 Kanal: @xazdent\n"
+            f"📨 {sent} ta foydalanuvchiga yuborildi\n"
+            f"💰 -{total:.0f} ball ayirildi\n\n"
+            f"{'👁 Kanal postini ko\'rishlar soni uchun: @xazdent' if chan_msg_id else ''}"
         )
+    except Exception: pass
 
-    # Yuboramiz
-    photo   = d.get("ad_photo")
-    text    = d.get("ad_text", "")
-    ad_txt  = f"📢 *Reklama*\n\n{text}"
-    sent    = 0
-    for r in recipients:
-        try:
-            if photo:
-                await bot.send_photo(r["id"], photo, caption=ad_txt)
-            else:
-                await bot.send_message(r["id"], ad_txt)
-            sent += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            pass
-
-    await state.clear()
-    await call.message.edit_text(
-        f"✅ *E'lon yuborildi!*\n\n"
-        f"📨 {sent} ta foydalanuvchiga\n"
-        f"💰 -{total} ball sarflandi\n"
-        f"Qolgan balans: {bal-total:.1f} ball"
-    )
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(f"✅ Yuborildi: {sent} kishi | Kanal post: {chan_msg_id}")
     await call.answer("✅")
+
+@router.callback_query(F.data.startswith("adm_ad_rej_"))
+async def adm_ad_rej(call: CallbackQuery):
+    if call.from_user.id not in ADMIN_IDS: return
+    parts = call.data.split("_")
+    ad_id = int(parts[3])
+    uid   = int(parts[4])
+    await db_run("UPDATE transactions SET status=\'rejected\',confirmed_by=? WHERE id=?",
+                 (call.from_user.id, ad_id))
+    try:
+        await bot.send_message(uid,
+            "❌ *E\'loningiz rad etildi.*\n\n"
+            "Sabab: admin tomonidan qabul qilinmadi.\n"
+            "Ball ayirilmadi.")
+    except Exception: pass
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer("❌ Rad etildi.")
+    await call.answer()
 
 @router.callback_query(F.data == "ad_edit")
 async def ad_edit(call: CallbackQuery, state: FSMContext):
     await state.set_state(AdState.content)
     await call.message.answer(
-        "✍️ *Yangi mazmunni yuboring:*\n\n"
-        "Matn, rasm yoki rasm+izoh",
-        reply_markup=ik([ib("◀️ Orqaga", "adreg_back")])
+        "✍️ *Yangi mazmunni yuboring:*\n"
+        "Matn, rasm yoki rasm + izoh"
     )
     await call.answer()
 
 @router.callback_query(F.data == "ad_cancel")
 async def ad_cancel(call: CallbackQuery, state: FSMContext):
     await state.clear()
-    await call.message.edit_text("❌ E'lon bekor qilindi.")
+    await call.message.edit_text("✖️ E\'lon bekor qilindi.")
     await call.answer()
+
+# ── TAKLIF QABUL HELPER FUNKSIYALAR ─────────────────────────────────────────
+
+async def _notify_winner(seller_id: int, clinic: dict, items: list):
+    """G'olib sotuvchiga to'liq xabar: mahsulotlar + klinika ma'lumoti."""
+    cname   = clinic["clinic_name"] or clinic["full_name"] or "Klinika"
+    cphone  = clinic["phone"] or "—"
+    cregion = clinic["region"] or "—"
+    caddr   = clinic["address"] or "—"
+    clat    = clinic.get("latitude")
+    clon    = clinic.get("longitude")
+
+    # Mahsulotlar ro'yxati
+    lines  = []
+    total  = 0
+    for i, (name, qty, unit, price) in enumerate(items, 1):
+        subtotal = price * qty
+        total   += subtotal
+        lines.append(
+            f"{i}. *{name}* — {qty} {unit}\n"
+            f"   {price:,.0f} × {qty} = *{subtotal:,.0f} so'm*"
+        )
+    items_txt = "\n".join(lines)
+
+    txt = (
+        f"🎉 *Taklifingiz qabul qilindi!*\n\n"
+        f"📦 *Buyurtma:*\n{items_txt}\n\n"
+        f"💰 *Jami: {total:,.0f} so'm*\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🏥 *{cname}*\n"
+        f"📞 {cphone}\n"
+        f"📍 {cregion}\n"
+        f"🏠 {caddr}"
+    )
+
+    try:
+        await bot.send_message(seller_id, txt)
+    except Exception as e:
+        log.error(f"Winner notify xato: {e}")
+        return
+
+    # Lokatsiya yuboramiz (agar bo'lsa)
+    if clat and clon:
+        try:
+            await bot.send_location(seller_id, latitude=clat, longitude=clon)
+        except Exception:
+            pass
+
+async def _notify_loser(seller_id: int, product_name: str, win_price: float,
+                        my_price: float, unit: str):
+    """Yutqazgan sotuvchiga faqat narx statistikasi."""
+    diff = my_price - win_price
+    pct  = abs(diff) / win_price * 100 if win_price else 0
+    try:
+        await bot.send_message(
+            seller_id,
+            f"📊 *{product_name}* bo\'yicha boshqa taklif qabul qilindi.\n\n"
+            f"Qabul qilingan narx: *{win_price:,.0f} so\'m/{unit}*\n"
+            f"Sizning narxingiz: *{my_price:,.0f} so\'m/{unit}*\n"
+            f"Farq: *{diff:+,.0f} so\'m ({pct:.0f}%)*\n\n"
+            f"_Xaridor ma\'lumotlari maxfiy._"
+        )
+    except Exception:
+        pass
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
@@ -3373,35 +2479,31 @@ async def _accept_offers_handler(req):
             need_winners[o["need_id"]] = (oid, o["price"], o["seller_id"])
             accepted_by_seller.setdefault(o["seller_id"], []).append(o["need_id"])
 
-        cname   = clinic["clinic_name"] or clinic["full_name"] or "Klinika"
-        cphone  = clinic["phone"] or "—"
-        cregion = clinic["region"] or "—"
-        caddr   = clinic["address"] or "—"
-
+        # G'olib sotuvchilarga: har biri uchun qabul qilingan mahsulotlar ro'yxati
         for sid, nids in accepted_by_seller.items():
-            try:
-                await bot.send_message(sid,
-                    f"🎉 *{len(nids)} ta taklifingiz qabul qilindi!*\n\n"
-                    f"🏥 {cname}\n📞 {cphone}\n📍 {cregion}\n🏠 {caddr}")
-            except Exception:
-                pass
+            items = []
+            for nid in nids:
+                win_info = need_winners.get(nid)
+                if not win_info:
+                    continue
+                win_oid, win_price, _ = win_info
+                nd = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+                if nd:
+                    items.append((nd["product_name"], nd["quantity"], nd["unit"], win_price))
+            if items:
+                await _notify_winner(sid, clinic, items)
 
+        # Yutqazganlarga: faqat narx statistikasi
         for need_id, (win_oid, win_price, win_sid) in need_winners.items():
             nd = await db_get("SELECT * FROM needs WHERE id=?", (need_id,))
             if not nd:
                 continue
-            losers = await db_all(
+            for loser in await db_all(
                 "SELECT * FROM offers WHERE need_id=? AND seller_id!=? AND price>0",
-                (need_id, win_sid))
-            for loser in losers:
-                try:
-                    await bot.send_message(loser["seller_id"],
-                        f"📊 *{nd['product_name']}* uchun boshqa taklif qabul qilindi.\n\n"
-                        f"Qabul qilingan narx: *{win_price:,.0f} so'm/{nd['unit']}*\n"
-                        f"Sizning narxingiz: *{loser['price']:,.0f} so'm/{nd['unit']}*\n\n"
-                        f"_Xaridor va g'olib sotuvchi ma'lumotlari maxfiy._")
-                except Exception:
-                    pass
+                (need_id, win_sid)
+            ):
+                await _notify_loser(loser["seller_id"], nd["product_name"],
+                                    win_price, loser["price"], nd["unit"])
 
         return _web.Response(
             text=_json.dumps({"ok": True, "accepted": len(offer_ids)}),
