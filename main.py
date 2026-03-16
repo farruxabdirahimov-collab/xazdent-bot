@@ -1829,18 +1829,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 <script>
 var tg=window.Telegram&&window.Telegram.WebApp;
 var bId=0,dlv=2,nds=[];
-var pts=window.location.pathname.split('/');
-for(var i=0;i<pts.length;i++){var n=parseInt(pts[i]);if(n>0){bId=n;break;}}
+// batch_id ni URL path dan olish: /offer/42 yoki /offer/42?...
+var _path=window.location.pathname;
+var _parts2=_path.split('/');for(var _i=0;_i<_parts2.length-1;_i++){if(_parts2[_i]==='offer'){var _n=parseInt(_parts2[_i+1]);if(_n>0){bId=_n;break;}}}
+// Query params dan ham tekshir
 var qp=new URLSearchParams(window.location.search);
 if(!bId&&qp.get('batch_id'))bId=parseInt(qp.get('batch_id'));
+if(!bId&&qp.get('bid'))bId=parseInt(qp.get('bid'));
+console.log('offer.html: bId='+bId+' path='+_path);
 if(tg){tg.ready();tg.expand();}
 function load(){
-  if(!bId){showE("Buyurtma ID topilmadi");return;}
-  fetch('/api/needs/'+bId).then(function(r){return r.json();})
+  if(!bId){showE("Buyurtma ID topilmadi (URL: "+window.location.href+")");return;}
+  fetch('/api/needs/'+bId)
+  .then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  })
   .then(function(d){
-    if(!d||!d.length){showE("Mahsulot yo'q yoki muddati tugagan");return;}
+    if(!d||!d.length){
+      showE("Mahsulot topilmadi (batch #"+bId+"). Buyurtma muddati tugagan bo'lishi mumkin.");
+      return;
+    }
     nds=d;render();
-  }).catch(function(e){showE("Yuklab bo'lmadi: "+e.message);});
+  })
+  .catch(function(e){showE("Yuklab bo'lmadi (batch #"+bId+"): "+e.message);});
 }
 function showE(m){document.getElementById('ct').innerHTML='<div class="spin">'+m+'</div>';document.getElementById('sub').textContent='Xato';}
 function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -1945,12 +1957,31 @@ load();
 
 async def handle_api_needs(request):
     """GET /api/needs/{batch_id} — batch dagi ehtiyojlar"""
-    batch_id = int(request.match_info.get("batch_id", 0))
-    needs    = await db_all(
-        "SELECT id, product_name, quantity, unit FROM needs WHERE batch_id=? AND status='active' ORDER BY id",
+    try:
+        batch_id = int(request.match_info.get("batch_id", 0))
+    except Exception:
+        batch_id = 0
+
+    if batch_id <= 0:
+        return _web.Response(
+            text=_json.dumps({"error": "batch_id noto'g'ri", "batch_id": batch_id}),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    # status filtrini olib tashlaymiz — done/paused ehtiyojlar ham ko'rinsin
+    needs = await db_all(
+        "SELECT id, product_name, quantity, unit, status FROM needs WHERE batch_id=? ORDER BY id",
         (batch_id,),
     )
-    data = [{"id": n["id"], "name": n["product_name"], "qty": n["quantity"], "unit": n["unit"]} for n in needs]
+
+    log.info(f"API /api/needs/{batch_id} -> {len(needs)} ta ehtiyoj")
+
+    data = [
+        {"id": n["id"], "name": n["product_name"], "qty": n["quantity"], "unit": n["unit"]}
+        for n in needs
+        if n["status"] not in ("cancelled",)
+    ]
     return _web.Response(
         text=_json.dumps(data, ensure_ascii=False),
         content_type="application/json",
