@@ -188,12 +188,10 @@ async def post_to_channel(need_id, need):
         f"{tags}\n💬 @XazdentBot"
     )
     batch_id = need.get("batch_id")
-    if WEBAPP_URL and batch_id:
-        url = f"{WEBAPP_URL}/offer/{batch_id}"
-        kb = ik([ib("💰 Narx taklif qilish →", web_app=WebAppInfo(url=url))])
-    else:
-        bot_info = await bot.get_me()
-        kb = ik([ib("📤 Taklif yuborish", url=f"https://t.me/{bot_info.username}?start=offer_{need_id}")])
+    # Kanalga WebAppInfo ishlamaydi — deep link ishlatamiz
+    bot_info = await bot.get_me()
+    deep_url = f"https://t.me/{bot_info.username}?start=offer_{need_id}"
+    kb = ik([ib("📤 Taklif yuborish", url=deep_url)])
     try:
         m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
         return m.message_id
@@ -222,12 +220,13 @@ async def post_batch_to_channel(batch_id, needs_list, owner):
         f"⏱ {dl_txt} ichida\n\n"
         f"{tags}\n💬 @XazdentBot"
     )
+    # Kanalga WebAppInfo yuborib bo'lmaydi — oddiy URL link ishlatamiz
+    bot_info = await bot.get_me()
     if WEBAPP_URL:
-        url = f"{WEBAPP_URL}/offer/{batch_id}"
-        kb = ik([ib("💰 Narx kiriting →", web_app=WebAppInfo(url=url))])
+        deep_url = f"https://t.me/{bot_info.username}?start=batch_{batch_id}"
     else:
-        bot_info = await bot.get_me()
-        kb = ik([ib("📤 Taklif yuborish", url=f"https://t.me/{bot_info.username}?start=batch_{batch_id}")])
+        deep_url = f"https://t.me/{bot_info.username}?start=batch_{batch_id}"
+    kb = ik([ib("📤 Taklif yuborish", url=deep_url)])
     try:
         m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
         log.info(f"✅ Batch kanal post: batch={batch_id} msg={m.message_id}")
@@ -287,15 +286,34 @@ async def cmd_start(msg: Message, state: FSMContext):
         )
         u = await get_user(uid)
 
-    # Deep link: /start offer_42
+    # Deep link: /start offer_42 yoki /start batch_5
     args = msg.text.split(maxsplit=1)[1] if " " in (msg.text or "") else ""
-    if args.startswith("offer_") and u and u["role"] == "seller":
+    if args.startswith("offer_") and u and u["role"] in ("seller",):
         try:
             nid = int(args.split("_")[1])
             await _start_offer_bot(msg, state, nid)
             return
         except Exception:
             pass
+    if args.startswith("batch_") and u and u["role"] in ("seller",):
+        try:
+            batch_id = int(args.split("_")[1])
+            uid = msg.from_user.id
+            if WEBAPP_URL:
+                url = f"{WEBAPP_URL}/offer/{batch_id}"
+                await msg.answer(
+                    "💰 *Narx kiriting:*",
+                    reply_markup=ik([ib("💰 Narx kiriting →", web_app=WebAppInfo(url=url))])
+                )
+            else:
+                needs = await db_all(
+                    "SELECT * FROM needs WHERE batch_id=? AND status='active'", (batch_id,)
+                )
+                if needs:
+                    await _start_offer_bot(msg, state, needs[0]["id"])
+            return
+        except Exception as e:
+            log.error(f"batch deep link xato: {e}")
 
     if u and u["role"] not in (None, "none", ""):
         lg  = u["lang"] or "uz"
