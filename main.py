@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
+from aiogram.types import BufferedInputFile
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
@@ -1071,7 +1072,7 @@ async def download_xlsx(call: CallbackQuery):
     async with aiofiles.open(path, "rb") as f:
         data = await f.read()
     await call.message.answer_document(
-        document=("jadval.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        document=BufferedInputFile(data, filename="jadval.xlsx"),
         caption=f"📊 Jadval #{batch_id}",
     )
     try:
@@ -1629,8 +1630,7 @@ async def seller_excel_cb(call: CallbackQuery):
         data = await f.read()
     fname = f"savdo_{datetime.now().strftime('%Y%m%d')}.xlsx"
     await call.message.answer_document(
-        document=(fname, data,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        document=BufferedInputFile(data, filename=fname),
         caption=f"📊 Savdo hisoboti — {datetime.now().strftime('%d.%m.%Y')}"
     )
     try:
@@ -1727,6 +1727,115 @@ async def _build_seller_excel(uid: int) -> str:
     path = os.path.join(BASE_DIR, f"seller_{uid}_{now.strftime('%Y%m%d_%H%M')}.xlsx")
     wb.save(path)
     return path
+
+# ── MAHSULOTLARIM ────────────────────────────────────────────────────────────
+@router.message(F.text == "📦 Mahsulotlarim")
+async def my_products(msg: Message, state: FSMContext):
+    uid  = msg.from_user.id
+    rows = await db_all(
+        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id",
+        (uid,)
+    )
+    if not rows:
+        await msg.answer(
+            "📦 *Mahsulotlar ro\'yxati*\n\nRo\'yxat bo\'sh.\n"
+            "Tez-tez buyurtma beradigan mahsulotlarni qo\'shing — "
+            "keyingi buyurtmada avtomatik chiqadi.",
+            reply_markup=ik([ib("➕ Mahsulot qo\'shish", "prod_add")])
+        )
+        return
+    txt = f"📦 *Mahsulotlarim* ({len(rows)} ta)\n\n"
+    for i, r in enumerate(rows, 1):
+        txt += f"{i}. *{r['name']}* — {r['unit']}\n"
+    await msg.answer(txt, reply_markup=ik(
+        [ib("➕ Qo\'shish", "prod_add"), ib("❌ O\'chirish", "prod_del")],
+    ))
+
+@router.callback_query(F.data == "prod_add")
+async def prod_add(call: CallbackQuery, state: FSMContext):
+    await state.set_state(MyProductsState.editing)
+    await state.update_data(prod_action="add")
+    await call.message.answer(
+        "✏️ Mahsulot nomini kiriting:\n\n"
+        "_Masalan: GC Fuji IX, Xarizma A2, Spirt_\n\n"
+        "/cancel — bekor qilish"
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "prod_del")
+async def prod_del(call: CallbackQuery, state: FSMContext):
+    uid  = call.from_user.id
+    rows = await db_all(
+        "SELECT * FROM clinic_products WHERE owner_id=? ORDER BY sort_order, id", (uid,)
+    )
+    if not rows:
+        await call.answer("Ro\'yxat bo\'sh", show_alert=True)
+        return
+    kb_rows = []
+    for r in rows:
+        kb_rows.append([ib(f"❌ {r['name']}", f"prod_del_{r['id']}")])
+    kb_rows.append([ib("◀️ Orqaga", "prod_back")])
+    await call.message.answer(
+        "O\'chirmoqchi bo\'lgan mahsulotni tanlang:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("prod_del_"))
+async def prod_del_item(call: CallbackQuery):
+    pid = int(call.data[9:])
+    row = await db_get("SELECT * FROM clinic_products WHERE id=? AND owner_id=?",
+                       (pid, call.from_user.id))
+    if not row:
+        await call.answer("Topilmadi", show_alert=True)
+        return
+    await db_run("DELETE FROM clinic_products WHERE id=?", (pid,))
+    await call.message.edit_text(f"✅ *{row['name']}* o\'chirildi.")
+    await call.answer()
+
+@router.callback_query(F.data == "prod_back")
+async def prod_back(call: CallbackQuery):
+    await call.message.delete()
+    await call.answer()
+
+@router.message(MyProductsState.editing)
+async def prod_add_name(msg: Message, state: FSMContext):
+    if msg.text and msg.text.startswith("/"):
+        await state.clear()
+        return
+    name = msg.text.strip() if msg.text else ""
+    if not name or len(name) < 2:
+        await msg.answer("❌ Kamida 2 ta harf kiriting.")
+        return
+    await state.update_data(prod_name=name)
+    await msg.answer(
+        f"*{name}* — birligini tanlang:",
+        reply_markup=ik(
+            [ib("dona","pu_dona"), ib("kg","pu_kg"), ib("litr","pu_litr")],
+            [ib("quti","pu_quti"), ib("paket","pu_paket"), ib("ml","pu_ml")],
+        )
+    )
+
+@router.callback_query(F.data.startswith("pu_"), MyProductsState.editing)
+async def prod_add_unit(call: CallbackQuery, state: FSMContext):
+    unit = call.data[3:]
+    d    = await state.get_data()
+    name = d.get("prod_name","")
+    uid  = call.from_user.id
+    # Mavjudmi?
+    ex = await db_get(
+        "SELECT id FROM clinic_products WHERE owner_id=? AND name=?", (uid, name)
+    )
+    if ex:
+        await call.message.edit_text(f"⚠️ *{name}* allaqachon ro\'yxatda bor.")
+        await state.clear(); await call.answer(); return
+    await db_insert(
+        "INSERT INTO clinic_products(owner_id,name,unit) VALUES(?,?,?)",
+        (uid, name, unit)
+    )
+    await state.clear()
+    await call.message.edit_text(f"✅ *{name}* ({unit}) ro\'yxatga qo\'shildi!")
+    await call.answer()
 
 # ── DO'KON ────────────────────────────────────────────────────────────────────
 @router.message(F.text == "🏪 Do'konim")
@@ -2361,6 +2470,191 @@ async def _notify_loser(seller_id: int, product_name: str, win_price: float,
         )
     except Exception:
         pass
+
+# ── TEJASH STATISTIKASI ──────────────────────────────────────────────────────
+@router.message(F.text == "📊 Tejash")
+async def savings_stats(msg: Message):
+    uid = msg.from_user.id
+    await _show_savings(uid, msg)
+
+async def _show_savings(uid: int, target_msg):
+    now   = datetime.now()
+    month = now.strftime("%Y-%m")
+    year  = now.strftime("%Y")
+
+    # Qabul qilingan takliflar + shu buyurtmadagi barcha takliflar
+    accepted = await db_all(
+        "SELECT o.need_id, o.price as won_price, n.quantity, n.product_name, n.unit, "
+        "o.created_at "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE n.owner_id=? AND o.status=\'accepted\'",
+        (uid,)
+    )
+    if not accepted:
+        await target_msg.answer(
+            "📊 *Tejash statistikasi*\n\nHali qabul qilingan taklif yo\'q.",
+            reply_markup=ik([ib("📥 Excel", "savings_excel")])
+        )
+        return
+
+    # Har qabul qilingan taklif uchun o'sha need dagi MAX narxni topamiz
+    rows = []
+    total_saved_month = 0
+    total_saved_year  = 0
+    total_saved_all   = 0
+
+    for a in accepted:
+        max_row = await db_get(
+            "SELECT MAX(price) as max_p FROM offers WHERE need_id=? AND price>0",
+            (a["need_id"],)
+        )
+        max_p = max_row["max_p"] if max_row and max_row["max_p"] else a["won_price"]
+        saved_per_unit = max_p - a["won_price"]
+        saved_total    = saved_per_unit * a["quantity"]
+        pct = saved_per_unit / max_p * 100 if max_p > 0 else 0
+        created = a["created_at"] or ""
+        rows.append({
+            "name":       a["product_name"],
+            "qty":        a["quantity"],
+            "unit":       a["unit"],
+            "won":        a["won_price"],
+            "max":        max_p,
+            "saved":      saved_total,
+            "pct":        pct,
+            "month":      created[:7],
+            "year":       created[:4],
+        })
+        if created.startswith(month): total_saved_month += saved_total
+        if created.startswith(year):  total_saved_year  += saved_total
+        total_saved_all += saved_total
+
+    # Top 5 tejash
+    top5 = sorted(rows, key=lambda x: x["saved"], reverse=True)[:5]
+
+    txt = (
+        f"📊 *Tejash statistikasi*\n\n"
+        f"💰 Bu oy:   *{total_saved_month:>12,.0f} so\'m*\n"
+        f"💰 Bu yil:  *{total_saved_year:>12,.0f} so\'m*\n"
+        f"💰 Jami:    *{total_saved_all:>12,.0f} so\'m*\n\n"
+        f"_Bot orqali eng arzon taklifni tanlab tejadingiz_\n\n"
+        f"🏆 *Top tejamlar:*\n"
+    )
+    for i, r in enumerate(top5, 1):
+        txt += (
+            f"{i}. *{r['name']}*\n"
+            f"   {r['won']:,.0f} vs {r['max']:,.0f} so\'m/ta\n"
+            f"   Tejaldi: *{r['saved']:,.0f} so\'m ({r['pct']:.0f}%)*\n"
+        )
+
+    await target_msg.answer(txt, reply_markup=ik(
+        [ib("📥 Excel yuklab olish", "savings_excel")],
+    ))
+
+@router.callback_query(F.data == "savings_excel")
+async def savings_excel(call: CallbackQuery):
+    await call.answer("⏳ Tayyorlanmoqda...")
+    uid  = call.from_user.id
+    path = await _build_savings_excel(uid)
+    if not path:
+        await call.message.answer("❌ Excel yaratib bo\'lmadi")
+        return
+    import aiofiles
+    async with aiofiles.open(path, "rb") as f:
+        data = await f.read()
+    fname = f"tejash_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    await call.message.answer_document(
+        document=BufferedInputFile(data, filename=fname),
+        caption=f"📊 Tejash hisoboti — {datetime.now().strftime('%d.%m.%Y')}"
+    )
+    try:
+        import os as _os; _os.remove(path)
+    except Exception: pass
+
+async def _build_savings_excel(uid: int) -> str:
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        return None
+
+    wb  = openpyxl.Workbook()
+    now = datetime.now()
+
+    def hdr(ws, cols, color="1565C0"):
+        fill = PatternFill("solid", fgColor=color)
+        font = Font(bold=True, color="FFFFFF")
+        for i, v in enumerate(cols, 1):
+            c = ws.cell(row=1, column=i, value=v)
+            c.fill = fill; c.font = font
+            c.alignment = Alignment(horizontal="center")
+    def aw(ws):
+        for col in ws.columns:
+            w = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(w+4, 40)
+
+    # Qabul qilingan takliflar
+    accepted = await db_all(
+        "SELECT o.need_id, o.price as won_price, n.quantity, n.product_name, "
+        "n.unit, o.created_at "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE n.owner_id=? AND o.status=\'accepted\' ORDER BY o.created_at DESC",
+        (uid,)
+    )
+
+    ws1 = wb.active; ws1.title = "Tejash tarixi"
+    hdr(ws1, ["Sana","Mahsulot","Miqdor","Birlik",
+              "To\'langan narx","Eng qimmat narx","Tejaldi (so\'m)","Tejaldi (%)"])
+    green = PatternFill("solid", fgColor="E2EFDA")
+    for i, a in enumerate(accepted, 2):
+        max_row = await db_get(
+            "SELECT MAX(price) as m FROM offers WHERE need_id=? AND price>0",
+            (a["need_id"],)
+        )
+        max_p   = max_row["m"] if max_row and max_row["m"] else a["won_price"]
+        saved   = (max_p - a["won_price"]) * a["quantity"]
+        pct     = (max_p - a["won_price"]) / max_p * 100 if max_p > 0 else 0
+        ws1.cell(row=i, column=1, value=(a["created_at"] or "")[:10])
+        ws1.cell(row=i, column=2, value=a["product_name"])
+        ws1.cell(row=i, column=3, value=a["quantity"])
+        ws1.cell(row=i, column=4, value=a["unit"])
+        ws1.cell(row=i, column=5, value=a["won_price"])
+        ws1.cell(row=i, column=6, value=max_p)
+        c7 = ws1.cell(row=i, column=7, value=round(saved))
+        c8 = ws1.cell(row=i, column=8, value=round(pct, 1))
+        if saved > 0:
+            c7.fill = green; c8.fill = green
+
+    # Jami qator
+    if accepted:
+        r = len(accepted) + 2
+        ws1.cell(row=r, column=6, value="JAMI:").font = Font(bold=True)
+        total = sum(
+            ((await db_get("SELECT MAX(price) as m FROM offers WHERE need_id=? AND price>0",
+                           (a["need_id"],)) or {}).get("m", a["won_price"]) - a["won_price"])
+            * a["quantity"] for a in accepted
+        )
+        ws1.cell(row=r, column=7, value=round(total)).font = Font(bold=True)
+    aw(ws1)
+
+    # Oylik tejash
+    ws2 = wb.create_sheet("Oylik")
+    hdr(ws2, ["Oy","Bitimlar","Jami tejaldi (so\'m)"], "2E7D32")
+    monthly = await db_all(
+        "SELECT SUBSTR(o.created_at,1,7) as month, COUNT(*) as cnt "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE n.owner_id=? AND o.status=\'accepted\' "
+        "GROUP BY month ORDER BY month DESC LIMIT 24",
+        (uid,)
+    )
+    for i, m in enumerate(monthly, 2):
+        ws2.cell(row=i, column=1, value=m["month"])
+        ws2.cell(row=i, column=2, value=m["cnt"])
+        ws2.cell(row=i, column=3, value="—")
+    aw(ws2)
+
+    path = os.path.join(BASE_DIR, f"tejash_{uid}_{now.strftime('%Y%m%d_%H%M')}.xlsx")
+    wb.save(path)
+    return path
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
