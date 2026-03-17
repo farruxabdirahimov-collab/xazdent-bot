@@ -113,6 +113,11 @@ input.s-input:focus{border-color:var(--btn)}
   <div id="stats-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
 </div>
 
+<!-- SUPPORT -->
+<div class="page" id="tab-support">
+  <div id="support-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
+</div>
+
 <!-- CHEKLAR -->
 <div class="page" id="tab-checks">
   <div id="checks-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
@@ -144,6 +149,7 @@ function showTab(tab) {
 
 function loadTab(tab) {
   if (tab === 'stats')    loadStats();
+  if (tab === 'support')  loadSupport();
   if (tab === 'checks')   loadChecks();
   if (tab === 'users')    loadUsers();
   if (tab === 'settings') loadSettings();
@@ -284,6 +290,81 @@ function loadUsers() {
           '<th>Ism</th><th>Rol</th><th>Hudud</th><th>Sana</th>' +
         '</tr></thead><tbody>' + rows + '</tbody></table>';
     });
+}
+
+// ── SUPPORT ──────────────────────────────────────────────────────────────────
+function loadSupport() {
+  fetch('/api/admin/support?uid=' + userId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { document.getElementById('support-content').innerHTML = '<div class="loading">Ruxsat yo'q</div>'; return; }
+      var msgs = d.data || [];
+      if (!msgs.length) {
+        document.getElementById('support-content').innerHTML = '<div class="loading">💬 Xabarlar yo'q</div>';
+        return;
+      }
+      var html = '';
+      msgs.forEach(function(m) {
+        var statusBadge = m.status === 'replied'
+          ? '<span class="badge ok">✅ Javob berildi</span>'
+          : '<span class="badge pend">🔔 Yangi</span>';
+        html += '<div class="check-card" id="sup-' + m.id + '">' +
+          '<div class="check-header">' +
+            '<div>' +
+              '<div class="check-name">' + esc(m.name||'?') + '</div>' +
+              '<div style="font-size:11px;color:var(--hint)">' + (m.created_at||'').slice(0,16) +
+              (m.phone ? ' · ' + m.phone : '') + '</div>' +
+            '</div>' +
+            statusBadge +
+          '</div>' +
+          '<div style="font-size:14px;margin:8px 0;padding:10px;background:rgba(255,255,255,.05);border-radius:8px">' +
+            esc(m.message) +
+          '</div>';
+        if (m.admin_reply) {
+          html += '<div style="font-size:13px;color:var(--green);padding:8px 10px;' +
+            'background:rgba(34,197,94,.08);border-radius:8px;margin-bottom:8px">' +
+            '💬 ' + esc(m.admin_reply) + '</div>';
+        }
+        if (m.status !== 'replied') {
+          html += '<div style="display:flex;gap:6px;margin-top:4px">' +
+            '<input id="rep-' + m.id + '" placeholder="Javob yozing..." ' +
+              'style="flex:1;background:var(--bg2);border:1px solid var(--border);' +
+              'border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;outline:none">' +
+            '<button class="btn green sm" onclick="sendReply(' + m.id + ',' + m.user_id + ')">Yuborish</button>' +
+          '</div>';
+        }
+        html += '</div>';
+      });
+      document.getElementById('support-content').innerHTML = html;
+    })
+    .catch(function(e) {
+      document.getElementById('support-content').innerHTML = '<div class="loading">Xato: ' + e.message + '</div>';
+    });
+}
+
+function sendReply(msgId, userId) {
+  var inp = document.getElementById('rep-' + msgId);
+  var txt = inp ? inp.value.trim() : '';
+  if (!txt) return;
+  fetch('/api/admin/support_reply', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({msg_id:msgId, user_id:userId, reply:txt, admin_id:window.userId})
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (d.ok) {
+      var card = document.getElementById('sup-' + msgId);
+      if (card) {
+        var replyDiv = document.createElement('div');
+        replyDiv.style.cssText = 'font-size:13px;color:var(--green);padding:8px 10px;background:rgba(34,197,94,.08);border-radius:8px';
+        replyDiv.textContent = '💬 ' + txt;
+        card.appendChild(replyDiv);
+        var actions = card.querySelector('div[style*="display:flex"]');
+        if (actions) actions.remove();
+      }
+    } else {
+      alert('Xato: ' + (d.error||'nomalum'));
+    }
+  });
 }
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
