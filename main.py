@@ -3289,6 +3289,14 @@ async def start_webserver():
     # ── GET /order ────────────────────────────────────────────────────
     app.router.add_get("/order", handle_order_page)
     app.router.add_get("/offer/{batch_id}", handle_offer_page)
+
+    async def _help_page(req):
+        path = os.path.join(BASE_DIR, "webapp", "help.html")
+        if os.path.exists(path):
+            return _web.FileResponse(path)
+        return _web.Response(text="help.html topilmadi", status=404,
+                             content_type="text/html")
+    app.router.add_get("/help", _help_page)
     app.router.add_get("/api/products/{uid}", handle_api_products)
 
     # ── GET /api/needs/{batch_id} ──────────────────────────────────
