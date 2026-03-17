@@ -45,8 +45,10 @@ async def init_db():
             role TEXT DEFAULT 'none', lang TEXT DEFAULT 'uz', clinic_name TEXT,
             region TEXT, address TEXT, latitude REAL, longitude REAL,
             balance REAL DEFAULT 0, is_blocked INTEGER DEFAULT 0,
+            payment_methods TEXT DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+        await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_methods TEXT")
         await c.execute("""
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)""")
         await c.execute("""
@@ -70,9 +72,11 @@ async def init_db():
             unit TEXT NOT NULL DEFAULT 'dona', budget REAL,
             deadline_hours INTEGER NOT NULL DEFAULT 24, extra_note TEXT,
             status TEXT DEFAULT 'active', channel_message_id BIGINT,
+            payment_methods TEXT DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
             expires_at TEXT
         )""")
+        await c.execute("ALTER TABLE needs ADD COLUMN IF NOT EXISTS payment_methods TEXT")
         await c.execute("""
         CREATE TABLE IF NOT EXISTS offers (
             id SERIAL PRIMARY KEY, need_id INTEGER, batch_id INTEGER,
