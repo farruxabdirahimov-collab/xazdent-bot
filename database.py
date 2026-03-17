@@ -115,6 +115,17 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
         await c.execute("""
+        CREATE TABLE IF NOT EXISTS support_messages (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            message TEXT NOT NULL,
+            admin_reply TEXT,
+            status TEXT DEFAULT 'new',
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
+            replied_at TEXT
+        )""")
+        await c.execute("ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT")
+        await c.execute("""
         INSERT INTO settings(key,value) VALUES
             ('ball_price','1000'),('elon_price','0'),('card_number','9860020138100068')
         ON CONFLICT(key) DO NOTHING""")
