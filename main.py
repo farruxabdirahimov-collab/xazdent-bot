@@ -131,6 +131,7 @@ def kb_seller(lg):
         [KeyboardButton(text="🔔 Ehtiyojlar"),  KeyboardButton(text="📤 Takliflarim")],
         [KeyboardButton(text="🏪 Do'konim"),     KeyboardButton(text="💰 Hisobim")],
         [KeyboardButton(text="📊 Statistika"),   KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_regions(lg):
@@ -2011,6 +2012,24 @@ async def cmd_broadcast(msg: Message):
         except Exception: pass
     await msg.answer(f"✅ Yuborildi: *{sent}* ta")
 
+@router.message(Command("help"))
+async def cmd_help(msg: Message):
+    uid = msg.from_user.id
+    u   = await get_user(uid)
+    if not WEBAPP_URL:
+        await msg.answer(
+            "📖 *Yordam*\n\n"
+            "Klinika: ehtiyoj yozing → takliflar keling → eng arzonni tanlang\n"
+            "Sotuvchi: buyurtmalarni ko\'ring → narx kiriting → qabul kuting"
+        )
+        return
+    role = (u["role"] if u else "") or "clinic"
+    url  = f"{WEBAPP_URL}/help?role={role}"
+    await msg.answer(
+        "📖 *Qo\'llanma*\n\nBot qanday ishlashini o\'rganing:",
+        reply_markup=ik([ib("📖 Qo\'llanmani ochish →", web_app=WebAppInfo(url=url))])
+    )
+
 # ── /debug ───────────────────────────────────────────────────────────────────
 # ── REKLAMA E'LON TIZIMI ─────────────────────────────────────────────────────
 # Narxlar: Toshkent shahri 200 ball, boshqa 50 ball
@@ -2644,6 +2663,139 @@ async def _build_savings_excel(uid: int) -> str:
     path = os.path.join(BASE_DIR, f"tejash_{uid}_{now.strftime('%Y%m%d_%H%M')}.xlsx")
     wb.save(path)
     return path
+
+@router.message(F.text == "📖 Yordam")
+async def menu_help(msg: Message):
+    uid  = msg.from_user.id
+    u    = await get_user(uid)
+    role = (u["role"] if u else "") or "clinic"
+    if not WEBAPP_URL:
+        await msg.answer("📖 Yordam: /help buyrug'ini yuboring")
+        return
+    url = f"{WEBAPP_URL}/help?role={role}"
+    await msg.answer(
+        "📖 *Qo\'llanma*",
+        reply_markup=ik([ib("📖 Ochish →", web_app=WebAppInfo(url=url))])
+    )
+
+# ── SUPPORT TIZIMI ───────────────────────────────────────────────────────────
+class SupportState(StatesGroup):
+    waiting_message = State()
+    waiting_reply   = State()
+
+@router.callback_query(F.data == "support_start")
+async def support_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(SupportState.waiting_message)
+    await call.message.answer(
+        "💬 *Yordam xizmati*\n\n"
+        "Savolingizni yoki muammoingizni yozing.\n"
+        "Admin imkon qadar tez javob beradi.\n\n"
+        "_/cancel — bekor qilish_"
+    )
+    await call.answer()
+
+@router.message(SupportState.waiting_message)
+async def support_message_received(msg: Message, state: FSMContext):
+    if msg.text and msg.text.startswith("/"):
+        await state.clear()
+        await msg.answer("❌ Bekor qilindi.")
+        return
+
+    text = msg.text or (msg.caption if msg.caption else "")
+    if not text:
+        await msg.answer("⚠️ Faqat matn yuboring.")
+        return
+
+    uid = msg.from_user.id
+    u   = await get_user(uid)
+    name = (u["clinic_name"] or u["full_name"] or str(uid)) if u else str(uid)
+
+    # DB ga saqlaymiz
+    mid = await db_insert(
+        "INSERT INTO support_messages(user_id, message) VALUES(?,?)",
+        (uid, text)
+    )
+
+    await state.clear()
+    await msg.answer(
+        "✅ *Xabaringiz qabul qilindi!*\n\n"
+        "Admin tez orada javob beradi."
+    )
+
+    # Adminga xabar
+    admin_txt = (
+        f"💬 *Yangi support xabari #{mid}*\n\n"
+        f"👤 {name} (ID: {uid})\n"
+        f"📱 {u['phone'] or '—' if u else '—'}\n\n"
+        f"📝 {text}"
+    )
+    kb = ik([ib(f"💬 Javob berish", f"reply_{mid}_{uid}")])
+    for aid in ADMIN_IDS:
+        try:
+            await bot.send_message(aid, admin_txt, reply_markup=kb)
+        except Exception:
+            pass
+
+@router.callback_query(F.data.startswith("reply_"))
+async def admin_reply_start(call: CallbackQuery, state: FSMContext):
+    if call.from_user.id not in ADMIN_IDS: return
+    parts  = call.data.split("_")
+    msg_id = int(parts[1])
+    uid    = int(parts[2])
+    await state.set_state(SupportState.waiting_reply)
+    await state.update_data(support_msg_id=msg_id, support_user_id=uid)
+    await call.message.answer(
+        f"✍️ *Javobingizni yozing* (xabar #{msg_id}):\n"
+        f"_/cancel — bekor qilish_"
+    )
+    await call.answer()
+
+@router.message(SupportState.waiting_reply)
+async def admin_reply_send(msg: Message, state: FSMContext):
+    if msg.text and msg.text.startswith("/"):
+        await state.clear()
+        await msg.answer("❌ Bekor qilindi.")
+        return
+
+    d      = await state.get_data()
+    mid    = d.get("support_msg_id")
+    uid    = d.get("support_user_id")
+    reply  = msg.text or ""
+    admin  = msg.from_user.id
+
+    await db_run(
+        "UPDATE support_messages SET admin_reply=?, status='replied', "
+        "replied_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS'), admin_id=? WHERE id=?",
+        (reply, admin, mid)
+    )
+    await state.clear()
+
+    # Foydalanuvchiga javob
+    try:
+        await bot.send_message(
+            uid,
+            f"💬 *Yordam xizmatidan javob*\n\n{reply}"
+        )
+        await msg.answer(f"✅ Javob yuborildi.")
+    except Exception as e:
+        await msg.answer(f"❌ Yuborib bo'lmadi: {e}")
+
+# Profildan support ochish
+@router.callback_query(F.data == "open_support")
+async def open_support(call: CallbackQuery, state: FSMContext):
+    await state.set_state(SupportState.waiting_message)
+    await call.message.answer(
+        "💬 *Yordam xizmati*\n\n"
+        "Savolingizni yozing — admin javob beradi.",
+        reply_markup=ik([ib("✖️ Bekor", "cancel_support")])
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "cancel_support")
+async def cancel_support(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await call.answer()
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
@@ -3321,6 +3473,47 @@ async def start_webserver():
                 content_type="application/json", status=500)
     app.router.add_post("/api/submit_offer", _submit_offer)
     app.router.add_post("/api/accept_offers", _accept_offers_handler)
+
+    async def _admin_support_list(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        rows = await db_all(
+            "SELECT s.*, COALESCE(u.clinic_name,u.full_name,CAST(s.user_id AS TEXT)) as uname, "
+            "u.phone "
+            "FROM support_messages s LEFT JOIN users u ON s.user_id=u.id "
+            "ORDER BY s.created_at DESC LIMIT 50"
+        )
+        data = [{"id":r["id"],"user_id":r["user_id"],"name":r["uname"],"phone":r["phone"],
+                 "message":r["message"],"admin_reply":r["admin_reply"],
+                 "status":r["status"],"created_at":r["created_at"]} for r in rows]
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/support", _admin_support_list)
+
+    async def _admin_support_reply(req):
+        try:
+            body   = await req.json()
+            mid    = int(body.get("msg_id",0))
+            uid    = int(body.get("user_id",0))
+            reply  = body.get("reply","")
+            admin  = int(body.get("admin_id",0))
+            if admin not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            await db_run(
+                "UPDATE support_messages SET admin_reply=?, status=\'replied\', "
+                "replied_at=to_char(now(),\'YYYY-MM-DD HH24:MI:SS\'), admin_id=? WHERE id=?",
+                (reply, admin, mid)
+            )
+            try:
+                await bot.send_message(uid, f"💬 *Yordam xizmatidan javob*\n\n{reply}")
+            except Exception: pass
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/support_reply", _admin_support_reply)
 
     # ── ADMIN API ─────────────────────────────────────────────────
     async def _admin_check(req):
