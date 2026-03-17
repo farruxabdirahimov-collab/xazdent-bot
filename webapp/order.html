@@ -135,6 +135,21 @@ body {
 }
 .send-btn:active { opacity: .8; }
 .send-btn:disabled { opacity: .35; cursor: not-allowed; }
+.pm-chip {
+  display:flex; align-items:center; gap:6px;
+  padding:7px 14px; border-radius:16px;
+  border:1.5px solid rgba(0,0,0,.12);
+  font-size:13px; font-weight:500; cursor:pointer;
+  background:transparent;
+  color:var(--tg-theme-text-color,#000);
+  transition:all .15s; -webkit-tap-highlight-color:transparent;
+}
+.pm-chip input { display:none; }
+.pm-chip.checked {
+  background:var(--tg-theme-button-color,#007aff);
+  color:var(--tg-theme-button-text-color,#fff);
+  border-color:transparent;
+}
 </style>
 </head>
 <body>
@@ -150,6 +165,21 @@ body {
 </div>
 
 <div id="list"></div>
+
+<div class="dl-row">
+  <div class="dl-label">💳 To'lov usuli:</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px" id="pm-row">
+    <label class="pm-chip" id="pm-p2p">
+      <input type="checkbox" value="p2p" onchange="pmChange()"> 💳 P2P (karta)
+    </label>
+    <label class="pm-chip" id="pm-bank">
+      <input type="checkbox" value="bank" onchange="pmChange()"> 🏦 Hisob raqam
+    </label>
+    <label class="pm-chip" id="pm-cash">
+      <input type="checkbox" value="cash" onchange="pmChange()"> 💵 Naqd pul
+    </label>
+  </div>
+</div>
 
 <div class="dl-row">
   <div class="dl-label">⏱ Qachongacha kerak?</div>
@@ -272,6 +302,21 @@ function selDl(el) {
   deadline = parseInt(el.dataset.val);
 }
 
+function pmChange() {
+  document.querySelectorAll('.pm-chip').forEach(function(chip) {
+    var inp = chip.querySelector('input');
+    chip.classList.toggle('checked', inp.checked);
+  });
+}
+
+function getPaymentMethods() {
+  var sel = [];
+  document.querySelectorAll('.pm-chip input:checked').forEach(function(inp) {
+    sel.push(inp.value);
+  });
+  return sel.join(',');
+}
+
 function send() {
   var items = filled();
   if (!items.length) return;
@@ -285,7 +330,8 @@ function send() {
     userId = tg.initDataUnsafe.user.id;
   }
 
-  var payload = JSON.stringify({type:'bulk_order', items:items, deadline:deadline, uid:userId});
+  var pm = getPaymentMethods();
+  var payload = JSON.stringify({type:'bulk_order', items:items, deadline:deadline, uid:userId, payment_methods:pm});
 
   // API orqali yuboramiz
   fetch('/api/submit_order', {
