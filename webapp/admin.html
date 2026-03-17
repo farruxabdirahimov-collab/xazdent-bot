@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Admin Panel</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: var(--tg-theme-bg-color, #0f0f0f);
+  --bg2: var(--tg-theme-secondary-bg-color, #1a1a1a);
+  --text: var(--tg-theme-text-color, #fff);
+  --hint: var(--tg-theme-hint-color, #888);
+  --btn: var(--tg-theme-button-color, #2563eb);
+  --btnTxt: var(--tg-theme-button-text-color, #fff);
+  --accent: #3b82f6;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --border: rgba(255,255,255,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:20px}
+
+.nav{display:flex;gap:2px;padding:8px;background:var(--bg2);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.nav-btn{flex:1;padding:8px 4px;border:none;border-radius:8px;
+  background:transparent;color:var(--hint);font-size:11px;font-weight:500;
+  cursor:pointer;transition:all .15s;text-align:center}
+.nav-btn.active{background:var(--btn);color:var(--btnTxt)}
+
+.page{display:none;padding:12px}
+.page.active{display:block}
+
+/* Cards */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.card{background:var(--bg2);border-radius:12px;padding:14px;border:1px solid var(--border)}
+.card.full{grid-column:1/-1}
+.card-label{font-size:11px;color:var(--hint);margin-bottom:4px}
+.card-val{font-size:22px;font-weight:700;color:var(--text)}
+.card-sub{font-size:11px;color:var(--hint);margin-top:2px}
+.card.green .card-val{color:var(--green)}
+.card.amber .card-val{color:var(--amber)}
+.card.blue  .card-val{color:var(--accent)}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:8px 10px;color:var(--hint);
+  font-size:11px;font-weight:500;border-bottom:1px solid var(--border)}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.tbl tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge.ok{background:rgba(34,197,94,.15);color:var(--green)}
+.badge.pend{background:rgba(245,158,11,.15);color:var(--amber)}
+.badge.rej{background:rgba(239,68,68,.15);color:var(--red)}
+
+/* Buttons */
+.btn{display:block;width:100%;padding:12px;border:none;border-radius:10px;
+  background:var(--btn);color:var(--btnTxt);font-size:14px;font-weight:600;
+  cursor:pointer;margin-bottom:8px;text-align:center;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn.outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn.green{background:var(--green);color:#000}
+.btn.red{background:var(--red)}
+.btn.sm{padding:6px 12px;font-size:12px;width:auto;display:inline-block}
+
+/* Setting rows */
+.setting-row{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.setting-label{font-size:14px}
+.setting-val{font-size:14px;font-weight:600;color:var(--accent)}
+input.s-input{background:var(--bg2);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:14px;padding:8px 12px;
+  width:100%;margin-top:6px;outline:none}
+input.s-input:focus{border-color:var(--btn)}
+
+/* Check item */
+.check-card{background:var(--bg2);border-radius:12px;padding:12px;
+  margin-bottom:8px;border:1px solid var(--border)}
+.check-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.check-name{font-size:14px;font-weight:600}
+.check-amount{font-size:16px;font-weight:700;color:var(--green)}
+.check-actions{display:flex;gap:6px}
+.check-img{width:100%;border-radius:8px;margin-bottom:8px}
+
+/* Region bar */
+.reg-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.reg-name{font-size:12px;min-width:110px;color:var(--hint)}
+.reg-bar-wrap{flex:1;background:rgba(255,255,255,.08);border-radius:4px;height:6px}
+.reg-bar{height:6px;border-radius:4px;background:var(--accent)}
+.reg-val{font-size:12px;min-width:32px;text-align:right}
+
+.loading{text-align:center;padding:40px;color:var(--hint)}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid var(--border);
+  border-top-color:var(--btn);border-radius:50%;animation:sp .7s linear infinite;margin-bottom:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.sep{height:1px;background:var(--border);margin:8px 0}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="nav-btn active" onclick="showTab('stats')">📊 Stats</button>
+  <button class="nav-btn" onclick="showTab('checks')">💳 Cheklar</button>
+  <button class="nav-btn" onclick="showTab('users')">👥 Users</button>
+  <button class="nav-btn" onclick="showTab('settings')">⚙️ Sozlama</button>
+</div>
+
+<!-- STATS -->
+<div class="page active" id="tab-stats">
+  <div id="stats-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
+</div>
+
+<!-- CHEKLAR -->
+<div class="page" id="tab-checks">
+  <div id="checks-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
+</div>
+
+<!-- USERS -->
+<div class="page" id="tab-users">
+  <div id="users-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
+</div>
+
+<!-- SOZLAMALAR -->
+<div class="page" id="tab-settings">
+  <div id="settings-content"><div class="loading"><div class="spin"></div><br>Yuklanmoqda...</div></div>
+</div>
+
+<script>
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+var userId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 0;
+var loaded = {};
+
+function showTab(tab) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.target.classList.add('active');
+  if (!loaded[tab]) { loaded[tab] = true; loadTab(tab); }
+}
+
+function loadTab(tab) {
+  if (tab === 'stats')    loadStats();
+  if (tab === 'checks')   loadChecks();
+  if (tab === 'users')    loadUsers();
+  if (tab === 'settings') loadSettings();
+}
+
+// ── STATS ────────────────────────────────────────────────────────────────────
+function loadStats() {
+  fetch('/api/admin/stats?uid=' + userId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { document.getElementById('stats-content').innerHTML = '<div class="loading">Ruxsat yo\'q</div>'; return; }
+      var s = d.data;
+      var month = s.month || {};
+      var regions = s.regions || [];
+
+      // Region bar max
+      var maxReg = regions.reduce(function(m,r){ return Math.max(m, r.needs||0); }, 1);
+
+      var regBars = regions.slice(0,8).map(function(r) {
+        var pct = Math.round((r.needs||0)/maxReg*100);
+        return '<div class="reg-row">' +
+          '<div class="reg-name">' + esc(r.region||'Nomalum') + '</div>' +
+          '<div class="reg-bar-wrap"><div class="reg-bar" style="width:'+pct+'%"></div></div>' +
+          '<div class="reg-val">' + (r.needs||0) + '</div>' +
+        '</div>';
+      }).join('');
+
+      document.getElementById('stats-content').innerHTML =
+        '<div class="grid">' +
+          '<div class="card blue"><div class="card-label">Jami users</div>' +
+            '<div class="card-val">' + (s.total_users||0) + '</div>' +
+            '<div class="card-sub">+' + (s.new_week||0) + ' bu hafta</div></div>' +
+          '<div class="card"><div class="card-label">Klinikalar</div>' +
+            '<div class="card-val">' + (s.clinics||0) + '</div>' +
+            '<div class="card-sub">Sotuvchilar: ' + (s.sellers||0) + '</div></div>' +
+          '<div class="card amber"><div class="card-label">Bu oy buyurtmalar</div>' +
+            '<div class="card-val">' + (month.needs||0) + '</div>' +
+            '<div class="card-sub">Jami: ' + (s.total_needs||0) + '</div></div>' +
+          '<div class="card green"><div class="card-label">Bu oy bitimlar</div>' +
+            '<div class="card-val">' + (month.deals||0) + '</div>' +
+            '<div class="card-sub">Jami: ' + (s.total_deals||0) + '</div></div>' +
+          '<div class="card full green"><div class="card-label">Jami daromad</div>' +
+            '<div class="card-val">' + fmt(s.revenue||0) + " so'm" + '</div>' +
+            '<div class="card-sub">Bu oy: ' + fmt(month.revenue||0) + " so'm" + '</div></div>' +
+        '</div>' +
+        '<div class="card"><div class="card-label" style="margin-bottom:10px">Hudud bo\'yicha buyurtmalar</div>' +
+          regBars +
+        '</div>' +
+        '<div style="margin-top:8px">' +
+          '<button class="btn" onclick="downloadExcel()">📥 Excel yuklab olish</button>' +
+          '<button class="btn outline" onclick="sendBroadcast()">📢 Broadcast</button>' +
+        '</div>';
+    })
+    .catch(function(e) {
+      document.getElementById('stats-content').innerHTML = '<div class="loading">Xato: ' + e.message + '</div>';
+    });
+}
+
+// ── CHEKLAR ───────────────────────────────────────────────────────────────────
+function loadChecks() {
+  fetch('/api/admin/checks?uid=' + userId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok || !d.data.length) {
+        document.getElementById('checks-content').innerHTML =
+          '<div class="loading">✅ Kutayotgan cheklar yo\'q</div>';
+        return;
+      }
+      var html = '';
+      d.data.forEach(function(tx) {
+        html += '<div class="check-card" id="chk-' + tx.id + '">' +
+          '<div class="check-header">' +
+            '<div>' +
+              '<div class="check-name">' + esc(tx.name||'?') + '</div>' +
+              '<div style="font-size:12px;color:var(--hint)">' + (tx.created_at||'').slice(0,16) + '</div>' +
+            '</div>' +
+            '<div class="check-amount">' + fmt(tx.amount) + " so'm → " + tx.balls + ' ball</div>' +
+          '</div>';
+        if (tx.photo) {
+          html += '<img class="check-img" src="' + tx.photo + '" onerror="this.style.display=\'none\'">';
+        }
+        html += '<div class="check-actions">' +
+          '<button class="btn green sm" onclick="approveCheck(' + tx.id + ',' + tx.user_id + ',' + tx.balls + ')">✅ Tasdiqlash</button>' +
+          '<button class="btn red sm" onclick="rejectCheck(' + tx.id + ',' + tx.user_id + ')">❌ Rad</button>' +
+        '</div></div>';
+      });
+      document.getElementById('checks-content').innerHTML = html;
+    })
+    .catch(function(e) {
+      document.getElementById('checks-content').innerHTML = '<div class="loading">Xato: ' + e.message + '</div>';
+    });
+}
+
+function approveCheck(txId, userId, balls) {
+  fetch('/api/admin/check_action', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({action:'approve', tx_id:txId, user_id:userId, balls:balls, admin_id:window.userId})
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (d.ok) {
+      var el = document.getElementById('chk-' + txId);
+      if (el) el.innerHTML = '<div style="padding:8px;color:var(--green);text-align:center">✅ Tasdiqlandi</div>';
+    }
+  });
+}
+
+function rejectCheck(txId, userId) {
+  fetch('/api/admin/check_action', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({action:'reject', tx_id:txId, user_id:userId, admin_id:window.userId})
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (d.ok) {
+      var el = document.getElementById('chk-' + txId);
+      if (el) el.innerHTML = '<div style="padding:8px;color:var(--red);text-align:center">❌ Rad etildi</div>';
+    }
+  });
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+function loadUsers() {
+  fetch('/api/admin/users?uid=' + userId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { document.getElementById('users-content').innerHTML = '<div class="loading">Ruxsat yo\'q</div>'; return; }
+      var rows = d.data.map(function(u) {
+        var role = u.role === 'seller' ? 'Sotuvchi' : u.role === 'clinic' ? 'Klinika' : u.role || '?';
+        var badge = u.role === 'seller' ? 'pend' : 'ok';
+        return '<tr>' +
+          '<td>' + esc(u.name||'?') + '</td>' +
+          '<td><span class="badge ' + badge + '">' + role + '</span></td>' +
+          '<td>' + esc(u.region||'—') + '</td>' +
+          '<td>' + (u.created_at||'').slice(0,10) + '</td>' +
+        '</tr>';
+      }).join('');
+      document.getElementById('users-content').innerHTML =
+        '<table class="tbl"><thead><tr>' +
+          '<th>Ism</th><th>Rol</th><th>Hudud</th><th>Sana</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>';
+    });
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────────────────
+function loadSettings() {
+  fetch('/api/admin/settings?uid=' + userId)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { document.getElementById('settings-content').innerHTML = '<div class="loading">Ruxsat yo\'q</div>'; return; }
+      var s = d.data;
+      document.getElementById('settings-content').innerHTML =
+        '<div class="card">' +
+          '<div class="setting-row">' +
+            '<div><div class="setting-label">1 ball narxi</div>' +
+              '<input class="s-input" id="inp-ball" value="' + (s.ball_price||1000) + '" type="number"></div>' +
+          '</div>' +
+          '<div class="setting-row">' +
+            '<div><div class="setting-label">Karta raqami</div>' +
+              '<input class="s-input" id="inp-card" value="' + esc(s.card_number||'') + '" type="text"></div>' +
+          '</div>' +
+          '<div class="setting-row">' +
+            '<div><div class="setting-label">E\'lon narxi (ball)</div>' +
+              '<input class="s-input" id="inp-elon" value="' + (s.elon_price||0) + '" type="number"></div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="btn" onclick="saveSettings()" style="margin-top:8px">💾 Saqlash</button>';
+    });
+}
+
+function saveSettings() {
+  var data = {
+    ball_price:  document.getElementById('inp-ball').value,
+    card_number: document.getElementById('inp-card').value,
+    elon_price:  document.getElementById('inp-elon').value,
+    admin_id: userId
+  };
+  fetch('/api/admin/save_settings', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    alert(d.ok ? '✅ Saqlandi!' : '❌ Xato');
+  });
+}
+
+function downloadExcel() {
+  window.location.href = '/api/admin/excel?uid=' + userId;
+}
+
+function sendBroadcast() {
+  var txt = prompt('Broadcast matni:');
+  if (!txt) return;
+  fetch('/api/admin/broadcast', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({text: txt, admin_id: userId})
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    alert(d.ok ? '✅ ' + (d.sent||0) + ' ta yuborildi' : '❌ Xato');
+  });
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(n){ return Math.round(n||0).toLocaleString(); }
+window.userId = userId;
+
+// Birinchi tab
+loadStats();
+</script>
+</body>
+</html>
