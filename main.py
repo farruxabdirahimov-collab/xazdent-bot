@@ -128,7 +128,7 @@ def kb_seller(lg):
     return rk(
         [KeyboardButton(text="🔔 Ehtiyojlar"),  KeyboardButton(text="📤 Takliflarim")],
         [KeyboardButton(text="🏪 Do'konim"),     KeyboardButton(text="💰 Hisobim")],
-        [KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📊 Statistika"),   KeyboardButton(text="⚙️ Profil")],
     )
 
 def kb_regions(lg):
@@ -234,11 +234,16 @@ async def post_batch_to_channel(batch_id, needs_list, owner):
         lines += f"\n• ...va yana {len(needs_list)-15} ta"
     all_words = " ".join(n["product_name"] for n in needs_list[:5]).split()
     tags = " ".join(f"#{w.lower()}" for w in dict.fromkeys(all_words) if len(w)>2)[:80]
+    # To'lov turlari
+    pay_icons = {"p2p":"💳 P2P","cash":"💵 Naqd","bank":"🏦 Hisob raqam"}
+    pm_raw = needs_list[0].get("payment_methods","") if needs_list else ""
+    pm_txt = " · ".join(pay_icons[p] for p in (pm_raw or "").split(",") if p in pay_icons)
+    pm_line = f"\n💳 {pm_txt}" if pm_txt else ""
     txt = (
         f"📋 *BUYURTMA #{batch_id}* — {len(needs_list)} ta mahsulot\n\n"
         f"{lines}\n\n"
         f"📍 {owner.get('region') or ''}\n"
-        f"⏱ {dl_txt} ichida\n\n"
+        f"⏱ {dl_txt} ichida{pm_line}\n\n"
         f"{tags}\n💬 @XazdentBot"
     )
     # Kanalga WebAppInfo yuborib bo'lmaydi — oddiy URL link ishlatamiz
@@ -472,6 +477,56 @@ async def show_profile(msg: Message, state: FSMContext):
         [ib("📢 E'lon berish", "ad_start")],
     ))
 
+def _payment_kb(selected: list) -> InlineKeyboardMarkup:
+    opts = [("p2p","💳 P2P (karta)"), ("bank","🏦 Hisob raqam"), ("cash","💵 Naqd pul")]
+    rows = []
+    for key, label in opts:
+        chk = "✅ " if key in selected else "☐ "
+        rows.append([ib(f"{chk}{label}", f"pm_tog_{key}")])
+    rows.append([ib("💾 Saqlash", "pm_save"), ib("◀️ Bekor", "pm_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+@router.callback_query(F.data == "set_payment")
+async def set_payment(call: CallbackQuery, state: FSMContext):
+    u   = await get_user(call.from_user.id)
+    cur = (u.get("payment_methods") or "").split(",") if u else []
+    cur = [x for x in cur if x]
+    await state.update_data(pm_selected=cur)
+    await call.message.answer(
+        "💳 *To\'lov usullarini tanlang:*\n_(Bir nechta tanlash mumkin)_",
+        reply_markup=_payment_kb(cur)
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("pm_tog_"))
+async def pm_toggle(call: CallbackQuery, state: FSMContext):
+    key = call.data[7:]
+    d   = await state.get_data()
+    sel = list(d.get("pm_selected", []))
+    if key in sel: sel.remove(key)
+    else: sel.append(key)
+    await state.update_data(pm_selected=sel)
+    await call.message.edit_reply_markup(reply_markup=_payment_kb(sel))
+    await call.answer()
+
+@router.callback_query(F.data == "pm_save")
+async def pm_save(call: CallbackQuery, state: FSMContext):
+    d   = await state.get_data()
+    sel = d.get("pm_selected", [])
+    val = ",".join(sel)
+    await db_run("UPDATE users SET payment_methods=? WHERE id=?", (val or None, call.from_user.id))
+    await state.clear()
+    pay_icons = {"p2p":"💳 P2P","cash":"💵 Naqd","bank":"🏦 Hisob raqam"}
+    pm_txt = " · ".join(pay_icons[p] for p in sel if p in pay_icons) or "Belgilanmagan"
+    await call.message.edit_text(f"✅ Saqlandi: *{pm_txt}*")
+    await call.answer("✅")
+
+@router.callback_query(F.data == "pm_cancel")
+async def pm_cancel(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await call.answer()
+
 @router.callback_query(F.data == "change_role")
 async def change_role(call: CallbackQuery):
     await call.message.answer(
@@ -482,6 +537,56 @@ async def change_role(call: CallbackQuery):
             [ib("🛒 Sotuvchi",          "role_seller")],
         )
     )
+    await call.answer()
+
+def _payment_kb(selected: list) -> InlineKeyboardMarkup:
+    opts = [("p2p","💳 P2P (karta)"), ("bank","🏦 Hisob raqam"), ("cash","💵 Naqd pul")]
+    rows = []
+    for key, label in opts:
+        chk = "✅ " if key in selected else "☐ "
+        rows.append([ib(f"{chk}{label}", f"pm_tog_{key}")])
+    rows.append([ib("💾 Saqlash", "pm_save"), ib("◀️ Bekor", "pm_cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+@router.callback_query(F.data == "set_payment")
+async def set_payment(call: CallbackQuery, state: FSMContext):
+    u   = await get_user(call.from_user.id)
+    cur = (u.get("payment_methods") or "").split(",") if u else []
+    cur = [x for x in cur if x]
+    await state.update_data(pm_selected=cur)
+    await call.message.answer(
+        "💳 *To\'lov usullarini tanlang:*\n_(Bir nechta tanlash mumkin)_",
+        reply_markup=_payment_kb(cur)
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("pm_tog_"))
+async def pm_toggle(call: CallbackQuery, state: FSMContext):
+    key = call.data[7:]
+    d   = await state.get_data()
+    sel = list(d.get("pm_selected", []))
+    if key in sel: sel.remove(key)
+    else: sel.append(key)
+    await state.update_data(pm_selected=sel)
+    await call.message.edit_reply_markup(reply_markup=_payment_kb(sel))
+    await call.answer()
+
+@router.callback_query(F.data == "pm_save")
+async def pm_save(call: CallbackQuery, state: FSMContext):
+    d   = await state.get_data()
+    sel = d.get("pm_selected", [])
+    val = ",".join(sel)
+    await db_run("UPDATE users SET payment_methods=? WHERE id=?", (val or None, call.from_user.id))
+    await state.clear()
+    pay_icons = {"p2p":"💳 P2P","cash":"💵 Naqd","bank":"🏦 Hisob raqam"}
+    pm_txt = " · ".join(pay_icons[p] for p in sel if p in pay_icons) or "Belgilanmagan"
+    await call.message.edit_text(f"✅ Saqlandi: *{pm_txt}*")
+    await call.answer("✅")
+
+@router.callback_query(F.data == "pm_cancel")
+async def pm_cancel(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
     await call.answer()
 
 @router.callback_query(F.data == "change_role")
@@ -1387,18 +1492,241 @@ async def _save_offer(obj, state: FSMContext, note):
 # ── SOTUVCHI: TAKLIFLARIM ─────────────────────────────────────────────────────
 @router.message(F.text == "📤 Takliflarim")
 async def my_offers(msg: Message):
+    uid  = msg.from_user.id
     offs = await db_all(
-        "SELECT o.*, n.product_name as np FROM offers o "
-        "JOIN needs n ON o.need_id=n.id WHERE o.seller_id=? ORDER BY o.created_at DESC LIMIT 20",
-        (msg.from_user.id,),
+        "SELECT o.*, n.product_name as np, n.quantity as nqty, n.unit as nunit "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE o.seller_id=? ORDER BY o.created_at DESC LIMIT 30",
+        (uid,),
     )
     if not offs:
         await msg.answer("📭 Hali taklif yubormagansiz.")
         return
-    await msg.answer(f"📤 *Takliflarim:* {len(offs)} ta")
-    for o in offs:
-        st = {"pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(o["status"], "📤")
-        await msg.answer(f"{st} *{o['np']}*\n💰 {o['price']:,.0f} so'm")
+
+    # Jami savdo summasi
+    total_won = sum(
+        o["price"] * o["nqty"]
+        for o in offs if o["status"] == "accepted"
+    )
+    won_count = sum(1 for o in offs if o["status"] == "accepted")
+    pend_count= sum(1 for o in offs if o["status"] == "pending")
+
+    summary = (
+        f"📤 *Takliflarim* ({len(offs)} ta)\n\n"
+        f"✅ Qabul: *{won_count} ta*\n"
+        f"⏳ Kutmoqda: *{pend_count} ta*\n"
+        f"💰 Jami savdo: *{total_won:,.0f} so'm*"
+    )
+    await msg.answer(summary, reply_markup=ik(
+        [ib("📊 Batafsil statistika", "seller_stats")],
+        [ib("📥 Excel yuklab olish", "seller_excel")],
+    ))
+    # So'nggi 10 ta
+    for o in offs[:10]:
+        st = {"pending":"⏳","accepted":"✅","rejected":"❌"}.get(o["status"],"📤")
+        total_line = o["price"] * o["nqty"]
+        await msg.answer(
+            f"{st} *{o['np']}* — {o['nqty']} {o['nunit']}\n"
+            f"💰 {o['price']:,.0f} × {o['nqty']} = *{total_line:,.0f} so'm*"
+        )
+
+# ── SOTUVCHI STATISTIKA ──────────────────────────────────────────────────────
+@router.message(F.text == "📊 Statistika")
+async def seller_stats_btn(msg: Message):
+    await _show_seller_stats(msg.from_user.id, msg)
+
+@router.callback_query(F.data == "seller_stats")
+async def seller_stats_cb(call: CallbackQuery):
+    await _show_seller_stats(call.from_user.id, call.message)
+    await call.answer()
+
+async def _show_seller_stats(uid: int, target_msg):
+    now   = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    week  = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    month = now.strftime("%Y-%m")
+    year  = now.strftime("%Y")
+
+    async def won_sum(since=None, period=None):
+        if period:
+            rows = await db_all(
+                "SELECT o.price, n.quantity FROM offers o "
+                "JOIN needs n ON o.need_id=n.id "
+                "WHERE o.seller_id=? AND o.status=\'accepted\' AND o.created_at LIKE ?",
+                (uid, f"{period}%")
+            )
+        elif since:
+            rows = await db_all(
+                "SELECT o.price, n.quantity FROM offers o "
+                "JOIN needs n ON o.need_id=n.id "
+                "WHERE o.seller_id=? AND o.status=\'accepted\' AND o.created_at >= ?",
+                (uid, since)
+            )
+        else:
+            rows = await db_all(
+                "SELECT o.price, n.quantity FROM offers o "
+                "JOIN needs n ON o.need_id=n.id "
+                "WHERE o.seller_id=? AND o.status=\'accepted\'",
+                (uid,)
+            )
+        return sum(r["price"] * r["quantity"] for r in rows), len(rows)
+
+    day_sum,   day_cnt   = await won_sum(since=today)
+    week_sum,  week_cnt  = await won_sum(since=week)
+    month_sum, month_cnt = await won_sum(period=month)
+    year_sum,  year_cnt  = await won_sum(period=year)
+    total_sum, total_cnt = await won_sum()
+
+    # Jami takliflar
+    all_offs  = await db_get("SELECT COUNT(*) as c FROM offers WHERE seller_id=?", (uid,))
+    all_count = all_offs["c"] if all_offs else 0
+    rate      = f"{total_cnt/all_count*100:.0f}%" if all_count else "—"
+
+    # Top 5 mahsulot
+    top_prods = await db_all(
+        "SELECT n.product_name, COUNT(*) as cnt, SUM(o.price*n.quantity) as total "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE o.seller_id=? AND o.status=\'accepted\' "
+        "GROUP BY n.product_name ORDER BY total DESC LIMIT 5",
+        (uid,)
+    )
+
+    txt = (
+        f"📊 *Savdo statistikasi*\n\n"
+        f"📅 Bugun:      *{day_sum:>12,.0f} so'm* ({day_cnt} ta)\n"
+        f"📅 Bu hafta:   *{week_sum:>12,.0f} so'm* ({week_cnt} ta)\n"
+        f"📅 Bu oy:      *{month_sum:>12,.0f} so'm* ({month_cnt} ta)\n"
+        f"📅 Bu yil:     *{year_sum:>12,.0f} so'm* ({year_cnt} ta)\n"
+        f"📅 Jami:       *{total_sum:>12,.0f} so'm* ({total_cnt} ta)\n\n"
+        f"📤 Jami taklif: {all_count} ta | ✅ Qabul: {rate}\n"
+    )
+
+    if top_prods:
+        txt += "\n🏆 *Top mahsulotlar:*\n"
+        for i, p in enumerate(top_prods, 1):
+            txt += f"  {i}. {p['product_name']} — {p['total']:,.0f} so'm ({p['cnt']} ta)\n"
+
+    await target_msg.answer(txt, reply_markup=ik(
+        [ib("📥 Excel yuklab olish", "seller_excel")],
+        [ib("◀️ Orqaga", "seller_stats_back")],
+    ))
+
+@router.callback_query(F.data == "seller_stats_back")
+async def seller_stats_back(call: CallbackQuery):
+    await call.message.delete()
+    await call.answer()
+
+@router.callback_query(F.data == "seller_excel")
+async def seller_excel_cb(call: CallbackQuery):
+    await call.answer("⏳ Excel tayyorlanmoqda...")
+    uid  = call.from_user.id
+    path = await _build_seller_excel(uid)
+    if not path:
+        await call.message.answer("❌ Excel yaratib bo\'lmadi")
+        return
+    import aiofiles
+    async with aiofiles.open(path, "rb") as f:
+        data = await f.read()
+    fname = f"savdo_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    await call.message.answer_document(
+        document=(fname, data,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        caption=f"📊 Savdo hisoboti — {datetime.now().strftime('%d.%m.%Y')}"
+    )
+    try:
+        import os as _os; _os.remove(path)
+    except Exception: pass
+
+async def _build_seller_excel(uid: int) -> str:
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        return None
+
+    wb  = openpyxl.Workbook()
+    now = datetime.now()
+
+    def hdr(ws, cols, color="4472C4"):
+        fill = PatternFill("solid", fgColor=color)
+        font = Font(bold=True, color="FFFFFF")
+        for i, v in enumerate(cols, 1):
+            c = ws.cell(row=1, column=i, value=v)
+            c.fill = fill; c.font = font
+            c.alignment = Alignment(horizontal="center")
+
+    def aw(ws):
+        for col in ws.columns:
+            w = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(w+4, 40)
+
+    # ── 1. Umumiy savdo ──────────────────────────────────────────
+    ws1 = wb.active; ws1.title = "Jami savdo"
+    hdr(ws1, ["Sana", "Mahsulot", "Miqdor", "Birlik", "Narx (1 ta)", "Jami", "Klinika"])
+    offs = await db_all(
+        "SELECT o.*, n.product_name, n.quantity, n.unit, "
+        "COALESCE(u.clinic_name, u.full_name) as clinic "
+        "FROM offers o "
+        "JOIN needs n ON o.need_id=n.id "
+        "JOIN users u ON n.owner_id=u.id "
+        "WHERE o.seller_id=? AND o.status=\'accepted\' "
+        "ORDER BY o.created_at DESC",
+        (uid,)
+    )
+    for i, o in enumerate(offs, 2):
+        ws1.cell(row=i, column=1, value=o["created_at"][:10] if o["created_at"] else "")
+        ws1.cell(row=i, column=2, value=o["product_name"])
+        ws1.cell(row=i, column=3, value=o["quantity"])
+        ws1.cell(row=i, column=4, value=o["unit"])
+        ws1.cell(row=i, column=5, value=o["price"])
+        ws1.cell(row=i, column=6, value=o["price"] * o["quantity"])
+        ws1.cell(row=i, column=7, value=o["clinic"] or "—")
+    # Jami
+    if offs:
+        row = len(offs) + 2
+        ws1.cell(row=row, column=5, value="JAMI:").font = Font(bold=True)
+        total = sum(o["price"]*o["quantity"] for o in offs)
+        ws1.cell(row=row, column=6, value=total).font = Font(bold=True)
+    aw(ws1)
+
+    # ── 2. Oylik ─────────────────────────────────────────────────
+    ws2 = wb.create_sheet("Oylik")
+    hdr(ws2, ["Oy", "Bitimlar", "Jami savdo (so'm)"], "2E7D32")
+    monthly = await db_all(
+        "SELECT SUBSTR(o.created_at,1,7) as month, "
+        "COUNT(*) as cnt, SUM(o.price*n.quantity) as total "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE o.seller_id=? AND o.status=\'accepted\' "
+        "GROUP BY month ORDER BY month DESC LIMIT 24",
+        (uid,)
+    )
+    for i, m in enumerate(monthly, 2):
+        ws2.cell(row=i, column=1, value=m["month"])
+        ws2.cell(row=i, column=2, value=m["cnt"])
+        ws2.cell(row=i, column=3, value=m["total"])
+    aw(ws2)
+
+    # ── 3. Mahsulotlar ───────────────────────────────────────────
+    ws3 = wb.create_sheet("Mahsulotlar")
+    hdr(ws3, ["Mahsulot", "Bitimlar", "Jami (so'm)", "O'rtacha narx"], "1565C0")
+    prods = await db_all(
+        "SELECT n.product_name, COUNT(*) as cnt, "
+        "SUM(o.price*n.quantity) as total, AVG(o.price) as avg_p "
+        "FROM offers o JOIN needs n ON o.need_id=n.id "
+        "WHERE o.seller_id=? AND o.status=\'accepted\' "
+        "GROUP BY n.product_name ORDER BY total DESC",
+        (uid,)
+    )
+    for i, p in enumerate(prods, 2):
+        ws3.cell(row=i, column=1, value=p["product_name"])
+        ws3.cell(row=i, column=2, value=p["cnt"])
+        ws3.cell(row=i, column=3, value=p["total"])
+        ws3.cell(row=i, column=4, value=round(p["avg_p"], 0) if p["avg_p"] else 0)
+    aw(ws3)
+
+    path = os.path.join(BASE_DIR, f"seller_{uid}_{now.strftime('%Y%m%d_%H%M')}.xlsx")
+    wb.save(path)
+    return path
 
 # ── DO'KON ────────────────────────────────────────────────────────────────────
 @router.message(F.text == "🏪 Do'konim")
@@ -1986,10 +2314,17 @@ async def _notify_winner(seller_id: int, clinic: dict, items: list):
         )
     items_txt = "\n".join(lines)
 
+    # Sotuvchining to'lov usullari
+    seller_u = await get_user(seller_id)
+    pay_icons = {"p2p":"💳 P2P","cash":"💵 Naqd","bank":"🏦 Hisob raqam"}
+    spm_raw = (seller_u.get("payment_methods") or "") if seller_u else ""
+    spm_txt = " · ".join(pay_icons[p] for p in spm_raw.split(",") if p in pay_icons)
+    spm_line = f"\n💳 To\'lov: {spm_txt}" if spm_txt else ""
+
     txt = (
         f"🎉 *Taklifingiz qabul qilindi!*\n\n"
         f"📦 *Buyurtma:*\n{items_txt}\n\n"
-        f"💰 *Jami: {total:,.0f} so'm*\n\n"
+        f"💰 *Jami: {total:,.0f} so\'m*{spm_line}\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🏥 *{cname}*\n"
         f"📞 {cphone}\n"
