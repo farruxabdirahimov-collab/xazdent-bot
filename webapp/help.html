@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Yordam</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:var(--tg-theme-bg-color,#fff);
+  --bg2:var(--tg-theme-secondary-bg-color,#f2f2f7);
+  --text:var(--tg-theme-text-color,#000);
+  --hint:var(--tg-theme-hint-color,#888);
+  --btn:var(--tg-theme-button-color,#007aff);
+  --btnT:var(--tg-theme-button-text-color,#fff);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:var(--bg2);color:var(--text);padding-bottom:30px}
+
+/* Role selector */
+.role-bar{display:flex;gap:8px;padding:12px 16px;background:var(--bg);
+  border-bottom:1px solid rgba(0,0,0,.07);position:sticky;top:0;z-index:10}
+.role-btn{flex:1;padding:9px 8px;border:none;border-radius:10px;
+  background:var(--bg2);color:var(--hint);font-size:13px;font-weight:500;
+  cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.role-btn.active{background:var(--btn);color:var(--btnT)}
+
+/* Content */
+.section{margin:12px 12px 0;background:var(--bg);border-radius:14px;overflow:hidden}
+.section-title{padding:14px 16px 0;font-size:13px;font-weight:600;
+  color:var(--hint);text-transform:uppercase;letter-spacing:.04em}
+
+/* Step card */
+.step{display:flex;gap:12px;padding:14px 16px;
+  border-bottom:1px solid rgba(0,0,0,.06)}
+.step:last-child{border-bottom:none}
+.step-num{width:32px;height:32px;border-radius:50%;background:var(--btn);
+  color:var(--btnT);font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-body{flex:1}
+.step-title{font-size:15px;font-weight:600;margin-bottom:4px}
+.step-desc{font-size:13px;color:var(--hint);line-height:1.5}
+.step-tag{display:inline-block;margin-top:6px;padding:3px 10px;
+  border-radius:10px;font-size:11px;font-weight:500;
+  background:rgba(0,122,255,.1);color:var(--btn)}
+
+/* Benefit card */
+.benefit{display:flex;align-items:flex-start;gap:12px;
+  padding:13px 16px;border-bottom:1px solid rgba(0,0,0,.06)}
+.benefit:last-child{border-bottom:none}
+.ben-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.ben-title{font-size:14px;font-weight:600;margin-bottom:2px}
+.ben-desc{font-size:12px;color:var(--hint);line-height:1.5}
+
+/* FAQ */
+.faq{padding:13px 16px;border-bottom:1px solid rgba(0,0,0,.06);cursor:pointer}
+.faq:last-child{border-bottom:none}
+.faq-q{font-size:14px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.faq-a{font-size:13px;color:var(--hint);line-height:1.6;margin-top:8px;display:none}
+.faq.open .faq-a{display:block}
+.faq-arr{transition:transform .2s;font-size:12px;color:var(--hint)}
+.faq.open .faq-arr{transform:rotate(90deg)}
+
+/* Hero */
+.hero{text-align:center;padding:24px 20px 20px}
+.hero-icon{font-size:48px;margin-bottom:12px}
+.hero-title{font-size:20px;font-weight:700;margin-bottom:6px}
+.hero-sub{font-size:14px;color:var(--hint);line-height:1.6}
+
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="role-bar">
+  <button class="role-btn active" onclick="showRole('clinic')">🏥 Klinika</button>
+  <button class="role-btn" onclick="showRole('seller')">🛒 Sotuvchi</button>
+</div>
+
+<!-- ═══════════════ KLINIKA ═══════════════ -->
+<div id="role-clinic">
+
+  <div class="hero">
+    <div class="hero-icon">🏥</div>
+    <div class="hero-title">Klinika / Vrach uchun</div>
+    <div class="hero-sub">Kerakli mahsulotni eng arzon narxda<br>topishning eng tez yo'li</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Qanday ishlaydi</div>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Ehtiyojni yozing</div>
+        <div class="step-desc">«✏️ Ehtiyoj yozish» tugmasini bosing. Mini App ochiladi — mahsulot nomi va miqdorini kiriting. To'lov turini tanlang.</div>
+        <span class="step-tag">⚡️ 1 daqiqa</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Takliflar keladi</div>
+        <div class="step-desc">Botimizda ro'yxatdan o'tgan sotuvchilar sizning buyurtmangizni ko'rib, narx taklif qilishadi. Har taklif kelganda sizga xabar keladi.</div>
+        <span class="step-tag">📩 Avtomatik xabar</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Jadvalda solishtiring</div>
+        <div class="step-desc">«📊 Jadval ko'rish» tugmasini bosing. Barcha sotuvchilarning narxlari bir joyda — eng arzon avtomatik belgilanadi.</div>
+        <span class="step-tag">✅ Eng arzon belgilanadi</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Qabul qiling</div>
+        <div class="step-desc">Har mahsulot uchun alohida yoki hammasini bitta do'kondan qabul qilishingiz mumkin. Qabul bosilganda sotuvchiga sizning kontaktingiz avtomatik yuboriladi.</div>
+        <span class="step-tag">🤝 Sotuvchi o'zi bog'lanadi</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:12px">
+    <div class="section-title">Afzalliklari</div>
+    <div class="benefit">
+      <div class="ben-icon">💰</div>
+      <div>
+        <div class="ben-title">Pulni tejaysiz</div>
+        <div class="ben-desc">Bir nechta sotuvchi raqobat qiladi — siz eng arzon narxni olasiz. O'rtacha 15-30% tejash mumkin.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">⏱</div>
+      <div>
+        <div class="ben-title">Vaqtni tejaysiz</div>
+        <div class="ben-desc">Har bir sotuvchiga qo'ng'iroq qilmasdan, bir joydan barcha narxlarni ko'rasiz.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">📊</div>
+      <div>
+        <div class="ben-title">Tejash statistikasi</div>
+        <div class="ben-desc">«📊 Tejash» bo'limida qancha pul tejagansiz — kunlik, oylik ko'rasiz.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">📦</div>
+      <div>
+        <div class="ben-title">Mahsulotlar ro'yxati</div>
+        <div class="ben-desc">Tez-tez buyurtma qilinadigan mahsulotlarni «📦 Mahsulotlarim» da saqlang — keyingi safar avtomatik chiqadi.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:12px">
+    <div class="section-title">Ko'p so'raladigan savollar</div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Taklif kelmasa nima qilaman? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Buyurtma kanal orqali barcha sotuvchilarga yetkaziladi. Odatda 1-2 soat ichida takliflar keladi. Agar kelmasa — muddatni uzaytirib qayta joylang.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Sotuvchi kontaktini qachon olaman? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Taklifni qabul qilgandan keyin sotuvchi ma'lumotlari (ism, telefon, manzil) sizga yuboriladi. Siz ham sotuvchiga ko'rinasiz.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">To'lov qanday amalga oshiriladi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">To'lov bevosita sotuvchi bilan kelishiladi. Bot faqat aloqa vositasi — pul bot orqali o'tmaydi. Buyurtmada qaysi to'lov turini afzal ko'rishingizni ko'rsatishingiz mumkin.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Bir vaqtda bir nechta buyurtma bersam bo'ladimi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Ha, cheklov yo'q. Har qanday miqdordagi buyurtmalarni bir vaqtda berishingiz mumkin.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ SOTUVCHI ═══════════════ -->
+<div id="role-seller" class="hidden">
+
+  <div class="hero">
+    <div class="hero-icon">🛒</div>
+    <div class="hero-title">Sotuvchi uchun</div>
+    <div class="hero-sub">Yangi mijozlarni toping va<br>savdoni oshiring</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Qanday ishlaydi</div>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Buyurtmalarni ko'ring</div>
+        <div class="step-desc">«🔔 Ehtiyojlar» tugmasi — barcha aktiv buyurtmalar. Yoki @xazdent kanaliga a'zo bo'ling — yangi buyurtmalar kanalga chiqadi.</div>
+        <span class="step-tag">🔔 Real vaqtda xabar</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Narx kiriting</div>
+        <div class="step-desc">«💰 Narx kiriting» tugmasini bosing. Mini App ochiladi — har mahsulot uchun 1 ta narx kiriting. Mavjud bo'lmasa «Mavjud emas» belgisini qo'ying.</div>
+        <span class="step-tag">1 ta narx = 1 birlik uchun</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Qabul kutishda</div>
+        <div class="step-desc">Xaridor barcha takliflarni solishtiradi. Sizning taklifingiz qabul qilinsa — xaridor kontakti avtomatik yuboriladi.</div>
+        <span class="step-tag">📩 Kontakt avtomatik keladi</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Savdo statistikasi</div>
+        <div class="step-desc">«📊 Statistika» bo'limida kunlik, oylik savdo summalari, top mahsulotlar, qabul foizi ko'rinadi. Excel yuklab olish mumkin.</div>
+        <span class="step-tag">📈 Excel hisobot</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:12px">
+    <div class="section-title">Afzalliklari</div>
+    <div class="benefit">
+      <div class="ben-icon">🎯</div>
+      <div>
+        <div class="ben-title">Tayyor mijozlar</div>
+        <div class="ben-desc">Qo'ng'iroq va reklama shart emas — klinikalar o'zi kerakli narsani yozadi, siz narx kiritasiz.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">📢</div>
+      <div>
+        <div class="ben-title">Reklama berish</div>
+        <div class="ben-desc">«📢 E'lon berish» orqali ma'lum hudud va auditoriyaga reklama yuborishingiz mumkin. Narx balldan ayiriladi.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">🏆</div>
+      <div>
+        <div class="ben-title">Raqobatdan xabardor</div>
+        <div class="ben-desc">Taklifingiz yutqazsa — qabul qilingan narx va sizning narxingiz farqi ko'rsatiladi. Ma'lumot maxfiy saqlanadi.</div>
+      </div>
+    </div>
+    <div class="benefit">
+      <div class="ben-icon">💳</div>
+      <div>
+        <div class="ben-title">To'lov usullarini belgilang</div>
+        <div class="ben-desc">Profildan qaysi to'lov turlarini qabul qilishingizni ko'rsating — P2P, hisob raqam yoki naqd.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:12px">
+    <div class="section-title">Ko'p so'raladigan savollar</div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Taklif berish uchun to'lov kerakmi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Yo'q. Taklif berish va buyurtmalarni ko'rish bepul. Faqat reklama berish ball talab qiladi.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Narxim qabul qilinmasa nima bo'ladi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Xaridor boshqa sotuvchini tanlasa, sizga qabul qilingan narx va o'zingizning narxingiz farqi yuboriladi. Xaridor ma'lumotlari ko'rsatilmaydi.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Do'kon ochish shart emasmi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Do'kon ochmay ham taklif berishingiz mumkin. Lekin do'kon ochsangiz — isming va do'kon noming ko'rinadi, ishonch oshadi.</div>
+    </div>
+    <div class="faq" onclick="toggleFaq(this)">
+      <div class="faq-q">Ball qanday to'planadi? <span class="faq-arr">›</span></div>
+      <div class="faq-a">Ball sotib olish uchun «💰 Hisobim» bo'limiga kiring, miqdor kiriting va karta orqali to'lang. Admin tasdiqlaydi va ballingizga qo'shiladi.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+// URL dan rol aniqlash
+var qp   = new URLSearchParams(window.location.search);
+var role = qp.get('role') || 'clinic';
+if (role === 'seller') showRole('seller');
+
+function showRole(r) {
+  document.querySelectorAll('.role-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('[id^="role-"]').forEach(function(d){ d.classList.add('hidden'); });
+  document.getElementById('role-' + r).classList.remove('hidden');
+  event && event.target && event.target.classList.add('active');
+  if (!event || !event.target) {
+    var btns = document.querySelectorAll('.role-btn');
+    if (r === 'clinic') btns[0].classList.add('active');
+    else btns[1].classList.add('active');
+  }
+}
+
+function toggleFaq(el) {
+  el.classList.toggle('open');
+}
+</script>
+</body>
+</html>
