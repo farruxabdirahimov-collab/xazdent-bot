@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BufferedInputFile
+import asyncpg
 from aiogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
@@ -487,67 +488,6 @@ def _payment_kb(selected: list) -> InlineKeyboardMarkup:
     rows.append([ib("💾 Saqlash", "pm_save"), ib("◀️ Bekor", "pm_cancel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-@router.callback_query(F.data == "set_payment")
-async def set_payment(call: CallbackQuery, state: FSMContext):
-    u   = await get_user(call.from_user.id)
-    cur = (u.get("payment_methods") or "").split(",") if u else []
-    cur = [x for x in cur if x]
-    await state.update_data(pm_selected=cur)
-    await call.message.answer(
-        "💳 *To\'lov usullarini tanlang:*\n_(Bir nechta tanlash mumkin)_",
-        reply_markup=_payment_kb(cur)
-    )
-    await call.answer()
-
-@router.callback_query(F.data.startswith("pm_tog_"))
-async def pm_toggle(call: CallbackQuery, state: FSMContext):
-    key = call.data[7:]
-    d   = await state.get_data()
-    sel = list(d.get("pm_selected", []))
-    if key in sel: sel.remove(key)
-    else: sel.append(key)
-    await state.update_data(pm_selected=sel)
-    await call.message.edit_reply_markup(reply_markup=_payment_kb(sel))
-    await call.answer()
-
-@router.callback_query(F.data == "pm_save")
-async def pm_save(call: CallbackQuery, state: FSMContext):
-    d   = await state.get_data()
-    sel = d.get("pm_selected", [])
-    val = ",".join(sel)
-    await db_run("UPDATE users SET payment_methods=? WHERE id=?", (val or None, call.from_user.id))
-    await state.clear()
-    pay_icons = {"p2p":"💳 P2P","cash":"💵 Naqd","bank":"🏦 Hisob raqam"}
-    pm_txt = " · ".join(pay_icons[p] for p in sel if p in pay_icons) or "Belgilanmagan"
-    await call.message.edit_text(f"✅ Saqlandi: *{pm_txt}*")
-    await call.answer("✅")
-
-@router.callback_query(F.data == "pm_cancel")
-async def pm_cancel(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.delete()
-    await call.answer()
-
-@router.callback_query(F.data == "change_role")
-async def change_role(call: CallbackQuery):
-    await call.message.answer(
-        "🔄 *Yangi rolni tanlang:*",
-        reply_markup=ik(
-            [ib("🏥 Klinika / Vrach", "role_clinic")],
-            [ib("🔬 Zubtexnik",        "role_zubtex")],
-            [ib("🛒 Sotuvchi",          "role_seller")],
-        )
-    )
-    await call.answer()
-
-def _payment_kb(selected: list) -> InlineKeyboardMarkup:
-    opts = [("p2p","💳 P2P (karta)"), ("bank","🏦 Hisob raqam"), ("cash","💵 Naqd pul")]
-    rows = []
-    for key, label in opts:
-        chk = "✅ " if key in selected else "☐ "
-        rows.append([ib(f"{chk}{label}", f"pm_tog_{key}")])
-    rows.append([ib("💾 Saqlash", "pm_save"), ib("◀️ Bekor", "pm_cancel")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 @router.callback_query(F.data == "set_payment")
 async def set_payment(call: CallbackQuery, state: FSMContext):
@@ -2022,6 +1962,55 @@ async def adm_rej(call: CallbackQuery):
     await call.message.edit_caption(call.message.caption + "\n\n❌ RAD ETILDI", reply_markup=None)
     await call.answer("❌")
 
+@router.message(Command("admin"))
+async def cmd_admin(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    if not WEBAPP_URL:
+        await msg.answer("⚠️ WEBAPP_URL sozlanmagan"); return
+    await msg.answer(
+        "👨‍💼 *Admin panel*",
+        reply_markup=ik([ib("🖥 Ochish →", web_app=WebAppInfo(url=f"{WEBAPP_URL}/admin"))])
+    )
+
+@router.message(Command("setball"))
+async def cmd_setball(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("ball_price", val)
+        await msg.answer(f"✅ 1 ball = *{val} so\'m*")
+    except Exception: await msg.answer("❌ /setball 2000")
+
+@router.message(Command("setelon"))
+async def cmd_setelon(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("elon_price", val)
+        await msg.answer(f"✅ 1 e\'lon = *{val} ball*")
+    except Exception: await msg.answer("❌ /setelon 1")
+
+@router.message(Command("setcard"))
+async def cmd_setcard(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    try:
+        val = msg.text.split()[1]
+        await update_setting("card_number", val)
+        await msg.answer(f"✅ Karta: `{val}`")
+    except Exception: await msg.answer("❌ /setcard 9860...")
+
+@router.message(Command("broadcast"))
+async def cmd_broadcast(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS: return
+    parts = msg.text.split(maxsplit=1)
+    if len(parts) < 2: await msg.answer("Format: /broadcast Matn"); return
+    users = await db_all("SELECT id FROM users WHERE is_blocked=0")
+    sent = 0
+    for u in users:
+        try: await bot.send_message(u["id"], parts[1]); sent += 1; await asyncio.sleep(0.05)
+        except Exception: pass
+    await msg.answer(f"✅ Yuborildi: *{sent}* ta")
+
 # ── /debug ───────────────────────────────────────────────────────────────────
 # ── REKLAMA E'LON TIZIMI ─────────────────────────────────────────────────────
 # Narxlar: Toshkent shahri 200 ball, boshqa 50 ball
@@ -3332,6 +3321,175 @@ async def start_webserver():
                 content_type="application/json", status=500)
     app.router.add_post("/api/submit_offer", _submit_offer)
     app.router.add_post("/api/accept_offers", _accept_offers_handler)
+
+    # ── ADMIN API ─────────────────────────────────────────────────
+    async def _admin_check(req):
+        uid = int(req.query.get("uid", 0))
+        return uid in ADMIN_IDS
+
+    async def _admin_stats(req):
+        if not await _admin_check(req):
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json")
+        now   = datetime.now()
+        month = now.strftime("%Y-%m")
+        week  = (now - timedelta(days=7)).isoformat()
+
+        total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+        new_week  = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (week,)))["c"]
+        clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
+        sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
+        total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
+        total_d   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
+        month_n   = (await db_get("SELECT COUNT(*) as c FROM needs WHERE created_at LIKE ?", (f"{month}%",)))["c"]
+        month_d   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
+        rev_all   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
+        rev_month = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
+        regions   = await db_all(
+            "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(n.id) as needs "
+            "FROM users u LEFT JOIN needs n ON n.owner_id=u.id "
+            "WHERE u.role IN ('clinic','zubtex') AND u.region IS NOT NULL "
+            "GROUP BY u.region ORDER BY needs DESC LIMIT 10"
+        )
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":{
+                "total_users":total_u,"new_week":new_week,
+                "clinics":clinics,"sellers":sellers,
+                "total_needs":total_n,"total_deals":total_d,
+                "month":{"needs":month_n,"deals":month_d,
+                         "revenue":float(rev_month["s"] if rev_month else 0)},
+                "revenue":float(rev_all["s"] if rev_all else 0),
+                "regions":[{"region":r["region"],"users":r["users"],"needs":r["needs"]} for r in regions],
+            }}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/stats", _admin_stats)
+
+    async def _admin_checks(req):
+        if not await _admin_check(req):
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        txs = await db_all(
+            "SELECT t.*, COALESCE(u.clinic_name,u.full_name) as name "
+            "FROM transactions t JOIN users u ON t.user_id=u.id "
+            "WHERE t.status='pending' AND t.type='topup' ORDER BY t.created_at DESC LIMIT 20"
+        )
+        data = []
+        for tx in txs:
+            data.append({"id":tx["id"],"user_id":tx["user_id"],"name":tx["name"],
+                         "amount":tx["amount"],"balls":tx["balls"],
+                         "created_at":tx["created_at"],"photo":None})
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/checks", _admin_checks)
+
+    async def _admin_check_action(req):
+        try:
+            body     = await req.json()
+            action   = body.get("action")
+            tx_id    = int(body.get("tx_id",0))
+            user_id  = int(body.get("user_id",0))
+            admin_id = int(body.get("admin_id",0))
+            if admin_id not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                     content_type="application/json")
+            if action == "approve":
+                balls = float(body.get("balls",0))
+                await db_run("UPDATE transactions SET status='confirmed',confirmed_by=? WHERE id=?",
+                             (admin_id, tx_id))
+                await add_balance(user_id, balls)
+                try: await bot.send_message(user_id, f"🎉 Hisobingizga *{balls:.1f} ball* qo\'shildi!")
+                except Exception: pass
+            elif action == "reject":
+                await db_run("UPDATE transactions SET status='rejected',confirmed_by=? WHERE id=?",
+                             (admin_id, tx_id))
+                try: await bot.send_message(user_id, "❌ Chekingiz rad etildi.")
+                except Exception: pass
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/check_action", _admin_check_action)
+
+    async def _admin_users(req):
+        if not await _admin_check(req):
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        rows = await db_all(
+            "SELECT id, COALESCE(clinic_name,full_name,username) as name, role, region, created_at "
+            "FROM users ORDER BY created_at DESC LIMIT 100"
+        )
+        data = [{"id":r["id"],"name":r["name"],"role":r["role"],
+                 "region":r["region"],"created_at":r["created_at"]} for r in rows]
+        return _web.Response(text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+                             content_type="application/json",
+                             headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/users", _admin_users)
+
+    async def _admin_settings(req):
+        if not await _admin_check(req):
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        data = {
+            "ball_price":  await get_setting("ball_price") or "1000",
+            "card_number": await get_setting("card_number") or "",
+            "elon_price":  await get_setting("elon_price") or "0",
+        }
+        return _web.Response(text=_json.dumps({"ok":True,"data":data}),
+                             content_type="application/json",
+                             headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/settings", _admin_settings)
+
+    async def _admin_save_settings(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            for key in ["ball_price","card_number","elon_price"]:
+                if key in body: await update_setting(key, str(body[key]))
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/save_settings", _admin_save_settings)
+
+    async def _admin_broadcast_api(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            text  = body.get("text","")
+            users = await db_all("SELECT id FROM users WHERE is_blocked=0")
+            sent  = 0
+            for u in users:
+                try:
+                    await bot.send_message(u["id"], text)
+                    sent += 1
+                    await asyncio.sleep(0.05)
+                except Exception: pass
+            return _web.Response(text=_json.dumps({"ok":True,"sent":sent}),
+                                 content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/broadcast", _admin_broadcast_api)
+
+    async def _admin_page(req):
+        path = os.path.join(BASE_DIR, "webapp", "admin.html")
+        if os.path.exists(path):
+            return _web.FileResponse(path)
+        return _web.Response(text="admin.html topilmadi", status=404)
+    app.router.add_get("/admin", _admin_page)
+
+    async def _admin_excel_dl(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text="ruxsat yo'q", status=403)
+        path = await build_admin_excel()
+        if not path:
+            return _web.Response(text="Excel yaratib bo'lmadi", status=500)
+        return _web.FileResponse(path, headers={
+            "Content-Disposition": f"attachment; filename=xazdent_admin.xlsx"
+        })
+    app.router.add_get("/api/admin/excel", _admin_excel_dl)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
         app.router.add_static("/static", webapp_dir)
