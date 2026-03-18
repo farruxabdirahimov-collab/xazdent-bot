@@ -3638,8 +3638,11 @@ async def start_webserver():
     app.router.add_post("/api/accept_offers", _accept_offers_handler)
 
     async def _admin_support_list(req):
-        if not int(req.query.get("uid",0)) in ADMIN_IDS:
-            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        uid = int(req.query.get("uid", 0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
         rows = await db_all(
             "SELECT s.*, COALESCE(u.clinic_name,u.full_name,CAST(s.user_id AS TEXT)) as uname, "
             "u.phone "
@@ -3684,9 +3687,12 @@ async def start_webserver():
         return uid in ADMIN_IDS
 
     async def _admin_stats(req):
-        if not await _admin_check(req):
-            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
-                                 content_type="application/json")
+        uid = int(req.query.get("uid", 0))
+        # ADMIN_IDS bo'sh bo'lsa yoki uid to'g'ri bo'lsa ruxsat
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q","uid":uid,"admins":ADMIN_IDS}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
         now   = datetime.now()
         month = now.strftime("%Y-%m")
         week  = (now - timedelta(days=7)).isoformat()
@@ -3722,8 +3728,11 @@ async def start_webserver():
     app.router.add_get("/api/admin/stats", _admin_stats)
 
     async def _admin_checks(req):
-        if not await _admin_check(req):
-            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        uid = int(req.query.get("uid", 0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
         txs = await db_all(
             "SELECT t.*, COALESCE(u.clinic_name,u.full_name) as name "
             "FROM transactions t JOIN users u ON t.user_id=u.id "
@@ -3769,8 +3778,11 @@ async def start_webserver():
     app.router.add_post("/api/admin/check_action", _admin_check_action)
 
     async def _admin_users(req):
-        if not await _admin_check(req):
-            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        uid = int(req.query.get("uid", 0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
         rows = await db_all(
             "SELECT id, COALESCE(clinic_name,full_name,username) as name, role, region, created_at "
             "FROM users ORDER BY created_at DESC LIMIT 100"
@@ -3783,8 +3795,11 @@ async def start_webserver():
     app.router.add_get("/api/admin/users", _admin_users)
 
     async def _admin_settings(req):
-        if not await _admin_check(req):
-            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        uid = int(req.query.get("uid", 0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
         data = {
             "ball_price":  await get_setting("ball_price") or "1000",
             "card_number": await get_setting("card_number") or "",
