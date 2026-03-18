@@ -136,7 +136,16 @@ input.s-input:focus{border-color:var(--btn)}
 <script>
 var tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
-var userId = tg && tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : 0;
+
+// userId olish — bir necha usul bilan
+var userId = 0;
+if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+  userId = tg.initDataUnsafe.user.id;
+}
+// URL dan ham tekshiramiz (fallback)
+var _qp = new URLSearchParams(window.location.search);
+if (!userId && _qp.get('uid')) userId = parseInt(_qp.get('uid'));
+
 var loaded = {};
 
 function showTab(tab) {
@@ -204,7 +213,8 @@ function loadStats() {
         '</div>';
     })
     .catch(function(e) {
-      document.getElementById('stats-content').innerHTML = '<div class="loading">Xato: ' + e.message + '</div>';
+      document.getElementById('stats-content').innerHTML =
+        '<div class="loading">Xato: ' + e.message + '<br><small>userId=' + userId + '</small></div>';
     });
 }
 
