@@ -121,9 +121,10 @@ def kb_role(lg):
 
 def kb_clinic(lg):
     return rk(
-        [KeyboardButton(text="📋 Ehtiyojlarim"), KeyboardButton(text="✏️ Ehtiyoj yozish")],
-        [KeyboardButton(text="📩 Takliflar"),     KeyboardButton(text="💰 Hisobim")],
-        [KeyboardButton(text="📦 Mahsulotlarim"), KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📋 Ehtiyojlarim"),  KeyboardButton(text="✏️ Ehtiyoj yozish")],
+        [KeyboardButton(text="📩 Takliflar"),      KeyboardButton(text="💰 Hisobim")],
+        [KeyboardButton(text="📦 Mahsulotlarim"),  KeyboardButton(text="📊 Tejash")],
+        [KeyboardButton(text="⚙️ Profil"),         KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_seller(lg):
@@ -198,7 +199,7 @@ async def get_or_create_room(uid):
 
 async def post_to_channel(need_id, need):
     """1 ta ehtiyoj uchun kanal posti (qayta post uchun)."""
-    dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+    dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta",240:"10 kun"}
     dl_txt = dl_map.get(need["deadline_hours"], f"{need['deadline_hours']} soat")
     owner  = await get_user(need["owner_id"])
     words  = need["product_name"].split()
@@ -223,11 +224,11 @@ async def post_to_channel(need_id, need):
         log.error(f"❌ Kanal xato: {e}")
         return None
 
-async def post_batch_to_channel(batch_id, needs_list, owner):
+async def post_batch_to_channel(batch_id, needs_list, owner, photo_file_id=None):
     """Ko'p ehtiyoj uchun BITTA paket post."""
     if not needs_list:
         return None
-    dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+    dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta",240:"10 kun"}
     dl_txt = dl_map.get(needs_list[0]["deadline_hours"], "?")
     lines  = "\n".join([
         f"• {n['product_name']} — {n['quantity']} {n['unit']}"
@@ -257,7 +258,11 @@ async def post_batch_to_channel(batch_id, needs_list, owner):
         deep_url = f"https://t.me/{bot_info.username}?start=batch_{batch_id}"
     kb = ik([ib("📤 Taklif yuborish", url=deep_url)])
     try:
-        m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
+        if photo_file_id:
+            m = await bot.send_photo(CHANNEL_ID, photo_file_id,
+                                     caption=txt, reply_markup=kb)
+        else:
+            m = await bot.send_message(CHANNEL_ID, txt, reply_markup=kb)
         log.info(f"✅ Batch kanal post: batch={batch_id} msg={m.message_id}")
         return m.message_id
     except Exception as e:
@@ -853,10 +858,20 @@ async def notify_sellers_batch(batch_id: int, owner_id: int):
         f"📍 {owner['region'] or ''}\n"
         f"⏱ {dl_map.get(needs[0]['deadline_hours'], '?')} ichida"
     )
+    # Batch dagi rasmni topamiz
+    photo_id = None
+    for n in needs:
+        if n.get("photo_file_id"):
+            photo_id = n["photo_file_id"]
+            break
+
     sent = 0
     for s in sellers:
         try:
-            await bot.send_message(s["id"], txt, reply_markup=kb)
+            if photo_id:
+                await bot.send_photo(s["id"], photo_id, caption=txt, reply_markup=kb)
+            else:
+                await bot.send_message(s["id"], txt, reply_markup=kb)
             sent += 1
             await asyncio.sleep(0.05)
         except Exception:
@@ -2683,6 +2698,10 @@ class SupportState(StatesGroup):
     waiting_message = State()
     waiting_reply   = State()
 
+class PhotoOrderState(StatesGroup):
+    waiting_photo   = State()
+    waiting_caption = State()
+
 @router.callback_query(F.data == "support_start")
 async def support_start(call: CallbackQuery, state: FSMContext):
     await state.set_state(SupportState.waiting_message)
@@ -2795,6 +2814,142 @@ async def open_support(call: CallbackQuery, state: FSMContext):
 async def cancel_support(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.message.delete()
+    await call.answer()
+
+# ── RASM BILAN BUYURTMA (bot orqali) ─────────────────────────────────────────
+@router.message(F.photo, F.func(lambda msg: True))
+async def handle_photo_message(msg: Message, state: FSMContext):
+    """Foydalanuvchi botga rasm yuborsa — buyurtma berish imkonini taklif qilamiz."""
+    cur_state = await state.get_state()
+    # Boshqa state da bo'lsa — bu handlerni ishlatmaymiz
+    if cur_state and cur_state not in (None, ""):
+        return
+
+    uid = msg.from_user.id
+    u   = await get_user(uid)
+    if not u or u["role"] not in ("clinic", "zubtex"):
+        return
+
+    file_id = msg.photo[-1].file_id
+    await state.set_state(PhotoOrderState.waiting_caption)
+    await state.update_data(order_photo_id=file_id)
+    await msg.answer(
+        "📷 *Rasm qabul qilindi!*\n\n"
+        "Endi qisqacha yozing:\n"
+        "_Mahsulot nomi, miqdori — masalan:_\n"
+        "`GC Fuji 2 kg, Xarizma A2 5 dona`\n\n"
+        "/cancel — bekor qilish",
+        reply_markup=ik([ib("✖️ Bekor qilish", "cancel_photo_order")])
+    )
+
+@router.message(PhotoOrderState.waiting_caption, F.text)
+async def photo_order_caption(msg: Message, state: FSMContext):
+    if msg.text.startswith("/"):
+        await state.clear()
+        await msg.answer("❌ Bekor qilindi.")
+        return
+
+    d        = await state.get_data()
+    photo_id = d.get("order_photo_id")
+    uid      = msg.from_user.id
+    u        = await get_user(uid)
+
+    # Matndan mahsulotlarni oddiy parse qilamiz
+    caption  = msg.text.strip()
+    items    = []
+    for line in caption.replace(",", "\n").split("\n"):
+        line = line.strip()
+        if not line: continue
+        parts = line.split()
+        if len(parts) >= 2:
+            # Raqamni topamiz
+            qty = None
+            unit = "dona"
+            name_parts = []
+            for p in parts:
+                p_clean = p.replace(",","").replace(".","")
+                if p_clean.isdigit() and qty is None:
+                    qty = float(p_clean)
+                elif p_clean in ["kg","litr","quti","paket","ml","gr","dona"] and qty is not None:
+                    unit = p_clean
+                else:
+                    name_parts.append(p)
+            if name_parts and qty:
+                items.append({"name":" ".join(name_parts),"qty":qty,"unit":unit})
+            elif name_parts:
+                items.append({"name":" ".join(name_parts),"qty":1,"unit":"dona"})
+        elif line:
+            items.append({"name":line,"qty":1,"unit":"dona"})
+
+    if not items:
+        await msg.answer("⚠️ Mahsulot nomini aniqlab bo'lmadi. Qayta yuboring.")
+        return
+
+    # Deadline tanlash
+    await state.update_data(photo_items=items, photo_caption=caption)
+    preview = "\n".join([f"• {it['qty']} {it['unit']} — {it['name']}" for it in items])
+    await msg.answer(
+        f"✅ *Topildi:*\n{preview}\n\n"
+        f"Qachongacha kerak?",
+        reply_markup=ik(
+            [ib("⚡️ 2 soat",  "pod_2"),   ib("🕐 24 soat", "pod_24")],
+            [ib("📅 3 kun",    "pod_72"),   ib("🗓 1 hafta", "pod_168")],
+            [ib("📆 10 kun",   "pod_240")],
+            [ib("✖️ Bekor",    "cancel_photo_order")],
+        )
+    )
+
+@router.callback_query(F.data.startswith("pod_"), PhotoOrderState.waiting_caption)
+async def photo_order_deadline(call: CallbackQuery, state: FSMContext):
+    deadline = int(call.data[4:])
+    d        = await state.get_data()
+    items    = d.get("photo_items", [])
+    photo_id = d.get("order_photo_id")
+    uid      = call.from_user.id
+    u        = await get_user(uid)
+
+    if not items or not u:
+        await call.answer("Xato", show_alert=True)
+        await state.clear()
+        return
+
+    room    = await get_or_create_room(uid)
+    expires = (datetime.now() + timedelta(hours=deadline)).isoformat()
+    batch_id = await db_insert(
+        "INSERT INTO batches(owner_id,deadline_hours,expires_at) VALUES(?,?,?)",
+        (uid, deadline, expires)
+    )
+    saved = []
+    for item in items:
+        nid = await db_insert(
+            "INSERT INTO needs(batch_id,room_id,owner_id,product_name,quantity,unit,"
+            "deadline_hours,expires_at,photo_file_id) VALUES(?,?,?,?,?,?,?,?,?)",
+            (batch_id, room["id"], uid, item["name"],
+             float(item["qty"]), item["unit"], deadline, expires, photo_id)
+        )
+        need = await db_get("SELECT * FROM needs WHERE id=?", (nid,))
+        saved.append(dict(need))
+
+    mid = await post_batch_to_channel(batch_id, saved, dict(u), photo_id)
+    if mid:
+        for n in saved:
+            await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
+
+    dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta",240:"10 kun"}
+    await state.clear()
+    chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
+    link = f"\n[Kanalda ko\'rish](https://t.me/{chan}/{mid})" if mid else ""
+    await call.message.edit_text(
+        f"✅ *{len(saved)} ta mahsulot joylashtirildi!*{link}\n\n"
+        f"⏱ {dl_map.get(deadline, str(deadline)+' soat')} ichida"
+    )
+    asyncio.create_task(notify_sellers_batch(batch_id, uid))
+    await call.answer("✅")
+
+@router.callback_query(F.data == "cancel_photo_order")
+async def cancel_photo_order(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.edit_text("❌ Bekor qilindi.")
     await call.answer()
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
@@ -3390,7 +3545,7 @@ async def start_webserver():
             if mid:
                 for n in saved:
                     await db_run("UPDATE needs SET channel_message_id=? WHERE id=?", (mid, n["id"]))
-            dl_map  = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta"}
+            dl_map  = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta",240:"10 kun"}
             preview = "\n".join([f"• {n['quantity']} {n['unit']} — {n['product_name']}" for n in saved[:5]])
             chan = CHANNEL_ID.lstrip("@") if isinstance(CHANNEL_ID, str) else str(CHANNEL_ID)
             link = f"\n[Kanalda ko'rish](https://t.me/{chan}/{mid})" if mid else ""
