@@ -1983,9 +1983,12 @@ async def cmd_admin(msg: Message):
     if msg.from_user.id not in ADMIN_IDS: return
     if not WEBAPP_URL:
         await msg.answer("⚠️ WEBAPP_URL sozlanmagan"); return
+    uid = msg.from_user.id
+    # uid ni URL ga qo'shamiz — Mini App ichida initDataUnsafe ishlamasa ham ishlaydi
+    url = f"{WEBAPP_URL}/admin?uid={uid}"
     await msg.answer(
         "👨‍💼 *Admin panel*",
-        reply_markup=ik([ib("🖥 Ochish →", web_app=WebAppInfo(url=f"{WEBAPP_URL}/admin"))])
+        reply_markup=ik([ib("🖥 Ochish →", web_app=WebAppInfo(url=url))])
     )
 
 @router.message(Command("setball"))
