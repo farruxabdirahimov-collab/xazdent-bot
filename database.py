@@ -77,6 +77,9 @@ async def init_db():
             expires_at TEXT
         )""")
         await c.execute("ALTER TABLE needs ADD COLUMN IF NOT EXISTS payment_methods TEXT")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER DEFAULT 1")
         await c.execute("ALTER TABLE needs ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
         await c.execute("""
         CREATE TABLE IF NOT EXISTS offers (
