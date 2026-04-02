@@ -123,8 +123,9 @@ def kb_clinic(lg):
     return rk(
         [KeyboardButton(text="📋 Ehtiyojlarim"),  KeyboardButton(text="✏️ Ehtiyoj yozish")],
         [KeyboardButton(text="📩 Takliflar"),      KeyboardButton(text="💰 Hisobim")],
-        [KeyboardButton(text="📦 Mahsulotlarim"),  KeyboardButton(text="📊 Tejash")],
-        [KeyboardButton(text="⚙️ Profil"),         KeyboardButton(text="📖 Yordam")],
+        [KeyboardButton(text="🛍 Katalog"),        KeyboardButton(text="📦 Mahsulotlarim")],
+        [KeyboardButton(text="📊 Tejash"),         KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_seller(lg):
@@ -1796,17 +1797,26 @@ async def prod_add_unit(call: CallbackQuery, state: FSMContext):
 # ── DO'KON ────────────────────────────────────────────────────────────────────
 @router.message(F.text == "🏪 Do'konim")
 async def my_shop(msg: Message):
-    shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (msg.from_user.id,))
+    uid  = msg.from_user.id
+    shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
     if not shop:
         await msg.answer(
             "🏪 Do'koningiz yo'q yoki tasdiqlanmagan.",
             reply_markup=ik([ib("➕ Do'kon ochish", "open_shop")]),
         )
         return
+    prod_count = (await db_get("SELECT COUNT(*) as c FROM products WHERE shop_id=? AND is_active=1", (shop["id"],)))["c"]
+    catalog_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller" if WEBAPP_URL else None
+    kb = ik(
+        [ib("🛍 Katalog (mini app)", web_app=WebAppInfo(url=catalog_url))] if catalog_url else [],
+        [ib("📦 Mahsulotlar: " + str(prod_count) + " ta", "shop_products")],
+    )
     await msg.answer(
         f"🏪 *{shop['shop_name']}*\n"
         f"📂 {shop['category']}\n"
-        f"🤝 Xaridlar: *{shop['total_deals'] or 0} ta*",
+        f"🤝 Xaridlar: *{shop['total_deals'] or 0} ta*\n"
+        f"📦 Mahsulotlar: *{prod_count} ta*",
+        reply_markup=kb
     )
 
 @router.callback_query(F.data == "open_shop")
@@ -2955,6 +2965,20 @@ async def cancel_photo_order(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text("❌ Bekor qilindi.")
     await call.answer()
 
+@router.message(F.text == "🛍 Katalog")
+async def catalog_btn(msg: Message):
+    uid  = msg.from_user.id
+    u    = await get_user(uid)
+    role = u["role"] if u else "clinic"
+    if not WEBAPP_URL:
+        await msg.answer("Katalog hozircha ishlamayapti.")
+        return
+    url = f"{WEBAPP_URL}/catalog?uid={uid}&role={role}"
+    await msg.answer(
+        "🛍 *Katalog*\n\nSotuvchilarning mahsulotlari:",
+        reply_markup=ik([ib("🛍 Katalogni ochish →", web_app=WebAppInfo(url=url))])
+    )
+
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
 async def fallback(msg: Message, state: FSMContext):
@@ -3639,6 +3663,183 @@ async def start_webserver():
                 content_type="application/json", status=500)
     app.router.add_post("/api/submit_offer", _submit_offer)
     app.router.add_post("/api/accept_offers", _accept_offers_handler)
+
+    # ── KATALOG API ────────────────────────────────────────────────
+    async def _catalog_page(req):
+        path = os.path.join(BASE_DIR, "webapp", "catalog.html")
+        if os.path.exists(path): return _web.FileResponse(path)
+        return _web.Response(text="catalog.html topilmadi", status=404)
+    app.router.add_get("/catalog", _catalog_page)
+
+    async def _api_catalog(req):
+        cat  = req.query.get("cat", "")
+        q    = req.query.get("q", "").lower().strip()
+        query = (
+            "SELECT p.*, s.shop_name, u.region "
+            "FROM products p "
+            "JOIN shops s ON p.shop_id=s.id "
+            "JOIN users u ON s.owner_id=u.id "
+            "WHERE s.status='active' AND p.is_active=1"
+        )
+        params = []
+        if cat:
+            query += " AND p.category_id=?"
+            params.append(int(cat))
+        query += " ORDER BY p.created_at DESC LIMIT 60"
+        rows = await db_all(query, tuple(params))
+        # Qidirish
+        if q:
+            rows = [r for r in rows if q in (r["name"] or "").lower()]
+        data = [{
+            "id": r["id"], "name": r["name"], "price": r["price"],
+            "unit": r["unit"], "shop_name": r["shop_name"],
+            "region": r["region"], "stock": r["stock"] or 0,
+            "photo": None
+        } for r in rows]
+        return _web.Response(
+            text=_json.dumps({"products": data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/catalog", _api_catalog)
+
+    async def _api_catalog_my(req):
+        uid  = int(req.query.get("uid", 0))
+        shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
+        if not shop:
+            return _web.Response(
+                text=_json.dumps({"products": [], "error": "do'kon yo'q"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+        cats = {1:"🦷 Terapevtik",2:"⚙️ Jarrohlik",3:"🔬 Zubtexnik",
+                4:"🧪 Dezinfeksiya",5:"💡 Uskunalar"}
+        rows = await db_all(
+            "SELECT * FROM products WHERE shop_id=? ORDER BY created_at DESC", (shop["id"],))
+        data = [{"id":r["id"],"name":r["name"],"price":r["price"],"unit":r["unit"],
+                 "stock":r["stock"] or 0,"is_active":r["is_active"],
+                 "category": cats.get(r["category_id"] or 1,""),
+                 "photo":None} for r in rows]
+        return _web.Response(
+            text=_json.dumps({"products": data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/catalog/my", _api_catalog_my)
+
+    async def _api_catalog_product(req):
+        pid  = int(req.match_info.get("product_id", 0))
+        row  = await db_get(
+            "SELECT p.*, s.shop_name, u.region "
+            "FROM products p JOIN shops s ON p.shop_id=s.id "
+            "JOIN users u ON s.owner_id=u.id WHERE p.id=?", (pid,))
+        if not row:
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":"topilmadi"}),
+                content_type="application/json")
+        return _web.Response(
+            text=_json.dumps({"ok":True,"product":{
+                "id":row["id"],"name":row["name"],"price":row["price"],
+                "unit":row["unit"],"description":row["description"],
+                "shop_name":row["shop_name"],"region":row["region"],
+                "stock":row["stock"] or 0,"photo":None
+            }}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/catalog/product/{product_id}", _api_catalog_product)
+
+    async def _api_add_product(req):
+        try:
+            body   = await req.json()
+            uid    = int(body.get("user_id", 0))
+            name   = body.get("name","").strip()
+            price  = float(body.get("price", 0))
+            cat_id = int(body.get("category_id", 1))
+            unit   = body.get("unit","dona")
+            desc   = body.get("description","") or ""
+            stock  = int(body.get("stock", 0))
+            img_b64= body.get("image")
+
+            if not name or price <= 0:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"nom va narx kerak"}),
+                    content_type="application/json")
+            shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
+            if not shop:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"do'kon yo'q yoki tasdiqlanmagan"}),
+                    content_type="application/json")
+
+            # Rasm
+            photo_id = None
+            if img_b64:
+                try:
+                    import base64 as _b64
+                    img_bytes = _b64.b64decode(img_b64)
+                    buf = BufferedInputFile(img_bytes, filename="prod.jpg")
+                    sent = await bot.send_photo(
+                        ADMIN_IDS[0] if ADMIN_IDS else uid, buf,
+                        caption=f"📦 Mahsulot rasmi: {name}"
+                    )
+                    photo_id = sent.photo[-1].file_id
+                except Exception as e:
+                    log.error(f"Product photo xato: {e}")
+
+            pid = await db_insert(
+                "INSERT INTO products(shop_id,name,price,unit,description,stock,category_id,photo_file_id) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (shop["id"], name, price, unit, desc, stock, cat_id, photo_id)
+            )
+            return _web.Response(
+                text=_json.dumps({"ok":True,"product_id":pid}),
+                content_type="application/json")
+        except Exception as e:
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":str(e)}),
+                content_type="application/json")
+    app.router.add_post("/api/catalog/add_product", _api_add_product)
+
+    async def _api_del_product(req):
+        try:
+            body = await req.json()
+            uid  = int(body.get("user_id", 0))
+            pid  = int(body.get("product_id", 0))
+            shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+            if not shop: return _web.Response(
+                text=_json.dumps({"ok":False}), content_type="application/json")
+            await db_run("DELETE FROM products WHERE id=? AND shop_id=?", (pid, shop["id"]))
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/catalog/del_product", _api_del_product)
+
+    async def _api_quick_order(req):
+        try:
+            body = await req.json()
+            pid  = int(body.get("product_id", 0))
+            uid  = int(body.get("user_id", 0))
+            prod = await db_get(
+                "SELECT p.*, s.owner_id as seller_id, s.shop_name "
+                "FROM products p JOIN shops s ON p.shop_id=s.id WHERE p.id=?", (pid,))
+            if not prod:
+                return _web.Response(text=_json.dumps({"ok":False,"error":"topilmadi"}),
+                                     content_type="application/json")
+            u = await get_user(uid)
+            uname = (u["clinic_name"] or u["full_name"] or str(uid)) if u else str(uid)
+            # Sotuvchiga xabar
+            try:
+                await bot.send_message(
+                    prod["seller_id"],
+                    f"📦 *Katalogdan so\'rov!*\n\n"
+                    f"🏥 {uname}\n"
+                    f"📌 {prod['name']} — {prod['price']:,.0f} so\'m/{prod['unit']}\n\n"
+                    f"📞 {u['phone'] if u else '—'}\n"
+                    f"📍 {u['region'] if u else '—'}"
+                )
+            except Exception: pass
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/catalog/quick_order", _api_quick_order)
 
     async def _admin_support_list(req):
         uid = int(req.query.get("uid", 0))
