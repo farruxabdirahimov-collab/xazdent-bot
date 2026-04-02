@@ -21,7 +21,6 @@ def _rows(rs):
     return [Row(dict(r)) for r in rs]
 
 def _q(query):
-    """SQLite ? → PostgreSQL $1,$2..."""
     out, n, i = [], 0, 0
     while i < len(query):
         if query[i] == '?':
@@ -39,6 +38,7 @@ def _q(query):
 async def init_db():
     pool = await get_pool()
     async with pool.acquire() as c:
+        # users
         await c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id BIGINT PRIMARY KEY, username TEXT, full_name TEXT, phone TEXT,
@@ -49,8 +49,12 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
         await c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS payment_methods TEXT")
+
+        # settings
         await c.execute("""
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)""")
+
+        # rooms
         await c.execute("""
         CREATE TABLE IF NOT EXISTS rooms (
             id SERIAL PRIMARY KEY, room_code TEXT UNIQUE NOT NULL,
@@ -58,6 +62,8 @@ async def init_db():
             max_needs INTEGER NOT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+
+        # batches
         await c.execute("""
         CREATE TABLE IF NOT EXISTS batches (
             id SERIAL PRIMARY KEY, owner_id BIGINT NOT NULL,
@@ -65,6 +71,8 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
             expires_at TEXT
         )""")
+
+        # needs
         await c.execute("""
         CREATE TABLE IF NOT EXISTS needs (
             id SERIAL PRIMARY KEY, batch_id INTEGER, room_id INTEGER,
@@ -73,14 +81,14 @@ async def init_db():
             deadline_hours INTEGER NOT NULL DEFAULT 24, extra_note TEXT,
             status TEXT DEFAULT 'active', channel_message_id BIGINT,
             payment_methods TEXT DEFAULT NULL,
+            photo_file_id TEXT DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
             expires_at TEXT
         )""")
         await c.execute("ALTER TABLE needs ADD COLUMN IF NOT EXISTS payment_methods TEXT")
-        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
-        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0")
-        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER DEFAULT 1")
         await c.execute("ALTER TABLE needs ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
+
+        # offers
         await c.execute("""
         CREATE TABLE IF NOT EXISTS offers (
             id SERIAL PRIMARY KEY, need_id INTEGER, batch_id INTEGER,
@@ -89,6 +97,8 @@ async def init_db():
             note TEXT, status TEXT DEFAULT 'pending',
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+
+        # shops
         await c.execute("""
         CREATE TABLE IF NOT EXISTS shops (
             id SERIAL PRIMARY KEY, owner_id BIGINT, shop_name TEXT NOT NULL,
@@ -97,13 +107,23 @@ async def init_db():
             total_deals INTEGER DEFAULT 0,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+
+        # products — avval CREATE, keyin ALTER
         await c.execute("""
         CREATE TABLE IF NOT EXISTS products (
             id SERIAL PRIMARY KEY, shop_id INTEGER NOT NULL,
             name TEXT NOT NULL, price REAL NOT NULL, unit TEXT NOT NULL,
             description TEXT, is_active INTEGER DEFAULT 1,
+            photo_file_id TEXT DEFAULT NULL,
+            stock INTEGER DEFAULT 0,
+            category_id INTEGER DEFAULT 1,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER DEFAULT 1")
+
+        # transactions
         await c.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id SERIAL PRIMARY KEY, user_id BIGINT, amount REAL NOT NULL,
@@ -111,6 +131,8 @@ async def init_db():
             receipt_file_id TEXT, confirmed_by BIGINT, note TEXT,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+
+        # clinic_products
         await c.execute("""
         CREATE TABLE IF NOT EXISTS clinic_products (
             id SERIAL PRIMARY KEY, owner_id BIGINT NOT NULL,
@@ -118,22 +140,26 @@ async def init_db():
             sort_order INTEGER DEFAULT 0,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+
+        # support_messages
         await c.execute("""
         CREATE TABLE IF NOT EXISTS support_messages (
-            id SERIAL PRIMARY KEY,
-            user_id BIGINT NOT NULL,
-            message TEXT NOT NULL,
-            admin_reply TEXT,
-            status TEXT DEFAULT 'new',
+            id SERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+            message TEXT NOT NULL, admin_reply TEXT,
+            status TEXT DEFAULT 'new', admin_id BIGINT,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS'),
             replied_at TEXT
         )""")
         await c.execute("ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT")
+
+        # default settings
         await c.execute("""
         INSERT INTO settings(key,value) VALUES
             ('ball_price','1000'),('elon_price','0'),('card_number','9860020138100068')
         ON CONFLICT(key) DO NOTHING""")
+
     print("✅ Database tayyor!")
+
 
 async def db_get(query, params=()):
     pool = await get_pool()
