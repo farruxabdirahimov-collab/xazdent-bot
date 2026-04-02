@@ -3,7 +3,7 @@ import os
 import logging
 from datetime import datetime, timedelta
 
-åfrom dotenv import load_dotenv
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import BufferedInputFile
