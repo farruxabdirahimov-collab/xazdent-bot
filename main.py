@@ -1807,10 +1807,14 @@ async def my_shop(msg: Message):
         return
     prod_count = (await db_get("SELECT COUNT(*) as c FROM products WHERE shop_id=? AND is_active=1", (shop["id"],)))["c"]
     catalog_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller" if WEBAPP_URL else None
-    kb = ik(
-        [ib("🛍 Katalog (mini app)", web_app=WebAppInfo(url=catalog_url))] if catalog_url else [],
-        [ib("📦 Mahsulotlar: " + str(prod_count) + " ta", "shop_products")],
-    )
+    add_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller" if WEBAPP_URL else None
+    kb_rows = []
+    if catalog_url:
+        kb_rows.append([ib("🛍 Katalog", web_app=WebAppInfo(url=catalog_url))])
+    if add_url:
+        kb_rows.append([ib("➕ Mahsulot qo\'shish", web_app=WebAppInfo(url=add_url+"&action=add"))])
+    kb_rows.append([ib("📦 Mahsulotlarim (" + str(prod_count) + " ta)", "shop_products")])
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     await msg.answer(
         f"🏪 *{shop['shop_name']}*\n"
         f"📂 {shop['category']}\n"
@@ -3675,7 +3679,7 @@ async def start_webserver():
         cat  = req.query.get("cat", "")
         q    = req.query.get("q", "").lower().strip()
         query = (
-            "SELECT p.*, s.shop_name, u.region "
+            "SELECT p.*, s.shop_name, s.owner_id as seller_id, u.region "
             "FROM products p "
             "JOIN shops s ON p.shop_id=s.id "
             "JOIN users u ON s.owner_id=u.id "
@@ -3687,15 +3691,29 @@ async def start_webserver():
             params.append(int(cat))
         query += " ORDER BY p.created_at DESC LIMIT 60"
         rows = await db_all(query, tuple(params))
-        # Qidirish
         if q:
             rows = [r for r in rows if q in (r["name"] or "").lower()]
-        data = [{
-            "id": r["id"], "name": r["name"], "price": r["price"],
-            "unit": r["unit"], "shop_name": r["shop_name"],
-            "region": r["region"], "stock": r["stock"] or 0,
-            "photo": None
-        } for r in rows]
+        cats = {1:"🦷 Terapevtik",2:"⚙️ Jarrohlik",3:"🔬 Zubtexnik",
+                4:"🧪 Dezinfeksiya",5:"💡 Uskunalar"}
+        # Har mahsulot uchun rasmlar va variantlar
+        data = []
+        for r in rows:
+            photos_rows = await db_all(
+                "SELECT file_id FROM product_photos WHERE product_id=? ORDER BY sort_order",
+                (r["id"],))
+            vars_rows = await db_all(
+                "SELECT size_name, article, stock FROM product_variants WHERE product_id=? ORDER BY id",
+                (r["id"],))
+            data.append({
+                "id": r["id"], "name": r["name"], "price": r["price"],
+                "unit": r["unit"], "shop_name": r["shop_name"],
+                "seller_id": r["seller_id"],
+                "region": r["region"], "stock": r["stock"] or 0,
+                "category": cats.get(r["category_id"] or 1,""),
+                "description": r["description"] or "",
+                "photos": [p["file_id"] for p in photos_rows],
+                "variants": [{"size_name":v["size_name"],"article":v["article"],"stock":v["stock"]} for v in vars_rows]
+            })
         return _web.Response(
             text=_json.dumps({"products": data}, ensure_ascii=False),
             content_type="application/json",
@@ -3714,10 +3732,21 @@ async def start_webserver():
                 4:"🧪 Dezinfeksiya",5:"💡 Uskunalar"}
         rows = await db_all(
             "SELECT * FROM products WHERE shop_id=? ORDER BY created_at DESC", (shop["id"],))
-        data = [{"id":r["id"],"name":r["name"],"price":r["price"],"unit":r["unit"],
-                 "stock":r["stock"] or 0,"is_active":r["is_active"],
-                 "category": cats.get(r["category_id"] or 1,""),
-                 "photo":None} for r in rows]
+        data = []
+        for r in rows:
+            ph_rows = await db_all(
+                "SELECT file_id FROM product_photos WHERE product_id=? ORDER BY sort_order",
+                (r["id"],))
+            vr_rows = await db_all(
+                "SELECT size_name, article, stock FROM product_variants WHERE product_id=? ORDER BY id",
+                (r["id"],))
+            data.append({
+                "id":r["id"],"name":r["name"],"price":r["price"],"unit":r["unit"],
+                "stock":r["stock"] or 0,"is_active":r["is_active"],
+                "category": cats.get(r["category_id"] or 1,""),
+                "photos":[p["file_id"] for p in ph_rows],
+                "variants":[{"size_name":v["size_name"],"article":v["article"],"stock":v["stock"]} for v in vr_rows]
+            })
         return _web.Response(
             text=_json.dumps({"products": data}, ensure_ascii=False),
             content_type="application/json",
@@ -3747,15 +3776,15 @@ async def start_webserver():
 
     async def _api_add_product(req):
         try:
-            body   = await req.json()
-            uid    = int(body.get("user_id", 0))
-            name   = body.get("name","").strip()
-            price  = float(body.get("price", 0))
-            cat_id = int(body.get("category_id", 1))
-            unit   = body.get("unit","dona")
-            desc   = body.get("description","") or ""
-            stock  = int(body.get("stock", 0))
-            img_b64= body.get("image")
+            body     = await req.json()
+            uid      = int(body.get("user_id", 0))
+            name     = body.get("name","").strip()
+            price    = float(body.get("price", 0))
+            cat_id   = int(body.get("category_id", 1))
+            unit     = body.get("unit","dona")
+            desc     = body.get("description","") or ""
+            images   = body.get("images", [])   # list of base64
+            variants = body.get("variants", [])  # [{size_name,article,stock}]
 
             if not name or price <= 0:
                 return _web.Response(
@@ -3764,33 +3793,52 @@ async def start_webserver():
             shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
             if not shop:
                 return _web.Response(
-                    text=_json.dumps({"ok":False,"error":"do'kon yo'q yoki tasdiqlanmagan"}),
+                    text=_json.dumps({"ok":False,"error":"do\'kon yo\'q yoki tasdiqlanmagan"}),
                     content_type="application/json")
 
-            # Rasm
-            photo_id = None
-            if img_b64:
-                try:
-                    import base64 as _b64
-                    img_bytes = _b64.b64decode(img_b64)
-                    buf = BufferedInputFile(img_bytes, filename="prod.jpg")
-                    sent = await bot.send_photo(
-                        ADMIN_IDS[0] if ADMIN_IDS else uid, buf,
-                        caption=f"📦 Mahsulot rasmi: {name}"
-                    )
-                    photo_id = sent.photo[-1].file_id
-                except Exception as e:
-                    log.error(f"Product photo xato: {e}")
-
+            # Asosiy mahsulot yozish
             pid = await db_insert(
-                "INSERT INTO products(shop_id,name,price,unit,description,stock,category_id,photo_file_id) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (shop["id"], name, price, unit, desc, stock, cat_id, photo_id)
+                "INSERT INTO products(shop_id,name,price,unit,description,category_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (shop["id"], name, price, unit, desc, cat_id)
             )
+
+            # Rasmlar — har biri Telegram ga yuboriladi
+            import base64 as _b64
+            first_photo_id = None
+            for i, img_b64 in enumerate(images[:3]):
+                if not img_b64: continue
+                try:
+                    img_bytes = _b64.b64decode(img_b64)
+                    buf = BufferedInputFile(img_bytes, filename=f"prod_{i}.jpg")
+                    target = ADMIN_IDS[0] if ADMIN_IDS else uid
+                    sent = await bot.send_photo(target, buf,
+                        caption=f"📦 {name} ({i+1}-rasm)")
+                    fid = sent.photo[-1].file_id
+                    if not first_photo_id:
+                        first_photo_id = fid
+                        await db_run("UPDATE products SET photo_file_id=? WHERE id=?", (fid, pid))
+                    await db_insert(
+                        "INSERT INTO product_photos(product_id,file_id,sort_order) VALUES(?,?,?)",
+                        (pid, fid, i)
+                    )
+                except Exception as e:
+                    log.error(f"Photo upload xato: {e}")
+
+            # Variantlar
+            for v in variants:
+                size = (v.get("size_name") or "").strip()
+                if not size: continue
+                await db_insert(
+                    "INSERT INTO product_variants(product_id,size_name,article,stock) VALUES(?,?,?,?)",
+                    (pid, size, v.get("article",""), int(v.get("stock",0)))
+                )
+
             return _web.Response(
                 text=_json.dumps({"ok":True,"product_id":pid}),
                 content_type="application/json")
         except Exception as e:
+            log.error(f"add_product xato: {e}")
             return _web.Response(
                 text=_json.dumps({"ok":False,"error":str(e)}),
                 content_type="application/json")
@@ -3840,6 +3888,67 @@ async def start_webserver():
             return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
                                  content_type="application/json")
     app.router.add_post("/api/catalog/quick_order", _api_quick_order)
+
+    async def _api_cart_order(req):
+        """Savatdagi mahsulotlarni sotuvchilarga yuborish."""
+        try:
+            body   = await req.json()
+            uid    = int(body.get("user_id", 0))
+            orders = body.get("orders", [])  # [{seller_id, shop_name, items:[...]}]
+            if not orders or not uid:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"ma'lumot yetarli emas"}),
+                    content_type="application/json")
+            u = await get_user(uid)
+            if not u:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"foydalanuvchi topilmadi"}),
+                    content_type="application/json")
+            uname  = u["clinic_name"] or u["full_name"] or str(uid)
+            uphone = u["phone"] or "—"
+            uregion= u["region"] or "—"
+            uaddr  = u["address"] or "—"
+            sent   = 0
+            for order in orders:
+                seller_id = int(order.get("seller_id", 0))
+                shop_name = order.get("shop_name","")
+                items     = order.get("items",[])
+                if not seller_id or not items: continue
+                # Xabar matni
+                lines  = []
+                total  = 0
+                for i, item in enumerate(items, 1):
+                    subtotal = item["price"] * item["qty"]
+                    total   += subtotal
+                    lines.append(
+                        f"{i}. *{item['name']}*\n"
+                        f"   {item['qty']} {item['unit']} × {item['price']:,.0f} = *{subtotal:,.0f} so\'m*"
+                    )
+                items_txt = "\n".join(lines)
+                msg = (
+                    f"🛒 *Katalogdan buyurtma!*\n\n"
+                    f"📦 *Buyurtma:*\n{items_txt}\n\n"
+                    f"💰 *Jami: {total:,.0f} so\'m*\n\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"🏥 *{uname}*\n"
+                    f"📞 {uphone}\n"
+                    f"📍 {uregion}\n"
+                    f"🏠 {uaddr}"
+                )
+                try:
+                    await bot.send_message(seller_id, msg)
+                    sent += 1
+                except Exception as e:
+                    log.error(f"Cart order notify xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok":True,"sent":sent}),
+                content_type="application/json")
+        except Exception as e:
+            log.error(f"cart_order xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":str(e)}),
+                content_type="application/json")
+    app.router.add_post("/api/catalog/cart_order", _api_cart_order)
 
     async def _admin_support_list(req):
         uid = int(req.query.get("uid", 0))
