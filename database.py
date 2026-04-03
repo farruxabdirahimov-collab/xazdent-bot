@@ -152,6 +152,28 @@ async def init_db():
         )""")
         await c.execute("ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT")
 
+        # product_variants — razmer, artikul, miqdor
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS product_variants (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            size_name TEXT,
+            article TEXT,
+            stock INTEGER DEFAULT 0,
+            extra_price REAL DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),\'YYYY-MM-DD HH24:MI:SS\')
+        )""")
+
+        # product_photos — bir mahsulot uchun ko'p rasm
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS product_photos (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            file_id TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),\'YYYY-MM-DD HH24:MI:SS\')
+        )""")
+
         # default settings
         await c.execute("""
         INSERT INTO settings(key,value) VALUES
