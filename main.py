@@ -4227,14 +4227,28 @@ async def start_webserver():
             return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
                                  content_type="application/json",
                                  headers={"Access-Control-Allow-Origin":"*"})
-        query = ("SELECT id, COALESCE(clinic_name,full_name,username) as name, "
-                 "role, region, phone, balance, is_blocked, created_at "
-                 "FROM users WHERE 1=1")
-        if filt == "clinic":  query += " AND role IN ('clinic','zubtex')"
+        q_search = req.query.get("q", "").strip()
+        query  = ("SELECT id, COALESCE(clinic_name,full_name,username) as name, "
+                  "role, region, phone, balance, is_blocked, created_at "
+                  "FROM users WHERE 1=1")
+        params = []
+        if filt == "clinic":   query += " AND role IN ('clinic','zubtex')"
         elif filt == "seller": query += " AND role='seller'"
         elif filt == "active": query += " AND is_blocked=0 AND role!='none'"
+        if q_search:
+            # ID bo'yicha yoki ism bo'yicha qidirish
+            if q_search.isdigit():
+                query += " AND id=?"
+                params.append(int(q_search))
+            else:
+                query += (" AND (LOWER(COALESCE(clinic_name,'')) LIKE ? "
+                          "OR LOWER(COALESCE(full_name,'')) LIKE ? "
+                          "OR LOWER(COALESCE(username,'')) LIKE ? "
+                          "OR LOWER(COALESCE(phone,'')) LIKE ?)")
+                like = f"%{q_search.lower()}%"
+                params.extend([like, like, like, like])
         query += " ORDER BY created_at DESC LIMIT 100"
-        rows = await db_all(query)
+        rows = await db_all(query, tuple(params))
         data = [{"id":r["id"],"name":r["name"],"role":r["role"],
                  "region":r["region"],"phone":r["phone"],
                  "balance":float(r["balance"] or 0),
