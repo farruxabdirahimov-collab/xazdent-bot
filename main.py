@@ -1840,10 +1840,20 @@ async def my_shop(msg: Message):
         kb_rows.append([ib("➕ Mahsulot qo\'shish", web_app=WebAppInfo(url=add_url+"&action=add"))])
     kb_rows.append([ib("📦 Mahsulotlarim (" + str(prod_count) + " ta)", "shop_products")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
-    stars = "⭐" * min(5, max(1, int(shop["rating"] or 4)))
+    rating = float(shop["rating"] or 0)
+    stars = ""
+    if rating >= 4.5: stars = "⭐⭐⭐⭐⭐"
+    elif rating >= 3.5: stars = "⭐⭐⭐⭐"
+    elif rating >= 2.5: stars = "⭐⭐⭐"
+    elif rating >= 1.5: stars = "⭐⭐"
+    elif rating > 0:    stars = "⭐"
+    else: stars = "_Hali baholashlar yo\'q_"
+    # Baholar soni
+    review_count = (await db_get("SELECT COUNT(*) as c FROM reviews WHERE seller_id=?", (uid,)))["c"]
+    rate_txt = f"{stars} ({rating:.1f}) · {review_count} ta sharh" if rating > 0 else stars
     await msg.answer(
         f"🏪 *{shop['shop_name']}*\n"
-        f"{stars}\n\n"
+        f"{rate_txt}\n\n"
         f"📂 {shop['category']}\n"
         f"📦 Mahsulotlar: *{prod_count} ta*\n"
         f"🤝 Jami xaridlar: *{shop['total_deals'] or 0} ta*",
@@ -2746,6 +2756,12 @@ class PhotoOrderState(StatesGroup):
     waiting_photo   = State()
     waiting_caption = State()
 
+class ReviewState(StatesGroup):
+    waiting_comment = State()
+
+class ComplaintState(StatesGroup):
+    waiting_reason = State()
+
 @router.callback_query(F.data == "support_start")
 async def support_start(call: CallbackQuery, state: FSMContext):
     await state.set_state(SupportState.waiting_message)
@@ -3077,6 +3093,279 @@ async def seller_add_product_btn(msg: Message):
         "➕ *Mahsulot qo\'shish*\n\nRasm, narx va variantlarni kiriting:",
         reply_markup=ik([ib("➕ Mahsulot qo\'shish →", web_app=WebAppInfo(url=url))])
     )
+
+# ── BUYURTMA TASDIQLASH VA BAHOLASH TIZIMI ───────────────────────────────────
+
+@router.callback_query(F.data.startswith("co_confirm_"))
+async def catalog_order_confirm(call: CallbackQuery):
+    """Sotuvchi buyurtmani qabul qildi."""
+    parts    = call.data.split("_")
+    order_id = int(parts[2])
+    buyer_id = int(parts[3])
+    seller   = call.from_user.id
+
+    await db_run(
+        "UPDATE catalog_orders SET status='confirmed', confirmed_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS') "
+        "WHERE id=? AND seller_id=?",
+        (order_id, seller)
+    )
+
+    # Sotuvchiga tasdiqlash xabari
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(
+        f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
+        f"Xaridorga xabar yuborildi. 48 soatdan keyin\n"
+        f"baholash so\'rovi avtomatik ketadi."
+    )
+
+    # Xaridorga xabar
+    u = await get_user(seller)
+    shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller,))
+    sname = (shop["shop_name"] if shop else None) or (u["clinic_name"] if u else None) or "Sotuvchi"
+    try:
+        await bot.send_message(
+            buyer_id,
+            f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
+            f"🏪 *{sname}* buyurtmangizni tasdiqladi va\n"
+            f"jo\'natmoqda.\n\n"
+            f"_48 soatdan keyin yetib kelganini so\'raymiz._"
+        )
+    except Exception as e:
+        log.error(f"Buyer notify xato: {e}")
+    await call.answer("✅ Tasdiqlandi!")
+
+@router.callback_query(F.data.startswith("co_reject_"))
+async def catalog_order_reject(call: CallbackQuery):
+    """Sotuvchi buyurtmani rad etdi."""
+    parts    = call.data.split("_")
+    order_id = int(parts[2])
+    buyer_id = int(parts[3])
+
+    await db_run(
+        "UPDATE catalog_orders SET status='rejected' WHERE id=?", (order_id,)
+    )
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(f"❌ Buyurtma #{order_id} rad etildi.")
+
+    try:
+        await bot.send_message(
+            buyer_id,
+            f"❌ *Kechirasiz!*\n\n"
+            f"Sotuvchida bu mahsulot hozir mavjud emas.\n"
+            f"Boshqa sotuvchilardan qidirishingiz mumkin:\n\n"
+            f"👉 @XazdentBot → 🛍 Dental Market"
+        )
+    except Exception: pass
+    await call.answer("❌ Rad etildi")
+
+@router.callback_query(F.data.startswith("co_delivered_"))
+async def catalog_order_delivered(call: CallbackQuery):
+    """Xaridor yetib kelganini tasdiqladi."""
+    parts    = call.data.split("_")
+    order_id = int(parts[2])
+    seller_id= int(parts[3])
+    buyer_id = call.from_user.id
+
+    await db_run(
+        "UPDATE catalog_orders SET status='delivered', "
+        "delivered_at=to_char(now(),'YYYY-MM-DD HH24:MI:SS') WHERE id=?",
+        (order_id,)
+    )
+    await call.message.edit_reply_markup(reply_markup=None)
+
+    # Baholash so'rovini yuboramiz
+    rating_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="⭐", callback_data=f"rate_{order_id}_{seller_id}_1"),
+            InlineKeyboardButton(text="⭐⭐", callback_data=f"rate_{order_id}_{seller_id}_2"),
+            InlineKeyboardButton(text="⭐⭐⭐", callback_data=f"rate_{order_id}_{seller_id}_3"),
+            InlineKeyboardButton(text="⭐⭐⭐⭐", callback_data=f"rate_{order_id}_{seller_id}_4"),
+            InlineKeyboardButton(text="⭐⭐⭐⭐⭐", callback_data=f"rate_{order_id}_{seller_id}_5"),
+        ]
+    ])
+    await call.message.answer(
+        f"✅ *Ajoyib!*\n\nSotuvchini baholang:",
+        reply_markup=rating_kb
+    )
+    await call.answer()
+
+@router.callback_query(F.data.startswith("co_problem_"))
+async def catalog_order_problem(call: CallbackQuery, state: FSMContext):
+    """Xaridor muammo bildirdi."""
+    parts    = call.data.split("_")
+    order_id = int(parts[2])
+    seller_id= int(parts[3])
+
+    await state.set_state(ComplaintState.waiting_reason)
+    await state.update_data(order_id=order_id, seller_id=seller_id)
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(
+        "😔 *Muammoni tavsiflang:*\n\n"
+        "_Masalan: Mahsulot kelmadi, sifat yomon, soni kam..._\n\n"
+        "/cancel — bekor qilish"
+    )
+    await call.answer()
+
+@router.message(ComplaintState.waiting_reason, F.text)
+async def complaint_reason(msg: Message, state: FSMContext):
+    if msg.text and msg.text.startswith("/"):
+        await state.clear(); await msg.answer("Bekor qilindi."); return
+
+    d         = await state.get_data()
+    order_id  = d.get("order_id")
+    seller_id = d.get("seller_id")
+    reason    = msg.text.strip()
+    buyer_id  = msg.from_user.id
+    u         = await get_user(buyer_id)
+    uname     = (u["clinic_name"] or u["full_name"] if u else None) or str(buyer_id)
+
+    # DB ga shikoyat
+    await db_insert(
+        "INSERT INTO complaints(from_user_id,against_user_id,reason) VALUES(?,?,?)",
+        (buyer_id, seller_id, reason)
+    )
+    await db_run(
+        "UPDATE catalog_orders SET status='disputed' WHERE id=?", (order_id,)
+    )
+    await state.clear()
+    await msg.answer(
+        "✅ *Shikoyatingiz qabul qilindi.*\n\n"
+        "Admin 24 soat ichida ko\'rib chiqadi va\n"
+        "siz bilan bog\'lanadi."
+    )
+
+    # Adminga xabar
+    for aid in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                aid,
+                f"🚨 *Yangi shikoyat!*\n\n"
+                f"👤 Xaridor: {uname} (ID: {buyer_id})\n"
+                f"🏪 Sotuvchi ID: {seller_id}\n"
+                f"📋 Buyurtma #{order_id}\n\n"
+                f"📝 {reason}",
+                reply_markup=ik(
+                    [ib("👥 Users da ko\'rish", "admin_users_check")]
+                )
+            )
+        except Exception: pass
+
+@router.callback_query(F.data.startswith("rate_"))
+async def rate_seller(call: CallbackQuery, state: FSMContext):
+    """Xaridor yulduz berdi."""
+    parts     = call.data.split("_")
+    order_id  = int(parts[1])
+    seller_id = int(parts[2])
+    rating    = int(parts[3])
+    buyer_id  = call.from_user.id
+
+    # Avval baholagan bo'lsa qayta baholamasin
+    existing = await db_get(
+        "SELECT id FROM reviews WHERE order_id=? AND buyer_id=?",
+        (order_id, buyer_id)
+    )
+    if existing:
+        await call.answer("Allaqachon baholagansiz!", show_alert=True)
+        return
+
+    await state.set_state(ReviewState.waiting_comment)
+    await state.update_data(order_id=order_id, seller_id=seller_id, rating=rating)
+
+    stars = "⭐" * rating
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(
+        f"Baho: {stars}\n\n"
+        f"*Izoh qoldiring* (ixtiyoriy):\n"
+        f"_Mahsulot sifati, yetkazish tezligi..._",
+        reply_markup=ik([ib("➡️ Izohlarsiz yuborish", "review_skip")])
+    )
+    await call.answer()
+
+@router.callback_query(F.data == "review_skip", ReviewState.waiting_comment)
+async def review_skip(call: CallbackQuery, state: FSMContext):
+    await _save_review(call.from_user.id, state, comment="")
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer("✅ Bahoingiz qabul qilindi! Rahmat!")
+    await call.answer()
+
+@router.message(ReviewState.waiting_comment, F.text)
+async def review_comment(msg: Message, state: FSMContext):
+    if msg.text and msg.text.startswith("/"):
+        await state.clear(); return
+    await _save_review(msg.from_user.id, state, comment=msg.text.strip())
+    await msg.answer("✅ Bahoingiz va izohingiz qabul qilindi! Rahmat!")
+
+async def _save_review(buyer_id: int, state: FSMContext, comment: str):
+    d         = await state.get_data()
+    order_id  = d.get("order_id")
+    seller_id = d.get("seller_id")
+    rating    = d.get("rating", 5)
+    await state.clear()
+
+    await db_insert(
+        "INSERT INTO reviews(order_id,buyer_id,seller_id,rating,comment) VALUES(?,?,?,?,?)",
+        (order_id, buyer_id, seller_id, rating, comment)
+    )
+    # Do'kon reytingini yangilaymiz
+    avg = await db_get(
+        "SELECT AVG(rating) as avg FROM reviews WHERE seller_id=?", (seller_id,)
+    )
+    if avg and avg["avg"]:
+        await db_run(
+            "UPDATE shops SET rating=? WHERE owner_id=?",
+            (round(float(avg["avg"]), 1), seller_id)
+        )
+
+# ── 48 SOAT CHECKER ───────────────────────────────────────────────────────────
+async def delivery_checker():
+    """Har soat ishlaydigan — 48 soat o'tgan buyurtmalarni tekshiradi."""
+    while True:
+        await asyncio.sleep(3600)  # Har soat
+        try:
+            # 48 soat o'tgan, hali notify yuborilmagan confirmed buyurtmalar
+            cutoff = (datetime.now() - timedelta(hours=48)).isoformat()
+            orders = await db_all(
+                "SELECT * FROM catalog_orders "
+                "WHERE status='confirmed' AND notify_sent=0 "
+                "AND confirmed_at <= ?",
+                (cutoff,)
+            )
+            for order in orders:
+                try:
+                    delivery_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(
+                            text="✅ Ha, yetib keldi!",
+                            callback_data=f"co_delivered_{order['id']}_{order['seller_id']}"
+                        ),
+                        InlineKeyboardButton(
+                            text="❌ Yo'q, muammo bor",
+                            callback_data=f"co_problem_{order['id']}_{order['seller_id']}"
+                        )
+                    ]])
+                    # Mahsulotlar ro'yxati
+                    import json as _pj
+                    try:
+                        items = _pj.loads(order["products_json"] or "[]")
+                        prod_txt = ", ".join([f"{i['name']} x{i['qty']}" for i in items[:3]])
+                    except Exception:
+                        prod_txt = "mahsulotlar"
+
+                    await bot.send_message(
+                        order["buyer_id"],
+                        f"📦 *Buyurtmangiz yetib keldimi?*\n\n"
+                        f"_{prod_txt}_\n\n"
+                        f"Iltimos, tasdiqlang:",
+                        reply_markup=delivery_kb
+                    )
+                    await db_run(
+                        "UPDATE catalog_orders SET notify_sent=1 WHERE id=?",
+                        (order["id"],)
+                    )
+                    await asyncio.sleep(0.1)
+                except Exception as e:
+                    log.error(f"Delivery notify xato order {order['id']}: {e}")
+        except Exception as e:
+            log.error(f"delivery_checker xato: {e}")
 
 # ── FALLBACK ─────────────────────────────────────────────────────────────────
 @router.message()
@@ -4044,9 +4333,16 @@ async def start_webserver():
                         f"   {item['qty']} {item['unit']} × {item['price']:,.0f} = *{subtotal:,.0f} so\'m*"
                     )
                 items_txt = "\n".join(lines)
+                # catalog_orders jadvaliga yozamiz
+                import json as _pyjson
+                order_id = await db_insert(
+                    "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) "
+                    "VALUES(?,?,?,?)",
+                    (uid, seller_id, _pyjson.dumps(items, ensure_ascii=False), total)
+                )
                 msg = (
-                    f"🛒 *Katalogdan buyurtma!*\n\n"
-                    f"📦 *Buyurtma:*\n{items_txt}\n\n"
+                    f"🛒 *Katalogdan yangi buyurtma!*\n\n"
+                    f"📦 *Buyurtma #{order_id}:*\n{items_txt}\n\n"
                     f"💰 *Jami: {total:,.0f} so\'m*\n\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏥 *{uname}*\n"
@@ -4054,8 +4350,18 @@ async def start_webserver():
                     f"📍 {uregion}\n"
                     f"🏠 {uaddr}"
                 )
+                confirm_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text="✅ Buyurtmani qabul qildim",
+                        callback_data=f"co_confirm_{order_id}_{uid}"
+                    ),
+                    InlineKeyboardButton(
+                        text="❌ Mavjud emas",
+                        callback_data=f"co_reject_{order_id}_{uid}"
+                    )
+                ]])
                 try:
-                    await bot.send_message(seller_id, msg)
+                    await bot.send_message(seller_id, msg, reply_markup=confirm_kb)
                     sent += 1
                 except Exception as e:
                     log.error(f"Cart order notify xato: {e}")
@@ -4666,6 +4972,7 @@ async def main():
     log.info("🦷 XAZDENT Bot ishga tushdi!")
     await start_webserver()
     asyncio.create_task(expire_checker())
+    asyncio.create_task(delivery_checker())
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
