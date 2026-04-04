@@ -4221,17 +4221,25 @@ async def start_webserver():
     app.router.add_post("/api/admin/check_action", _admin_check_action)
 
     async def _admin_users(req):
-        uid = int(req.query.get("uid", 0))
+        uid    = int(req.query.get("uid", 0))
+        filt   = req.query.get("filter", "all")
         if ADMIN_IDS and uid not in ADMIN_IDS:
             return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
                                  content_type="application/json",
                                  headers={"Access-Control-Allow-Origin":"*"})
-        rows = await db_all(
-            "SELECT id, COALESCE(clinic_name,full_name,username) as name, role, region, created_at "
-            "FROM users ORDER BY created_at DESC LIMIT 100"
-        )
+        query = ("SELECT id, COALESCE(clinic_name,full_name,username) as name, "
+                 "role, region, phone, balance, is_blocked, created_at "
+                 "FROM users WHERE 1=1")
+        if filt == "clinic":  query += " AND role IN ('clinic','zubtex')"
+        elif filt == "seller": query += " AND role='seller'"
+        elif filt == "active": query += " AND is_blocked=0 AND role!='none'"
+        query += " ORDER BY created_at DESC LIMIT 100"
+        rows = await db_all(query)
         data = [{"id":r["id"],"name":r["name"],"role":r["role"],
-                 "region":r["region"],"created_at":r["created_at"]} for r in rows]
+                 "region":r["region"],"phone":r["phone"],
+                 "balance":float(r["balance"] or 0),
+                 "is_blocked":r["is_blocked"],
+                 "created_at":r["created_at"]} for r in rows]
         return _web.Response(text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
                              content_type="application/json",
                              headers={"Access-Control-Allow-Origin":"*"})
