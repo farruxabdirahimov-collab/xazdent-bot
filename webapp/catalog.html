@@ -366,7 +366,14 @@ var _prods = {};
   } else {
     document.getElementById('cart-ic').style.display = 'flex';
   }
-  loadCatalog();
+  // action=add bo'lsa mahsulot qo'shish formasi ochilsin
+  var action = _qp.get('action');
+  if (action === 'add' && ROLE === 'seller') {
+    loadCatalog();
+    setTimeout(openForm, 400);
+  } else {
+    loadCatalog();
+  }
 })();
 
 // ── VIEW ─────────────────────────────────────────────────────────────────────
