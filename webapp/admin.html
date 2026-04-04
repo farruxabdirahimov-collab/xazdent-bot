@@ -336,7 +336,7 @@ function setPeriod(p, btn) {
 }
 
 function loadStats() {
-  api('/api/admin/stats&period='+curPeriod)
+  api('/api/admin/stats?period='+curPeriod)
     .then(d => {
       if (!d.ok) { showErr('stats-body', d.error||'xato'); return; }
       var s = d.data, m = s.period||{}, regs = s.regions||[];
@@ -371,6 +371,24 @@ function statCard(label, val, sub, cls) {
     '<div class="csub">'+esc(sub)+'</div></div>';
 }
 
+function bigCard(icon, label, val, sub, cls) {
+  return '<div class="card">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<span style="font-size:22px">'+icon+'</span>' +
+      '<span class="clabel" style="margin-bottom:0">'+esc(label)+'</span>' +
+    '</div>' +
+    '<div class="cval '+cls+'" style="font-size:28px">'+fmt(val)+'</div>' +
+    '<div class="csub">'+esc(sub)+'</div></div>';
+}
+
+function miniCard(icon, label, val, sub, cls) {
+  return '<div class="card" style="padding:10px">' +
+    '<div style="font-size:18px;margin-bottom:3px">'+icon+'</div>' +
+    '<div class="cval '+cls+'" style="font-size:20px">'+fmt(val)+'</div>' +
+    '<div class="clabel" style="margin-bottom:0">'+esc(label)+'</div>' +
+    '<div class="csub" style="font-size:10px">'+esc(sub)+'</div></div>';
+}
+
 // ── BUYURTMALAR ───────────────────────────────────────────────────────────────
 function setOrderFilter(f, btn) {
   curOrderFilter = f;
@@ -380,7 +398,7 @@ function setOrderFilter(f, btn) {
 }
 
 function loadOrders() {
-  api('/api/admin/orders&filter='+curOrderFilter)
+  api('/api/admin/orders?filter='+curOrderFilter)
     .then(d => {
       if (!d.ok) { showErr('orders-body', d.error||'xato'); return; }
       var orders = d.data||[];
@@ -590,7 +608,7 @@ function setUserFilter(f, btn) {
 }
 
 function loadUsers() {
-  api('/api/admin/users&filter='+curUserFilter).then(d => {
+  api('/api/admin/users?filter='+curUserFilter).then(d => {
     if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
     var rows = d.data||[];
     if (!rows.length) {
@@ -645,7 +663,7 @@ function setComplaintFilter(f, btn) {
 }
 
 function loadComplaints() {
-  api('/api/admin/complaints&status='+curComplaintFilter).then(d => {
+  api('/api/admin/complaints?status='+curComplaintFilter).then(d => {
     if (!d.ok) { showErr('complaints-body', d.error||'xato'); return; }
     var items = d.data||[];
     if (!items.length) {
