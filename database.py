@@ -174,6 +174,49 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),\'YYYY-MM-DD HH24:MI:SS\')
         )""")
 
+        # product_views — ko'rishlar soni
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS product_views (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER NOT NULL,
+            user_id BIGINT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
+        # complaints — shikoyatlar
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS complaints (
+            id SERIAL PRIMARY KEY,
+            from_user_id BIGINT NOT NULL,
+            against_user_id BIGINT NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT DEFAULT 'new',
+            admin_note TEXT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
+        # subscriptions — obuna
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'trial',
+            trial_ends_at TEXT,
+            paid_until TEXT,
+            amount REAL DEFAULT 300000,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
+        # search_logs — qidiruvlar
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS search_logs (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            query TEXT NOT NULL,
+            results_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
         # default settings
         await c.execute("""
         INSERT INTO settings(key,value) VALUES
