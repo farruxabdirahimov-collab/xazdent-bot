@@ -4119,39 +4119,50 @@ async def start_webserver():
         return uid in ADMIN_IDS
 
     async def _admin_stats(req):
-        uid = int(req.query.get("uid", 0))
-        # ADMIN_IDS bo'sh bo'lsa yoki uid to'g'ri bo'lsa ruxsat
+        uid    = int(req.query.get("uid", 0))
+        period = req.query.get("period", "month")
         if ADMIN_IDS and uid not in ADMIN_IDS:
             return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q","uid":uid,"admins":ADMIN_IDS}),
                                  content_type="application/json",
                                  headers={"Access-Control-Allow-Origin":"*"})
-        now   = datetime.now()
-        month = now.strftime("%Y-%m")
-        week  = (now - timedelta(days=7)).isoformat()
+        now = datetime.now()
+        if period == "day":   since = now.strftime("%Y-%m-%d")
+        elif period == "week": since = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        elif period == "month": since = now.strftime("%Y-%m")
+        else: since = ""
 
-        total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
-        new_week  = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (week,)))["c"]
-        clinics   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
-        sellers   = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
-        total_n   = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
-        total_d   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
-        month_n   = (await db_get("SELECT COUNT(*) as c FROM needs WHERE created_at LIKE ?", (f"{month}%",)))["c"]
-        month_d   = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted' AND created_at LIKE ?", (f"{month}%",)))["c"]
-        rev_all   = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
-        rev_month = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed' AND created_at LIKE ?", (f"{month}%",))
-        regions   = await db_all(
+        def p_filter(col="created_at"):
+            if not since: return ""
+            if period == "month": return f" AND {col} LIKE '{since}%'"
+            return f" AND {col} >= '{since}'"
+
+        total_u  = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+        new_p    = (await db_get(f"SELECT COUNT(*) as c FROM users WHERE 1=1{p_filter()}"))["c"]
+        clinics  = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
+        sellers  = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
+        total_n  = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
+        total_d  = (await db_get("SELECT COUNT(*) as c FROM offers WHERE status='accepted'"))["c"]
+        period_n = (await db_get(f"SELECT COUNT(*) as c FROM needs WHERE 1=1{p_filter()}"))["c"]
+        period_d = (await db_get(f"SELECT COUNT(*) as c FROM offers WHERE status='accepted'{p_filter()}"))["c"]
+        no_off   = (await db_get(
+            "SELECT COUNT(DISTINCT batch_id) as c FROM needs n "
+            "WHERE status='active' AND NOT EXISTS "
+            "(SELECT 1 FROM offers o WHERE o.need_id=n.id)"))["c"]
+        rev_all  = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
+        rev_p    = await db_get(f"SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'{p_filter()}")
+        regions  = await db_all(
             "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(n.id) as needs "
             "FROM users u LEFT JOIN needs n ON n.owner_id=u.id "
             "WHERE u.role IN ('clinic','zubtex') AND u.region IS NOT NULL "
-            "GROUP BY u.region ORDER BY needs DESC LIMIT 10"
-        )
+            "GROUP BY u.region ORDER BY needs DESC LIMIT 10")
         return _web.Response(
             text=_json.dumps({"ok":True,"data":{
-                "total_users":total_u,"new_week":new_week,
+                "total_users":total_u,"new_period":new_p,
                 "clinics":clinics,"sellers":sellers,
                 "total_needs":total_n,"total_deals":total_d,
-                "month":{"needs":month_n,"deals":month_d,
-                         "revenue":float(rev_month["s"] if rev_month else 0)},
+                "no_offers":no_off,
+                "period":{"needs":period_n,"deals":period_d,
+                          "revenue":float(rev_p["s"] if rev_p else 0)},
                 "revenue":float(rev_all["s"] if rev_all else 0),
                 "regions":[{"region":r["region"],"users":r["users"],"needs":r["needs"]} for r in regions],
             }}, ensure_ascii=False),
@@ -4293,6 +4304,307 @@ async def start_webserver():
             "Content-Disposition": f"attachment; filename=xazdent_admin.xlsx"
         })
     app.router.add_get("/api/admin/excel", _admin_excel_dl)
+
+    # ── MARKET ANALYTICS ──────────────────────────────────────────────────
+    async def _admin_market(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}),
+                                 content_type="application/json")
+        total_p  = (await db_get("SELECT COUNT(*) as c FROM products WHERE is_active=1"))["c"]
+        total_s  = (await db_get("SELECT COUNT(*) as c FROM shops WHERE status='active'"))["c"]
+        now      = datetime.now()
+        month    = now.strftime("%Y-%m")
+        views_m  = (await db_get("SELECT COUNT(*) as c FROM product_views WHERE created_at LIKE ?", (f"{month}%",)))["c"]
+        views_t  = (await db_get("SELECT COUNT(*) as c FROM product_views"))["c"]
+        orders_m = (await db_get("SELECT COUNT(*) as c FROM needs WHERE created_at LIKE ?", (f"{month}%",)))["c"]
+        orders_t = (await db_get("SELECT COUNT(*) as c FROM needs"))["c"]
+        avg_p    = await db_get("SELECT AVG(price) as a FROM products WHERE is_active=1")
+        no_photo = (await db_get("SELECT COUNT(*) as c FROM products WHERE photo_file_id IS NULL AND is_active=1"))["c"]
+        no_stock = (await db_get("SELECT COUNT(*) as c FROM products WHERE stock=0 AND is_active=1"))["c"]
+        top_viewed = await db_all(
+            "SELECT p.name, s.shop_name, COUNT(v.id) as views "
+            "FROM product_views v JOIN products p ON v.product_id=p.id "
+            "JOIN shops s ON p.shop_id=s.id "
+            "GROUP BY p.id ORDER BY views DESC LIMIT 10")
+        top_searches = await db_all(
+            "SELECT query, COUNT(*) as cnt FROM search_logs "
+            "GROUP BY query ORDER BY cnt DESC LIMIT 10")
+        top_ordered = await db_all(
+            "SELECT p.name, s.shop_name, COUNT(o.id) as orders "
+            "FROM offers o JOIN needs n ON o.need_id=n.id "
+            "JOIN products p ON p.name=n.product_name "
+            "JOIN shops s ON p.shop_id=s.id "
+            "WHERE o.status='accepted' "
+            "GROUP BY p.id ORDER BY orders DESC LIMIT 10")
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":{
+                "total_products":total_p,"total_shops":total_s,
+                "views_month":views_m,"views_total":views_t,
+                "orders_month":orders_m,"orders_total":orders_t,
+                "avg_price":float(avg_p["a"] if avg_p and avg_p["a"] else 0),
+                "no_photo_count":no_photo,"no_stock_count":no_stock,
+                "top_viewed":[{"name":r["name"],"shop_name":r["shop_name"],"views":r["views"]} for r in top_viewed],
+                "top_searches":[{"query":r["query"],"cnt":r["cnt"]} for r in top_searches],
+                "top_ordered":[{"name":r["name"],"shop_name":r["shop_name"],"orders":r["orders"]} for r in top_ordered],
+            }}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/market", _admin_market)
+
+    # ── E'LON YUBORISH ────────────────────────────────────────────────────
+    async def _admin_announce(req):
+        try:
+            body       = await req.json()
+            admin_id   = int(body.get("admin_id",0))
+            if admin_id not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                     content_type="application/json")
+            text       = body.get("text","")
+            audiences  = body.get("audiences",[])
+            regions    = body.get("regions",[])
+            single_uid = int(body.get("single_uid",0))
+
+            if not text:
+                return _web.Response(text=_json.dumps({"ok":False,"error":"matn kerak"}),
+                                     content_type="application/json")
+
+            recipients = []
+            if single_uid:
+                recipients = [{"id": single_uid}]
+            else:
+                query = "SELECT id FROM users WHERE is_blocked=0"
+                params = []
+                if audiences:
+                    ph = ",".join(["?" for _ in audiences])
+                    query += f" AND role IN ({ph})"
+                    params.extend(audiences)
+                if regions:
+                    ph = ",".join(["?" for _ in regions])
+                    query += f" AND region IN ({ph})"
+                    params.extend(regions)
+                recipients = await db_all(query, tuple(params))
+
+            sent = 0
+            for u in recipients:
+                try:
+                    await bot.send_message(u["id"], text)
+                    sent += 1
+                    await asyncio.sleep(0.04)
+                except Exception: pass
+
+            # Tarixga saqlash
+            await db_insert(
+                "INSERT INTO transactions(user_id,amount,balls,type,note,status) VALUES(?,0,0,'announce',?,\'sent\')",
+                (admin_id, f"sent:{sent}|text:{text[:100]}")
+            )
+            return _web.Response(
+                text=_json.dumps({"ok":True,"sent":sent}),
+                content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/announce", _admin_announce)
+
+    async def _admin_announce_history(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        rows = await db_all(
+            "SELECT note, created_at FROM transactions "
+            "WHERE type='announce' ORDER BY created_at DESC LIMIT 20")
+        data = []
+        for r in rows:
+            note = r["note"] or ""
+            sent = 0; text = ""
+            for part in note.split("|"):
+                if part.startswith("sent:"): sent = int(part[5:])
+                if part.startswith("text:"): text = part[5:]
+            data.append({"text":text,"sent_count":sent,"created_at":r["created_at"]})
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/announce_history", _admin_announce_history)
+
+    # ── OBUNA ─────────────────────────────────────────────────────────────
+    async def _admin_subscriptions(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        now = datetime.now()
+        subs = await db_all(
+            "SELECT s.*, u.region, sh.shop_name, "
+            "COALESCE(u.clinic_name,u.full_name) as name "
+            "FROM subscriptions s "
+            "JOIN users u ON s.user_id=u.id "
+            "LEFT JOIN shops sh ON sh.owner_id=s.user_id AND sh.status='active' "
+            "ORDER BY s.created_at DESC")
+        data = []
+        for s in subs:
+            paid_until = s["paid_until"] or s["trial_ends_at"] or ""
+            days_left  = 0
+            if paid_until:
+                try:
+                    ends = datetime.fromisoformat(paid_until[:10])
+                    days_left = (ends - now).days
+                except Exception: pass
+            data.append({
+                "user_id":s["user_id"],"name":s["name"],"shop_name":s["shop_name"],
+                "region":s["region"],"status":s["status"],
+                "paid_until":paid_until,"days_left":days_left
+            })
+        stats = {
+            "total":   len(data),
+            "active":  sum(1 for d in data if d["status"]=="active"),
+            "trial":   sum(1 for d in data if d["status"]=="trial"),
+            "expired": sum(1 for d in data if d["status"]=="expired"),
+        }
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data,"stats":stats}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/subscriptions", _admin_subscriptions)
+
+    async def _admin_extend_sub(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            uid = int(body.get("target_uid",0))
+            sub = await db_get("SELECT * FROM subscriptions WHERE user_id=?", (uid,))
+            now = datetime.now()
+            if sub and sub["paid_until"]:
+                try: base = datetime.fromisoformat(sub["paid_until"][:10])
+                except: base = now
+            else:
+                base = now
+            new_until = (base + timedelta(days=30)).strftime("%Y-%m-%d")
+            if sub:
+                await db_run("UPDATE subscriptions SET paid_until=?,status='active' WHERE user_id=?",
+                             (new_until, uid))
+            else:
+                await db_insert(
+                    "INSERT INTO subscriptions(user_id,status,paid_until) VALUES(?,\'active\',?)",
+                    (uid, new_until))
+            try: await bot.send_message(uid, f"✅ Obunangiz {new_until} gacha uzaytirildi!")
+            except Exception: pass
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/extend_sub", _admin_extend_sub)
+
+    # ── SHIKOYATLAR ───────────────────────────────────────────────────────
+    async def _admin_complaints(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        status = req.query.get("status","new")
+        rows = await db_all(
+            "SELECT c.*, "
+            "COALESCE(uf.clinic_name,uf.full_name) as from_name, "
+            "COALESCE(ua.clinic_name,ua.full_name) as against_name "
+            "FROM complaints c "
+            "JOIN users uf ON c.from_user_id=uf.id "
+            "JOIN users ua ON c.against_user_id=ua.id "
+            "WHERE c.status=? ORDER BY c.created_at DESC", (status,))
+        data = [{"id":r["id"],"from_user_id":r["from_user_id"],"against_user_id":r["against_user_id"],
+                 "from_name":r["from_name"],"against_name":r["against_name"],
+                 "reason":r["reason"],"status":r["status"],"created_at":r["created_at"]} for r in rows]
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/complaints", _admin_complaints)
+
+    async def _admin_close_complaint(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            await db_run("UPDATE complaints SET status='closed' WHERE id=?",
+                         (int(body.get("complaint_id",0)),))
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/close_complaint", _admin_close_complaint)
+
+    # ── USER MSG & BLOCK ──────────────────────────────────────────────────
+    async def _admin_msg_user(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            uid  = int(body.get("target_uid",0))
+            text = body.get("text","")
+            await bot.send_message(uid, text)
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/msg_user", _admin_msg_user)
+
+    async def _admin_toggle_block(req):
+        try:
+            body  = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+            uid   = int(body.get("target_uid",0))
+            block = int(body.get("block",0))
+            await db_run("UPDATE users SET is_blocked=? WHERE id=?", (block, uid))
+            if block:
+                await db_run("UPDATE shops SET status='suspended' WHERE owner_id=?", (uid,))
+            else:
+                await db_run("UPDATE shops SET status='active' WHERE owner_id=?", (uid,))
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/toggle_block", _admin_toggle_block)
+
+    # ── ADMIN STATS — PERIOD SUPPORT ──────────────────────────────────────
+    async def _admin_orders(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
+        filt = req.query.get("filter","all")
+        query = (
+            "SELECT b.id, b.created_at, "
+            "COALESCE(u.clinic_name,u.full_name) as clinic_name, u.region, "
+            "COUNT(DISTINCT n.id) as prod_count, "
+            "COUNT(DISTINCT o.id) as offer_count, "
+            "b.expires_at, b.status "
+            "FROM batches b "
+            "JOIN users u ON b.owner_id=u.id "
+            "LEFT JOIN needs n ON n.batch_id=b.id "
+            "LEFT JOIN offers o ON o.need_id=n.id "
+            "WHERE 1=1"
+        )
+        if filt == "active":   query += " AND b.status='active'"
+        if filt == "done":     query += " AND b.status='done'"
+        if filt == "no_offers": query += " AND b.status='active'"
+        query += " GROUP BY b.id ORDER BY b.created_at DESC LIMIT 50"
+        rows = await db_all(query)
+        now = datetime.now()
+        data = []
+        for r in rows:
+            hours_left = 0
+            if r["expires_at"]:
+                try:
+                    exp = datetime.fromisoformat(r["expires_at"][:19])
+                    hours_left = (exp - now).total_seconds() / 3600
+                except Exception: pass
+            products_str = ""
+            prods = await db_all("SELECT product_name,quantity,unit FROM needs WHERE batch_id=? LIMIT 3", (r["id"],))
+            products_str = ", ".join([f"{p['product_name']} {p['quantity']}{p['unit']}" for p in prods])
+            if filt == "no_offers" and r["offer_count"] > 0: continue
+            data.append({
+                "id":r["id"],"clinic_name":r["clinic_name"],"region":r["region"],
+                "products":products_str,"offer_count":r["offer_count"],
+                "hours_left":hours_left,"status":r["status"]
+            })
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/orders", _admin_orders)
     webapp_dir = os.path.join(BASE_DIR, "webapp")
     if os.path.isdir(webapp_dir):
         app.router.add_static("/static", webapp_dir)
