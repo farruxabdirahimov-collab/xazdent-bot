@@ -19,14 +19,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   background:var(--bg);color:var(--text);padding-bottom:20px}
 
 /* NAV */
-.nav{display:flex;overflow-x:auto;background:var(--card);
+.nav{display:flex;flex-wrap:wrap;background:var(--card);
   border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;
-  scrollbar-width:none;gap:2px;padding:6px}
-.nav::-webkit-scrollbar{display:none}
-.nb{flex-shrink:0;padding:7px 12px;border:none;border-radius:8px;
-  background:transparent;color:var(--hint);font-size:12px;font-weight:600;
-  cursor:pointer;white-space:nowrap;transition:all .15s}
-.nb.on{background:var(--btn);color:#fff}
+  gap:3px;padding:6px}
+.nb{padding:6px 10px;border:none;border-radius:8px;
+  background:var(--bg);color:var(--hint);font-size:11px;font-weight:600;
+  cursor:grab;white-space:nowrap;transition:all .15s;
+  border:1px solid var(--border);user-select:none}
+.nb:active{cursor:grabbing;opacity:.7}
+.nb.on{background:var(--btn);color:#fff;border-color:transparent}
+.nb.drag-over{border:2px dashed var(--btn)}
 
 /* PAGES */
 .pg{display:none;padding:12px}
@@ -145,17 +147,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 </head>
 <body>
 
-<div class="nav">
-  <button class="nb on"  onclick="go('stats',this)">📊 Stats</button>
-  <button class="nb"     onclick="go('orders',this)">📋 Buyurtmalar</button>
-  <button class="nb"     onclick="go('market',this)">🛍 Market</button>
-  <button class="nb"     onclick="go('announce',this)">📢 E'lonlar</button>
-  <button class="nb"     onclick="go('subs',this)">💳 Obuna</button>
-  <button class="nb"     onclick="go('users',this)">👥 Users</button>
-  <button class="nb"     onclick="go('complaints',this)">🚨 Shikoyat</button>
-  <button class="nb"     onclick="go('checks',this)">✅ Cheklar</button>
-  <button class="nb"     onclick="go('settings',this)">⚙️ Sozlama</button>
-</div>
+<div class="nav" id="nav-bar"></div>
 
 <!-- ═══════════════════ STATS ═══════════════════════════════════════════════ -->
 <div class="pg on" id="pg-stats">
@@ -198,13 +190,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 
     <div class="flabel">Hudud (bo'sh = hammasi):</div>
     <div class="fcheck-row" id="ann-reg">
-      <label class="fcheck"><input type="checkbox" value="Toshkent shahri"> 🏙 Toshkent</label>
+      <label class="fcheck"><input type="checkbox" value="Toshkent shahri"> 🏙 Toshkent sh.</label>
+      <label class="fcheck"><input type="checkbox" value="Toshkent viloyati"> 🌆 Toshkent vil.</label>
       <label class="fcheck"><input type="checkbox" value="Samarqand"> 🏛 Samarqand</label>
+      <label class="fcheck"><input type="checkbox" value="Buxoro"> 🕌 Buxoro</label>
       <label class="fcheck"><input type="checkbox" value="Farg'ona"> 🌸 Farg'ona</label>
       <label class="fcheck"><input type="checkbox" value="Andijon"> 🏔 Andijon</label>
       <label class="fcheck"><input type="checkbox" value="Namangan"> 🌿 Namangan</label>
       <label class="fcheck"><input type="checkbox" value="Xorazm"> 🌊 Xorazm</label>
-      <label class="fcheck"><input type="checkbox" value="Buxoro"> 🕌 Buxoro</label>
+      <label class="fcheck"><input type="checkbox" value="Qashqadaryo"> 🌵 Qashqadaryo</label>
+      <label class="fcheck"><input type="checkbox" value="Surxondaryo"> 🏜 Surxondaryo</label>
+      <label class="fcheck"><input type="checkbox" value="Jizzax"> 🌾 Jizzax</label>
+      <label class="fcheck"><input type="checkbox" value="Sirdaryo"> 🌱 Sirdaryo</label>
+      <label class="fcheck"><input type="checkbox" value="Navoiy"> 💎 Navoiy</label>
+      <label class="fcheck"><input type="checkbox" value="Qoraqalpog'iston"> 🏝 Qoraqalpog'iston</label>
+    </div>
+    <div style="margin-bottom:8px">
+      <button class="btn sm outline" onclick="checkAllRegs(true)" style="margin-right:6px">✅ Hammasi</button>
+      <button class="btn sm outline" onclick="checkAllRegs(false)">❌ Tozala</button>
     </div>
 
     <div class="flabel">Aynan bir foydalanuvchiga (Telegram ID):</div>
@@ -248,6 +251,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     <button class="ptab" onclick="setUserFilter('seller',this)">Sotuvchilar</button>
     <button class="ptab" onclick="setUserFilter('active',this)">Faol</button>
   </div>
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <input class="finp" id="user-search" placeholder="🔍 Ism yoki Telegram ID..."
+      oninput="onUserSearch(this.value)" style="margin-bottom:0;flex:1">
+  </div>
   <div id="users-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
@@ -288,13 +295,88 @@ if (!UID) UID = parseInt(_q.get('uid')||'0')||0;
 var loaded = {}, curPeriod = 'month', curOrderFilter = 'all',
     curUserFilter = 'all', curComplaintFilter = 'new';
 
+// Tab tartib tizimi
+var DEFAULT_TABS = [
+  {id:'users',     label:'👥 Users'},
+  {id:'stats',     label:'📊 Stats'},
+  {id:'orders',    label:'📋 Buyurtmalar'},
+  {id:'market',    label:'🛍 Market'},
+  {id:'announce',  label:'📢 E\'lonlar'},
+  {id:'subs',      label:'💳 Obuna'},
+  {id:'complaints',label:'🚨 Shikoyat'},
+  {id:'checks',    label:'✅ Cheklar'},
+  {id:'settings',  label:'⚙️ Sozlama'},
+];
+
+function getSavedOrder() {
+  try {
+    var saved = localStorage.getItem('admin_tab_order');
+    if (saved) {
+      var ids = JSON.parse(saved);
+      var map = {};
+      DEFAULT_TABS.forEach(t => map[t.id] = t);
+      return ids.map(id => map[id]).filter(Boolean);
+    }
+  } catch(e) {}
+  return DEFAULT_TABS;
+}
+
+function saveOrder(tabs) {
+  try { localStorage.setItem('admin_tab_order', JSON.stringify(tabs.map(t=>t.id))); } catch(e) {}
+}
+
+var curTabs = getSavedOrder();
+var curTabId = curTabs[0].id;
+
+function buildNav() {
+  var nav = document.getElementById('nav-bar');
+  nav.innerHTML = '';
+  curTabs.forEach((tab, idx) => {
+    var btn = document.createElement('button');
+    btn.className = 'nb' + (tab.id === curTabId ? ' on' : '');
+    btn.innerHTML = tab.label;
+    btn.setAttribute('data-id', tab.id);
+    btn.setAttribute('draggable', 'true');
+    btn.onclick = function() { go(tab.id, btn); };
+    // Drag events
+    btn.addEventListener('dragstart', function(e) {
+      e.dataTransfer.setData('text/plain', tab.id);
+      btn.style.opacity = '.4';
+    });
+    btn.addEventListener('dragend', function() { btn.style.opacity='1'; });
+    btn.addEventListener('dragover', function(e) {
+      e.preventDefault(); btn.classList.add('drag-over');
+    });
+    btn.addEventListener('dragleave', function() { btn.classList.remove('drag-over'); });
+    btn.addEventListener('drop', function(e) {
+      e.preventDefault(); btn.classList.remove('drag-over');
+      var fromId = e.dataTransfer.getData('text/plain');
+      var fromIdx = curTabs.findIndex(t=>t.id===fromId);
+      var toIdx   = curTabs.findIndex(t=>t.id===tab.id);
+      if (fromIdx === toIdx) return;
+      var moved = curTabs.splice(fromIdx, 1)[0];
+      curTabs.splice(toIdx, 0, moved);
+      saveOrder(curTabs);
+      buildNav();
+    });
+    nav.appendChild(btn);
+  });
+}
+
 function go(name, btn) {
+  curTabId = name;
   document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById('pg-'+name).classList.add('on');
-  btn.classList.add('on');
+  if (btn) btn.classList.add('on');
+  else {
+    var b = document.querySelector('[data-id="'+name+'"]');
+    if (b) b.classList.add('on');
+  }
   if (!loaded[name]) { loaded[name] = true; fetchPage(name); }
 }
+
+buildNav();
 
 function fetchPage(name) {
   if (name==='stats')      loadStats();
@@ -608,9 +690,16 @@ function setUserFilter(f, btn) {
 }
 
 function loadUsers() {
-  api('/api/admin/users?filter='+curUserFilter).then(d => {
+  var q = document.getElementById('user-search') ? document.getElementById('user-search').value.trim() : '';
+  var url = '/api/admin/users?filter='+curUserFilter + (q ? '&q='+encodeURIComponent(q) : '');
+  fetch(url+'&uid='+UID).then(r=>r.json()).then(d => {
     if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
-    var rows = d.data||[];
+    renderUsers(d.data||[]);
+  }).catch(e => showErr('users-body', e.message));
+}
+
+function renderUsers(rows) {
+  {
     if (!rows.length) {
       document.getElementById('users-body').innerHTML = '<div class="loading">Foydalanuvchi yo\'q</div>'; return;
     }
@@ -640,7 +729,7 @@ function loadUsers() {
     });
     html += '</div>';
     document.getElementById('users-body').innerHTML = html;
-  }).catch(e => showErr('users-body', e.message));
+  }
 }
 
 function toggleBlock(uid, block) {
@@ -784,8 +873,34 @@ function saveSettings() {
 
 function dlExcel() { window.location.href='/api/admin/excel?uid='+UID; }
 
+function checkAllRegs(check) {
+  document.querySelectorAll('#ann-reg input[type="checkbox"]')
+    .forEach(inp => {
+      inp.checked = check;
+      inp.closest('.fcheck').classList.toggle('on', check);
+    });
+}
+
+var _userSearchTimer = null;
+function onUserSearch(q) {
+  clearTimeout(_userSearchTimer);
+  _userSearchTimer = setTimeout(function() {
+    loadUsersWithSearch(q.trim());
+  }, 400);
+}
+
+function loadUsersWithSearch(q) {
+  var url = '/api/admin/users?uid='+UID+'&filter='+curUserFilter;
+  if (q) url += '&q='+encodeURIComponent(q);
+  document.getElementById('users-body').innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  fetch(url).then(r=>r.json()).then(d => {
+    if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
+    renderUsers(d.data||[]);
+  }).catch(e => showErr('users-body', e.message));
+}
+
 // Load first tab
-loadStats();
+fetchPage(curTabId);
 </script>
 </body>
 </html>
