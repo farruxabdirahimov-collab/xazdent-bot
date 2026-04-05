@@ -18,7 +18,6 @@
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   background:var(--bg);color:var(--text);padding-bottom:20px}
 
-/* NAV */
 .nav{display:flex;flex-wrap:wrap;background:var(--card);
   border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;
   gap:3px;padding:6px}
@@ -30,17 +29,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .nb.on{background:var(--btn);color:#fff;border-color:transparent}
 .nb.drag-over{border:2px dashed var(--btn)}
 
-/* PAGES */
 .pg{display:none;padding:12px}
 .pg.on{display:block}
 
-/* CARDS */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px}
 .card{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--border)}
 .card.full{grid-column:1/-1}
-.card.clickable{cursor:pointer;transition:opacity .1s}
-.card.clickable:active{opacity:.7}
 .clabel{font-size:11px;color:var(--hint);margin-bottom:3px;font-weight:500}
 .cval{font-size:22px;font-weight:700}
 .csub{font-size:11px;color:var(--hint);margin-top:2px}
@@ -48,27 +43,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .cval.amber{color:var(--amber)}.cval.red{color:var(--red)}
 .cval.purple{color:var(--purple)}
 
-/* PERIOD TOGGLE */
 .period-row{display:flex;gap:4px;margin-bottom:12px;background:var(--card);
   border-radius:10px;padding:4px;border:1px solid var(--border)}
 .ptab{flex:1;padding:7px;border:none;border-radius:7px;background:transparent;
   color:var(--hint);font-size:12px;font-weight:600;cursor:pointer}
 .ptab.on{background:var(--btn);color:#fff}
 
-/* BARS */
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.bar-label{font-size:12px;min-width:110px;color:var(--hint)}
-.bar-bg{flex:1;background:var(--border);border-radius:4px;height:7px}
-.bar-fill{height:7px;border-radius:4px}
-.bar-val{font-size:12px;min-width:36px;text-align:right;font-weight:600}
+.bar-label{font-size:12px;min-width:100px;color:var(--hint)}
+.bar-bg{flex:1;background:var(--border);border-radius:4px;height:6px}
+.bar-fill{height:6px;border-radius:4px}
+.bar-val{font-size:12px;min-width:28px;text-align:right;font-weight:600}
 
-/* LIST ITEMS */
 .litem{display:flex;align-items:center;gap:10px;
   padding:11px 14px;border-bottom:1px solid var(--border);background:var(--card)}
 .litem:last-child{border-bottom:none}
 .litem-icon{width:38px;height:38px;border-radius:10px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:18px;flex-shrink:0}
+  display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .litem-info{flex:1;min-width:0}
 .litem-name{font-size:14px;font-weight:600;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -77,7 +68,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .litem-val{font-size:14px;font-weight:700}
 .litem-sub2{font-size:11px;color:var(--hint)}
 
-/* BADGES */
 .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
 .badge.ok{background:rgba(22,163,74,.12);color:var(--green)}
 .badge.warn{background:rgba(217,119,6,.12);color:var(--amber)}
@@ -85,19 +75,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .badge.info{background:rgba(37,99,235,.12);color:var(--btn)}
 .badge.purple{background:rgba(124,58,237,.12);color:var(--purple)}
 
-/* BTNS */
 .btn{display:block;width:100%;padding:12px;border:none;border-radius:10px;
   background:var(--btn);color:#fff;font-size:14px;font-weight:600;
   cursor:pointer;margin-bottom:8px}
 .btn:active{opacity:.8}
-.btn.green{background:var(--green)}
-.btn.red{background:var(--red)}
-.btn.amber{background:var(--amber);color:#000}
+.btn.green{background:var(--green)}.btn.red{background:var(--red)}
 .btn.outline{background:transparent;border:1px solid var(--border);color:var(--text)}
 .btn.sm{padding:7px 14px;width:auto;display:inline-block;margin:0;font-size:12px}
 .btn-row{display:flex;gap:6px;margin-top:8px}
 
-/* FORM */
 .finp{width:100%;padding:10px 12px;border:1.5px solid var(--border);
   border-radius:8px;font-size:14px;background:var(--bg);
   color:var(--text);outline:none;margin-bottom:10px}
@@ -109,7 +95,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .fcheck input{accent-color:var(--btn)}
 .fcheck.on{border-color:var(--btn);background:rgba(37,99,235,.07)}
 
-/* COMPLAINT */
 .complaint-card{background:var(--card);border-radius:12px;padding:14px;
   margin-bottom:8px;border:1px solid var(--border)}
 .cc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
@@ -117,7 +102,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   padding:10px;background:rgba(0,0,0,.04);border-radius:8px}
 .cc-acts{display:flex;gap:6px;flex-wrap:wrap}
 
-/* SUBSCRIPTION */
 .sub-card{background:var(--card);border-radius:12px;padding:14px;
   margin-bottom:8px;border:1px solid var(--border)}
 .sub-row{display:flex;align-items:center;gap:10px}
@@ -127,12 +111,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 .progress-wrap{margin-top:8px}
 .progress{height:5px;background:var(--border);border-radius:4px;overflow:hidden}
 .progress-bar{height:5px;border-radius:4px;background:var(--green);transition:width .3s}
-.progress-bar.warn{background:var(--amber)}
-.progress-bar.err{background:var(--red)}
+.progress-bar.warn{background:var(--amber)}.progress-bar.err{background:var(--red)}
 
-/* ANNOUNCEMENT FORM */
-.ann-section{background:var(--card);border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.ann-section{background:var(--card);border-radius:12px;padding:14px;
+  margin-bottom:10px;border:1px solid var(--border)}
 .ann-title{font-size:14px;font-weight:600;margin-bottom:12px}
+
+/* Users region table */
+.reg-table{width:100%;border-collapse:collapse;font-size:12px}
+.reg-table th{text-align:left;padding:7px 8px;color:var(--hint);
+  font-size:11px;font-weight:600;border-bottom:1px solid var(--border);
+  white-space:nowrap}
+.reg-table td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.reg-table tr:last-child td{border-bottom:none}
+.reg-bar-wrap{width:60px;background:var(--border);border-radius:3px;height:4px;display:inline-block}
+.reg-bar-inner{height:4px;border-radius:3px;background:var(--btn)}
+.new28{color:var(--green);font-size:11px;font-weight:600}
+
+/* Mini stat card */
+.mcard{background:var(--card);border-radius:12px;padding:12px;
+  border:1px solid var(--border);text-align:center}
+.mcard-icon{font-size:20px;margin-bottom:4px}
+.mcard-val{font-size:20px;font-weight:800;line-height:1}
+.mcard-label{font-size:10px;color:var(--hint);margin-top:3px;font-weight:500}
+.mcard-sub{font-size:10px;margin-top:2px;font-weight:600}
 
 .loading{text-align:center;padding:40px;color:var(--hint)}
 .spin{display:inline-block;width:22px;height:22px;
@@ -140,16 +142,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   border-radius:50%;animation:sp .7s linear infinite;margin-bottom:8px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .err-msg{color:var(--red);text-align:center;padding:20px;font-size:13px}
-.sep{height:1px;background:var(--border);margin:10px 0}
-.sec-title{font-size:13px;font-weight:700;color:var(--hint);
-  text-transform:uppercase;letter-spacing:.04em;margin:14px 0 8px}
+.sec-title{font-size:12px;font-weight:700;color:var(--hint);
+  text-transform:uppercase;letter-spacing:.04em;margin:12px 0 8px}
 </style>
 </head>
 <body>
 
 <div class="nav" id="nav-bar"></div>
 
-<!-- ═══════════════════ STATS ═══════════════════════════════════════════════ -->
+<!-- STATS -->
 <div class="pg on" id="pg-stats">
   <div class="period-row">
     <button class="ptab on" onclick="setPeriod('day',this)">Bugun</button>
@@ -160,35 +161,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   <div id="stats-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ BUYURTMALAR ════════════════════════════════════════ -->
+<!-- USERS -->
+<div class="pg" id="pg-users">
+  <div id="users-stats-top">
+    <div class="loading"><div class="spin"></div></div>
+  </div>
+  <div class="period-row" style="margin-top:10px">
+    <button class="ptab on" onclick="setUF('all',this)">Hammasi</button>
+    <button class="ptab" onclick="setUF('clinic',this)">🏥</button>
+    <button class="ptab" onclick="setUF('seller',this)">🛒</button>
+    <button class="ptab" onclick="setUF('zubtex',this)">🔬</button>
+  </div>
+  <input class="finp" id="user-search" placeholder="🔍 Ism, telefon yoki ID..."
+    oninput="onUS(this.value)" style="margin-bottom:8px">
+  <div id="users-body"><div class="loading"><div class="spin"></div></div></div>
+</div>
+
+<!-- BUYURTMALAR -->
 <div class="pg" id="pg-orders">
   <div class="period-row">
-    <button class="ptab on" onclick="setOrderFilter('all',this)">Hammasi</button>
-    <button class="ptab" onclick="setOrderFilter('active',this)">Aktiv</button>
-    <button class="ptab" onclick="setOrderFilter('done',this)">Tugagan</button>
-    <button class="ptab" onclick="setOrderFilter('no_offers',this)">Javobsiz</button>
+    <button class="ptab on" onclick="setOF('all',this)">Hammasi</button>
+    <button class="ptab" onclick="setOF('active',this)">Aktiv</button>
+    <button class="ptab" onclick="setOF('done',this)">Tugagan</button>
+    <button class="ptab" onclick="setOF('no_offers',this)">Javobsiz</button>
   </div>
   <div id="orders-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ MARKET ══════════════════════════════════════════════ -->
+<!-- MARKET -->
 <div class="pg" id="pg-market">
   <div id="market-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ E'LONLAR ════════════════════════════════════════════ -->
+<!-- E'LONLAR -->
 <div class="pg" id="pg-announce">
   <div class="ann-section">
     <div class="ann-title">📢 Yangi e'lon yuborish</div>
-
-    <div class="flabel">Kimga yuborilsin:</div>
+    <div class="flabel">Kimga:</div>
     <div class="fcheck-row" id="ann-aud">
       <label class="fcheck"><input type="checkbox" value="clinic"> 🏥 Klinikalar</label>
       <label class="fcheck"><input type="checkbox" value="zubtex"> 🔬 Zubtexniklar</label>
       <label class="fcheck"><input type="checkbox" value="seller"> 🛒 Sotuvchilar</label>
     </div>
-
-    <div class="flabel">Hudud (bo'sh = hammasi):</div>
+    <div class="flabel">Hudud:</div>
     <div class="fcheck-row" id="ann-reg">
       <label class="fcheck"><input type="checkbox" value="Toshkent shahri"> 🏙 Toshkent sh.</label>
       <label class="fcheck"><input type="checkbox" value="Toshkent viloyati"> 🌆 Toshkent vil.</label>
@@ -203,875 +218,495 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
       <label class="fcheck"><input type="checkbox" value="Jizzax"> 🌾 Jizzax</label>
       <label class="fcheck"><input type="checkbox" value="Sirdaryo"> 🌱 Sirdaryo</label>
       <label class="fcheck"><input type="checkbox" value="Navoiy"> 💎 Navoiy</label>
-      <label class="fcheck"><input type="checkbox" value="Qoraqalpog'iston"> 🏝 Qoraqalpog'iston</label>
+      <label class="fcheck"><input type="checkbox" value="Qoraqalpog'iston"> 🏝 QQ</label>
     </div>
-    <div style="margin-bottom:8px">
-      <button class="btn sm outline" onclick="checkAllRegs(true)" style="margin-right:6px">✅ Hammasi</button>
-      <button class="btn sm outline" onclick="checkAllRegs(false)">❌ Tozala</button>
+    <div style="margin-bottom:10px">
+      <button class="btn sm outline" onclick="chkRegs(true)" style="margin-right:6px">✅ Hammasi</button>
+      <button class="btn sm outline" onclick="chkRegs(false)">❌ Tozala</button>
     </div>
-
-    <div class="flabel">Aynan bir foydalanuvchiga (Telegram ID):</div>
-    <input class="finp" id="ann-uid" type="number" placeholder="123456789 (ixtiyoriy)">
-
+    <div class="flabel">Aynan bir userga (ID):</div>
+    <input class="finp" id="ann-uid" type="number" placeholder="243785989">
     <div class="flabel">Matn *</div>
     <textarea class="finp" id="ann-text" rows="4" placeholder="E'lon matni..."></textarea>
-
     <div id="ann-preview" style="display:none;margin-bottom:10px;padding:12px;
       background:rgba(37,99,235,.07);border-radius:8px;font-size:14px;line-height:1.5"></div>
-
     <div class="btn-row">
-      <button class="btn outline sm" onclick="annPreview()">👁 Ko'rish</button>
+      <button class="btn outline sm" onclick="annPrev()">👁 Ko'rish</button>
       <button class="btn sm" onclick="annSend()">📤 Yuborish</button>
     </div>
-    <div id="ann-result" style="margin-top:8px;font-size:13px;color:var(--green)"></div>
+    <div id="ann-res" style="margin-top:8px;font-size:13px"></div>
   </div>
-
   <div class="ann-section">
     <div class="ann-title">📊 Oxirgi e'lonlar</div>
-    <div id="ann-history"><div class="loading" style="padding:20px"><div class="spin"></div></div></div>
+    <div id="ann-history"><div class="loading" style="padding:16px"><div class="spin"></div></div></div>
   </div>
 </div>
 
-<!-- ═══════════════════ OBUNA ═══════════════════════════════════════════════ -->
+<!-- OBUNA -->
 <div class="pg" id="pg-subs">
   <div class="grid2" style="margin-bottom:10px">
     <div class="card"><div class="clabel">Jami sotuvchilar</div><div class="cval blue" id="sub-total">—</div></div>
     <div class="card"><div class="clabel">Faol obuna</div><div class="cval green" id="sub-active">—</div></div>
-    <div class="card"><div class="clabel">Trial davri</div><div class="cval amber" id="sub-trial">—</div></div>
-    <div class="card"><div class="clabel">Muddati o'tgan</div><div class="cval red" id="sub-expired">—</div></div>
+    <div class="card"><div class="clabel">Trial</div><div class="cval amber" id="sub-trial">—</div></div>
+    <div class="card"><div class="clabel">Tugagan</div><div class="cval red" id="sub-expired">—</div></div>
   </div>
   <div id="subs-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ USERS ═══════════════════════════════════════════════ -->
-<div class="pg" id="pg-users">
-  <!-- Statistika kartalari -->
-  <div id="users-stats" style="margin-bottom:0">
-    <div class="loading"><div class="spin"></div></div>
-  </div>
-
-  <!-- Hudud bo'yicha -->
-  <div id="users-regions" style="margin-bottom:0"></div>
-
-  <!-- Ro'yxat -->
-  <div class="period-row" style="margin-top:10px">
-    <button class="ptab on" onclick="setUserFilter('all',this)">Hammasi</button>
-    <button class="ptab" onclick="setUserFilter('clinic',this)">🏥 Klinika</button>
-    <button class="ptab" onclick="setUserFilter('seller',this)">🛒 Sotuvchi</button>
-    <button class="ptab" onclick="setUserFilter('zubtex',this)">🔬 Zubtex</button>
-    <button class="ptab" onclick="setUserFilter('blocked',this)">🔒 Bloklangan</button>
-  </div>
-  <div style="display:flex;gap:6px;margin-bottom:8px">
-    <input class="finp" id="user-search" placeholder="🔍 Ism, telefon yoki Telegram ID..."
-      oninput="onUserSearch(this.value)" style="margin-bottom:0;flex:1">
-  </div>
-  <div id="users-body"><div class="loading"><div class="spin"></div></div></div>
-</div>
-
-<!-- ═══════════════════ SUPPORT ════════════════════════════════════════════ -->
-<div class="pg" id="pg-support">
-  <div id="support-body"><div class="loading"><div class="spin"></div></div></div>
-</div>
-
-<!-- ═══════════════════ SHIKOYATLAR ════════════════════════════════════════ -->
+<!-- SHIKOYATLAR -->
 <div class="pg" id="pg-complaints">
   <div class="period-row">
-    <button class="ptab on" onclick="setComplaintFilter('new',this)">Yangi</button>
-    <button class="ptab" onclick="setComplaintFilter('reviewing',this)">Ko'rib chiqilmoqda</button>
-    <button class="ptab" onclick="setComplaintFilter('closed',this)">Yopilgan</button>
+    <button class="ptab on" onclick="setCF('new',this)">Yangi</button>
+    <button class="ptab" onclick="setCF('reviewing',this)">Ko'rilmoqda</button>
+    <button class="ptab" onclick="setCF('closed',this)">Yopilgan</button>
   </div>
   <div id="complaints-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ CHEKLAR ═════════════════════════════════════════════ -->
+<!-- CHEKLAR -->
 <div class="pg" id="pg-checks">
   <div id="checks-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
-<!-- ═══════════════════ SUPPORT ═════════════════════════════════════════════ -->
-<div class="pg" id="pg-support">
-  <div id="support-body"><div class="loading"><div class="spin"></div></div></div>
-</div>
-
-<!-- ═══════════════════ SETTINGS ════════════════════════════════════════════ -->
+<!-- SETTINGS -->
 <div class="pg" id="pg-settings">
   <div class="card" id="settings-body"><div class="loading"><div class="spin"></div></div></div>
 </div>
 
 <script>
-// ── INIT ─────────────────────────────────────────────────────────────────────
 var tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 var UID = 0;
 if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) UID = tg.initDataUnsafe.user.id;
-var _q = new URLSearchParams(window.location.search);
-if (!UID) UID = parseInt(_q.get('uid')||'0')||0;
+var _qp = new URLSearchParams(window.location.search);
+if (!UID) UID = parseInt(_qp.get('uid')||'0')||0;
 
-var loaded = {}, curPeriod = 'month', curOrderFilter = 'all',
-    curUserFilter = 'all', curComplaintFilter = 'new';
+var loaded = {}, curPeriod='month', curOF='all', curUF='all', curCF='new';
 
-// Tab tartib tizimi
+// ── NAV drag & drop ──────────────────────────────────────────────────────────
 var DEFAULT_TABS = [
   {id:'users',     label:'👥 Users'},
   {id:'stats',     label:'📊 Stats'},
   {id:'orders',    label:'📋 Buyurtmalar'},
   {id:'market',    label:'🛍 Market'},
-  {id:'announce',  label:'📢 E\'lonlar'},
+  {id:'announce',  label:"📢 E'lonlar"},
   {id:'subs',      label:'💳 Obuna'},
-  {id:'support',   label:'💬 Support'},
   {id:'complaints',label:'🚨 Shikoyat'},
   {id:'checks',    label:'✅ Cheklar'},
   {id:'settings',  label:'⚙️ Sozlama'},
 ];
-
-function getSavedOrder() {
+function getSaved() {
   try {
-    var saved = localStorage.getItem('admin_tab_order');
-    if (saved) {
-      var ids = JSON.parse(saved);
-      var map = {};
-      DEFAULT_TABS.forEach(t => map[t.id] = t);
-      return ids.map(id => map[id]).filter(Boolean);
-    }
+    var s = localStorage.getItem('admin_tabs');
+    if (s) { var ids=JSON.parse(s), map={};
+      DEFAULT_TABS.forEach(t=>map[t.id]=t);
+      return ids.map(id=>map[id]).filter(Boolean); }
   } catch(e) {}
   return DEFAULT_TABS;
 }
-
-function saveOrder(tabs) {
-  try { localStorage.setItem('admin_tab_order', JSON.stringify(tabs.map(t=>t.id))); } catch(e) {}
-}
-
-var curTabs = getSavedOrder();
-var curTabId = curTabs[0].id;
-
+var curTabs = getSaved(), curTabId = curTabs[0].id;
 function buildNav() {
-  var nav = document.getElementById('nav-bar');
-  nav.innerHTML = '';
-  curTabs.forEach((tab, idx) => {
+  var nav = document.getElementById('nav-bar'); nav.innerHTML='';
+  curTabs.forEach(tab => {
     var btn = document.createElement('button');
-    btn.className = 'nb' + (tab.id === curTabId ? ' on' : '');
-    btn.innerHTML = tab.label;
+    btn.className = 'nb'+(tab.id===curTabId?' on':'');
+    btn.textContent = tab.label;
     btn.setAttribute('data-id', tab.id);
-    btn.setAttribute('draggable', 'true');
-    btn.onclick = function() { go(tab.id, btn); };
-    // Drag events
-    btn.addEventListener('dragstart', function(e) {
-      e.dataTransfer.setData('text/plain', tab.id);
-      btn.style.opacity = '.4';
-    });
-    btn.addEventListener('dragend', function() { btn.style.opacity='1'; });
-    btn.addEventListener('dragover', function(e) {
-      e.preventDefault(); btn.classList.add('drag-over');
-    });
-    btn.addEventListener('dragleave', function() { btn.classList.remove('drag-over'); });
-    btn.addEventListener('drop', function(e) {
+    btn.setAttribute('draggable','true');
+    btn.onclick = function(){ goTab(tab.id, btn); };
+    btn.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain',tab.id); btn.style.opacity='.4'; });
+    btn.addEventListener('dragend',   () => { btn.style.opacity='1'; });
+    btn.addEventListener('dragover',  e => { e.preventDefault(); btn.classList.add('drag-over'); });
+    btn.addEventListener('dragleave', () => { btn.classList.remove('drag-over'); });
+    btn.addEventListener('drop', e => {
       e.preventDefault(); btn.classList.remove('drag-over');
-      var fromId = e.dataTransfer.getData('text/plain');
-      var fromIdx = curTabs.findIndex(t=>t.id===fromId);
-      var toIdx   = curTabs.findIndex(t=>t.id===tab.id);
-      if (fromIdx === toIdx) return;
-      var moved = curTabs.splice(fromIdx, 1)[0];
-      curTabs.splice(toIdx, 0, moved);
-      saveOrder(curTabs);
+      var fi=curTabs.findIndex(t=>t.id===e.dataTransfer.getData('text/plain'));
+      var ti=curTabs.findIndex(t=>t.id===tab.id);
+      if(fi===ti) return;
+      curTabs.splice(ti,0,curTabs.splice(fi,1)[0]);
+      try{localStorage.setItem('admin_tabs',JSON.stringify(curTabs.map(t=>t.id)));}catch(e){}
       buildNav();
     });
     nav.appendChild(btn);
   });
 }
-
-function go(name, btn) {
-  curTabId = name;
-  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
-  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
+function goTab(name, btn) {
+  curTabId=name;
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
   document.getElementById('pg-'+name).classList.add('on');
-  if (btn) btn.classList.add('on');
-  else {
-    var b = document.querySelector('[data-id="'+name+'"]');
-    if (b) b.classList.add('on');
-  }
-  if (!loaded[name]) { loaded[name] = true; fetchPage(name); }
+  (btn||document.querySelector('[data-id="'+name+'"]'))?.classList.add('on');
+  if(!loaded[name]){loaded[name]=true;fetchPage(name);}
 }
-
 buildNav();
-
-function fetchPage(name) {
-  if (name==='stats')      loadStats();
-  if (name==='orders')     loadOrders();
-  if (name==='market')     loadMarket();
-  if (name==='announce')   loadAnnHistory();
-  if (name==='subs')       loadSubs();
-  if (name==='users')      loadUsers();
-  if (name==='support')    loadSupport();
-  if (name==='complaints') loadComplaints();
-  if (name==='checks')     loadChecks();
-  if (name==='settings')   loadSettings();
+function fetchPage(n){
+  if(n==='stats')      loadStats();
+  if(n==='users')      loadUsers();
+  if(n==='orders')     loadOrders();
+  if(n==='market')     loadMarket();
+  if(n==='announce')   loadAnnHistory();
+  if(n==='subs')       loadSubs();
+  if(n==='complaints') loadComplaints();
+  if(n==='checks')     loadChecks();
+  if(n==='settings')   loadSettings();
 }
 
 function api(path) {
-  return fetch(path+'?uid='+UID).then(r => {
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
-  });
+  var sep = path.includes('?')?'&':'?';
+  return fetch(path+sep+'uid='+UID).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();});
 }
 function apiPost(path, data) {
-  data.admin_id = UID;
-  return fetch(path, {method:'POST',headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(data)}).then(r => r.json());
+  data.admin_id=UID;
+  return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json());
 }
-function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmt(n){ return Math.round(n||0).toLocaleString(); }
-function fmtDate(s){ return (s||'').slice(0,10); }
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(n){return Math.round(n||0).toLocaleString();}
+function fmtDate(s){return(s||'').slice(0,10);}
+function showErr(id,msg){document.getElementById(id).innerHTML='<div class="err-msg">❌ '+esc(msg)+'<br><small>uid='+UID+'</small></div>';}
 
-function showErr(id, msg) {
-  document.getElementById(id).innerHTML = '<div class="err-msg">❌ '+esc(msg)+'<br><small>uid='+UID+'</small></div>';
+// ── STATS ────────────────────────────────────────────────────────────────────
+function setPeriod(p,btn){
+  curPeriod=p;
+  document.querySelectorAll('#pg-stats .ptab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on'); loaded.stats=true; loadStats();
+}
+function loadStats(){
+  api('/api/admin/stats?period='+curPeriod).then(d=>{
+    if(!d.ok){showErr('stats-body',d.error||'xato');return;}
+    var s=d.data, m=s.period||{}, regs=s.regions||[];
+    var maxR=regs.reduce((a,r)=>Math.max(a,r.needs||0),1);
+    var regHtml=regs.slice(0,8).map(r=>{
+      var pct=Math.round((r.needs||0)/maxR*100);
+      return '<div class="bar-row">'+
+        '<div class="bar-label">'+esc(r.region||'?')+'</div>'+
+        '<div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:var(--btn)"></div></div>'+
+        '<div class="bar-val">'+(r.needs||0)+'</div></div>';
+    }).join('');
+    document.getElementById('stats-body').innerHTML=
+      '<div class="grid2">'+
+        sc('Foydalanuvchilar',s.total_users,'+'+s.new_period+' bu davrda','blue')+
+        sc('Klinikalar',s.clinics,'Sotuvchilar: '+s.sellers,'')+
+        sc('Buyurtmalar',m.needs,'Jami: '+s.total_needs,'amber')+
+        sc('Bitimlar',m.deals,'Jami: '+s.total_deals,'green')+
+        sc('Daromad',fmt(m.revenue)+" so'm",'Jami: '+fmt(s.revenue)+" so'm",'purple')+
+        sc('Javobsiz',s.no_offers,'Taklif kelmaganlar','red')+
+      '</div>'+
+      (regs.length?'<div class="card"><div class="sec-title">Hudud bo\'yicha buyurtmalar</div>'+regHtml+'</div>':'')+
+      '<div style="margin-top:8px"><button class="btn" onclick="dlExcel()">📥 Excel</button></div>';
+  }).catch(e=>showErr('stats-body',e.message));
+}
+function sc(l,v,s,c){return '<div class="card"><div class="clabel">'+esc(l)+'</div><div class="cval '+c+'">'+esc(''+v)+'</div><div class="csub">'+esc(s)+'</div></div>';}
+
+// ── USERS ────────────────────────────────────────────────────────────────────
+function loadUsers(){
+  // 1. Statistika
+  api('/api/admin/user_stats').then(d=>{
+    if(!d.ok) return;
+    var s=d.data, regs=s.regions||[];
+    // 4 ta karta
+    var cards=
+      '<div class="grid4">'+
+        mc('👥','Jami',s.total,'','blue')+
+        mc('🏥','Klinika',s.clinic,'+'+s.new_28+' (28k)','green')+
+        mc('🛒','Sotuvchi',s.seller,'','amber')+
+        mc('🔬','Zubtex',s.zubtex,'','purple')+
+      '</div>';
+    // Hudud jadvali
+    var maxT=regs.reduce((m,r)=>Math.max(m,r.total||0),1);
+    var tbl='<div class="card" style="margin-bottom:10px;overflow-x:auto">'+
+      '<div class="sec-title" style="margin-top:0">📍 Hudud bo\'yicha (o\'sish bo\'yicha)</div>'+
+      '<table class="reg-table"><thead><tr>'+
+        '<th>Hudud</th><th>🏥K</th><th>🛒S</th><th>🔬Z</th><th>Jami</th><th>+28k</th><th></th>'+
+      '</tr></thead><tbody>';
+    // Jami bo'yicha kamayish tartibida — allaqachon API dan sorted
+    regs.forEach(r=>{
+      var pct=Math.round((r.total||0)/maxT*100);
+      var n28=r.new_28||0;
+      tbl+='<tr>'+
+        '<td style="font-weight:500;white-space:nowrap">'+esc(r.region||'?')+'</td>'+
+        '<td style="color:var(--green);text-align:center">'+(r.clinic||0)+'</td>'+
+        '<td style="color:var(--amber);text-align:center">'+(r.seller||0)+'</td>'+
+        '<td style="color:var(--purple);text-align:center">'+(r.zubtex||0)+'</td>'+
+        '<td style="font-weight:700;text-align:center">'+(r.total||0)+'</td>'+
+        '<td class="new28" style="text-align:center">'+(n28>0?'+'+n28:'—')+'</td>'+
+        '<td><div class="reg-bar-wrap"><div class="reg-bar-inner" style="width:'+pct+'%"></div></div></td>'+
+      '</tr>';
+    });
+    tbl+='</tbody></table></div>';
+    document.getElementById('users-stats-top').innerHTML=cards+tbl;
+  }).catch(()=>{});
+
+  // 2. Ro'yxat
+  fetchUserList();
 }
 
-// ── STATS ─────────────────────────────────────────────────────────────────────
-function setPeriod(p, btn) {
-  curPeriod = p;
-  document.querySelectorAll('#pg-stats .ptab').forEach(b => b.classList.remove('on'));
+function mc(icon,label,val,sub,cls){
+  return '<div class="mcard">'+
+    '<div class="mcard-icon">'+icon+'</div>'+
+    '<div class="mcard-val '+cls+'">'+fmt(val)+'</div>'+
+    '<div class="mcard-label">'+esc(label)+'</div>'+
+    (sub?'<div class="mcard-sub" style="color:var(--green)">'+esc(sub)+'</div>':'')+
+  '</div>';
+}
+
+function setUF(f,btn){
+  curUF=f;
+  document.querySelectorAll('#pg-users .ptab').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
-  loaded.stats = true; loadStats();
+  fetchUserList();
 }
 
-function loadStats() {
-  api('/api/admin/stats?period='+curPeriod)
-    .then(d => {
-      if (!d.ok) { showErr('stats-body', d.error||'xato'); return; }
-      var s = d.data, m = s.period||{}, regs = s.regions||[];
-      var maxR = regs.reduce((a,r) => Math.max(a,r.needs||0), 1);
-      var regHtml = regs.slice(0,8).map(r => {
-        var pct = Math.round((r.needs||0)/maxR*100);
-        return '<div class="bar-row">' +
-          '<div class="bar-label">'+esc(r.region||'?')+'</div>' +
-          '<div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:var(--btn)"></div></div>' +
-          '<div class="bar-val">'+( r.needs||0)+'</div></div>';
-      }).join('');
+var _usTimer=null;
+function onUS(q){clearTimeout(_usTimer);_usTimer=setTimeout(()=>fetchUserList(q.trim()),400);}
 
-      document.getElementById('stats-body').innerHTML =
-        '<div class="grid2">' +
-          statCard('Foydalanuvchilar', s.total_users, '+'+s.new_period+' bu davrda', 'blue') +
-          statCard('Klinikalar', s.clinics, 'Sotuvchilar: '+s.sellers, '') +
-          statCard('Buyurtmalar', m.needs, 'Jami: '+s.total_needs, 'amber') +
-          statCard('Bitimlar', m.deals, 'Jami: '+s.total_deals, 'green') +
-          statCard('Daromad', fmt(m.revenue)+" so'm", 'Jami: '+fmt(s.revenue)+" so'm", 'purple') +
-          statCard('Javobsiz', s.no_offers, 'Taklif kelmaganlar', 'red') +
-        '</div>' +
-        (regs.length ? '<div class="card"><div class="sec-title">Hudud bo\'yicha buyurtmalar</div>'+regHtml+'</div>' : '') +
-        '<div style="margin-top:8px">' +
-          '<button class="btn" onclick="dlExcel()">📥 Excel yuklab olish</button>' +
-        '</div>';
-    }).catch(e => showErr('stats-body', e.message));
+function fetchUserList(q){
+  var sq=q||document.getElementById('user-search').value.trim();
+  var url='/api/admin/users?filter='+curUF+(sq?'&q='+encodeURIComponent(sq):'');
+  document.getElementById('users-body').innerHTML='<div class="loading"><div class="spin"></div></div>';
+  api(url).then(d=>{
+    if(!d.ok){showErr('users-body',d.error||'xato');return;}
+    renderUsers(d.data||[]);
+  }).catch(e=>showErr('users-body',e.message));
 }
 
-function statCard(label, val, sub, cls) {
-  return '<div class="card"><div class="clabel">'+esc(label)+'</div>' +
-    '<div class="cval '+cls+'">'+esc(''+val)+'</div>' +
-    '<div class="csub">'+esc(sub)+'</div></div>';
+function renderUsers(rows){
+  if(!rows.length){
+    document.getElementById('users-body').innerHTML='<div class="loading">Foydalanuvchi yo\'q</div>';return;
+  }
+  var html='<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">';
+  rows.forEach(u=>{
+    var role={clinic:'🏥',zubtex:'🔬',seller:'🛒'}[u.role]||'👤';
+    var badge=u.is_blocked
+      ?'<span class="badge err">Bloklangan</span>'
+      :u.role==='seller'?'<span class="badge info">Sotuvchi</span>'
+      :'<span class="badge ok">Aktiv</span>';
+    html+='<div class="litem">'+
+      '<div class="litem-icon" style="background:var(--bg);font-size:20px">'+role+'</div>'+
+      '<div class="litem-info">'+
+        '<div class="litem-name">'+esc(u.name||'?')+'</div>'+
+        '<div class="litem-sub">'+esc(u.region||'—')+(u.phone?' · '+esc(u.phone):'')+'</div>'+
+        '<div class="litem-sub">'+fmtDate(u.created_at)+(u.balance?' · 💰'+fmt(u.balance)+' ball':'')+'</div>'+
+      '</div>'+
+      '<div class="litem-right">'+badge+
+        '<div class="btn-row" style="margin-top:4px">'+
+          '<button class="btn sm outline" onclick="msgUser('+u.id+')" style="font-size:10px;padding:4px 8px">✉️</button>'+
+          (u.is_blocked
+            ?'<button class="btn sm green" onclick="toggleBlock('+u.id+',0)" style="font-size:10px;padding:4px 8px">✅</button>'
+            :'<button class="btn sm red" onclick="toggleBlock('+u.id+',1)" style="font-size:10px;padding:4px 8px">🔒</button>')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  html+='</div>';
+  document.getElementById('users-body').innerHTML=html;
 }
 
-function bigCard(icon, label, val, sub, cls) {
-  return '<div class="card">' +
-    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-      '<span style="font-size:22px">'+icon+'</span>' +
-      '<span class="clabel" style="margin-bottom:0">'+esc(label)+'</span>' +
-    '</div>' +
-    '<div class="cval '+cls+'" style="font-size:28px">'+fmt(val)+'</div>' +
-    '<div class="csub">'+esc(sub)+'</div></div>';
+function toggleBlock(uid,block){
+  apiPost('/api/admin/toggle_block',{target_uid:uid,block:block})
+    .then(d=>{if(d.ok){loaded.users=false;loadUsers();}});
+}
+function msgUser(uid){
+  var txt=prompt('Xabar matni:'); if(!txt) return;
+  apiPost('/api/admin/msg_user',{target_uid:uid,text:txt})
+    .then(d=>alert(d.ok?'✅ Yuborildi':'❌ Xato'));
 }
 
-function miniCard(icon, label, val, sub, cls) {
-  return '<div class="card" style="padding:10px">' +
-    '<div style="font-size:18px;margin-bottom:3px">'+icon+'</div>' +
-    '<div class="cval '+cls+'" style="font-size:20px">'+fmt(val)+'</div>' +
-    '<div class="clabel" style="margin-bottom:0">'+esc(label)+'</div>' +
-    '<div class="csub" style="font-size:10px">'+esc(sub)+'</div></div>';
+// ── ORDERS ───────────────────────────────────────────────────────────────────
+function setOF(f,btn){curOF=f;document.querySelectorAll('#pg-orders .ptab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');loaded.orders=true;loadOrders();}
+function loadOrders(){
+  api('/api/admin/orders?filter='+curOF).then(d=>{
+    if(!d.ok){showErr('orders-body',d.error||'xato');return;}
+    var orders=d.data||[];
+    if(!orders.length){document.getElementById('orders-body').innerHTML='<div class="loading">📭 Buyurtma yo\'q</div>';return;}
+    var html='<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">';
+    orders.forEach(o=>{
+      var st=o.status==='active'?'<span class="badge info">Aktiv</span>':o.offer_count===0?'<span class="badge err">Javobsiz</span>':'<span class="badge ok">Bitim</span>';
+      html+='<div class="litem">'+
+        '<div class="litem-icon" style="background:rgba(37,99,235,.1)">📋</div>'+
+        '<div class="litem-info">'+
+          '<div class="litem-name">'+esc(o.clinic_name||'?')+'</div>'+
+          '<div class="litem-sub">'+esc(o.products||'')+'</div>'+
+          '<div class="litem-sub">📍 '+esc(o.region||'')+'</div>'+
+        '</div>'+
+        '<div class="litem-right">'+st+'<div class="litem-sub2">'+o.offer_count+' taklif</div></div>'+
+      '</div>';
+    });
+    html+='</div>';
+    document.getElementById('orders-body').innerHTML=html;
+  }).catch(e=>showErr('orders-body',e.message));
 }
 
-// ── BUYURTMALAR ───────────────────────────────────────────────────────────────
-function setOrderFilter(f, btn) {
-  curOrderFilter = f;
-  document.querySelectorAll('#pg-orders .ptab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  loaded.orders = true; loadOrders();
-}
-
-function loadOrders() {
-  api('/api/admin/orders?filter='+curOrderFilter)
-    .then(d => {
-      if (!d.ok) { showErr('orders-body', d.error||'xato'); return; }
-      var orders = d.data||[];
-      if (!orders.length) {
-        document.getElementById('orders-body').innerHTML =
-          '<div class="loading">📭 Buyurtma yo\'q</div>'; return;
-      }
-      var html = '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">';
-      orders.forEach(o => {
-        var st = o.status==='active'
-          ? '<span class="badge info">Aktiv</span>'
-          : o.offer_count===0
-          ? '<span class="badge err">Javobsiz</span>'
-          : '<span class="badge ok">Bitim</span>';
-        var warn = o.offer_count===0 && o.hours_left < 6
-          ? '<span style="font-size:11px;color:var(--red)"> ⚠️ '+Math.round(o.hours_left)+'s qoldi</span>' : '';
-        html += '<div class="litem">' +
-          '<div class="litem-icon" style="background:rgba(37,99,235,.1)">📋</div>' +
-          '<div class="litem-info">' +
-            '<div class="litem-name">'+esc(o.clinic_name||'?')+'</div>' +
-            '<div class="litem-sub">'+esc(o.products||'')+'</div>' +
-            '<div class="litem-sub">📍 '+esc(o.region||'')+ warn+'</div>' +
-          '</div>' +
-          '<div class="litem-right">' + st +
-            '<div class="litem-sub2">'+o.offer_count+' taklif</div>' +
-          '</div></div>';
-      });
-      html += '</div>';
-      document.getElementById('orders-body').innerHTML = html;
-    }).catch(e => showErr('orders-body', e.message));
-}
-
-// ── MARKET ANALYTICS ─────────────────────────────────────────────────────────
-function loadMarket() {
-  api('/api/admin/market').then(d => {
-    if (!d.ok) { showErr('market-body', d.error||'xato'); return; }
-    var m = d.data||{};
-    var topView = (m.top_viewed||[]).map((p,i) =>
-      '<div class="litem">' +
-        '<div class="litem-icon" style="background:rgba(124,58,237,.1);font-size:15px;font-weight:700;color:var(--purple)">'+(i+1)+'</div>' +
-        '<div class="litem-info"><div class="litem-name">'+esc(p.name)+'</div>' +
-          '<div class="litem-sub">🏪 '+esc(p.shop_name||'?')+'</div></div>' +
-        '<div class="litem-right"><div class="litem-val">'+p.views+'</div>' +
-          '<div class="litem-sub2">ko\'rish</div></div>' +
-      '</div>'
-    ).join('');
-
-    var topSearch = (m.top_searches||[]).map(s =>
-      '<div class="litem">' +
-        '<div class="litem-icon" style="background:rgba(217,119,6,.1)">🔍</div>' +
-        '<div class="litem-info"><div class="litem-name">'+esc(s.query)+'</div></div>' +
-        '<div class="litem-right"><div class="litem-val">'+s.cnt+'</div>' +
-          '<div class="litem-sub2">marta</div></div>' +
-      '</div>'
-    ).join('');
-
-    var topOrdered = (m.top_ordered||[]).map((p,i) =>
-      '<div class="litem">' +
-        '<div class="litem-icon" style="background:rgba(22,163,74,.1);font-size:15px;font-weight:700;color:var(--green)">'+(i+1)+'</div>' +
-        '<div class="litem-info"><div class="litem-name">'+esc(p.name)+'</div>' +
-          '<div class="litem-sub">🏪 '+esc(p.shop_name||'?')+'</div></div>' +
-        '<div class="litem-right"><div class="litem-val">'+p.orders+'</div>' +
-          '<div class="litem-sub2">buyurtma</div></div>' +
-      '</div>'
-    ).join('');
-
-    var warnings = [];
-    if (m.no_photo_count) warnings.push('📸 Rasmsiz mahsulotlar: <b>'+m.no_photo_count+' ta</b>');
-    if (m.no_stock_count) warnings.push('⚠️ Stoksiz mahsulotlar: <b>'+m.no_stock_count+' ta</b>');
-    var warnHtml = warnings.length
-      ? '<div class="card full" style="margin-bottom:10px;border-color:var(--amber)">' +
-          warnings.map(w=>'<div style="font-size:13px;margin-bottom:4px">'+w+'</div>').join('') +
-        '</div>' : '';
-
-    document.getElementById('market-body').innerHTML =
-      '<div class="grid2" style="margin-bottom:10px">' +
-        statCard('Jami mahsulotlar', m.total_products, 'Aktiv do\'konlar: '+m.total_shops, 'blue') +
-        statCard('Bu oy ko\'rishlar', m.views_month, 'Jami: '+m.views_total, 'purple') +
-        statCard('Bu oy buyurtmalar', m.orders_month, 'Jami: '+m.orders_total, 'green') +
-        statCard('Avg narx', fmt(m.avg_price)+' so\'m', 'Barcha mahsulotlar', '') +
-      '</div>' +
-      warnHtml +
-      '<div class="sec-title">🔥 Ko\'p ko\'rilgan</div>' +
-      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">' + (topView||'<div class="loading" style="padding:16px">Ma\'lumot yo\'q</div>') + '</div>' +
-      '<div class="sec-title">💰 Ko\'p buyurtma qilingan</div>' +
-      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">' + (topOrdered||'<div class="loading" style="padding:16px">Ma\'lumot yo\'q</div>') + '</div>' +
-      '<div class="sec-title">🔍 Ko\'p qidirilgan</div>' +
-      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">' + (topSearch||'<div class="loading" style="padding:16px">Ma\'lumot yo\'q</div>') + '</div>';
-
-  }).catch(e => showErr('market-body', e.message));
+// ── MARKET ───────────────────────────────────────────────────────────────────
+function loadMarket(){
+  api('/api/admin/market').then(d=>{
+    if(!d.ok){showErr('market-body',d.error||'xato');return;}
+    var m=d.data||{};
+    var tvHtml=(m.top_viewed||[]).map((p,i)=>'<div class="litem"><div class="litem-icon" style="background:rgba(124,58,237,.1);font-size:14px;font-weight:700;color:var(--purple)">'+(i+1)+'</div><div class="litem-info"><div class="litem-name">'+esc(p.name)+'</div><div class="litem-sub">🏪 '+esc(p.shop_name||'')+'</div></div><div class="litem-right"><div class="litem-val">'+p.views+'</div><div class="litem-sub2">ko\'rish</div></div></div>').join('');
+    var toHtml=(m.top_ordered||[]).map((p,i)=>'<div class="litem"><div class="litem-icon" style="background:rgba(22,163,74,.1);font-size:14px;font-weight:700;color:var(--green)">'+(i+1)+'</div><div class="litem-info"><div class="litem-name">'+esc(p.name)+'</div><div class="litem-sub">🏪 '+esc(p.shop_name||'')+'</div></div><div class="litem-right"><div class="litem-val">'+p.orders+'</div><div class="litem-sub2">buyurtma</div></div></div>').join('');
+    var tsHtml=(m.top_searches||[]).map(s=>'<div class="litem"><div class="litem-icon" style="background:rgba(217,119,6,.1)">🔍</div><div class="litem-info"><div class="litem-name">'+esc(s.query)+'</div></div><div class="litem-right"><div class="litem-val">'+s.cnt+'</div></div></div>').join('');
+    var warn='';
+    if(m.no_photo_count) warn+='<div style="font-size:13px;margin-bottom:4px">📸 Rasmsiz: <b>'+m.no_photo_count+' ta</b></div>';
+    if(m.no_stock_count) warn+='<div style="font-size:13px">⚠️ Stoksiz: <b>'+m.no_stock_count+' ta</b></div>';
+    document.getElementById('market-body').innerHTML=
+      '<div class="grid2" style="margin-bottom:10px">'+
+        sc('Jami mahsulotlar',m.total_products,'Do\'konlar: '+m.total_shops,'blue')+
+        sc('Bu oy ko\'rish',m.views_month,'Jami: '+m.views_total,'purple')+
+        sc('Bu oy buyurtma',m.orders_month,'Jami: '+m.orders_total,'green')+
+        sc('Avg narx',fmt(m.avg_price)+" so'm",'','')+'</div>'+
+      (warn?'<div class="card" style="margin-bottom:10px;border-color:var(--amber)">'+warn+'</div>':'')+
+      '<div class="sec-title">🔥 Ko\'p ko\'rilgan</div>'+
+      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">'+(tvHtml||'<div class="loading" style="padding:14px">Ma\'lumot yo\'q</div>')+'</div>'+
+      '<div class="sec-title">💰 Ko\'p buyurtma</div>'+
+      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">'+(toHtml||'<div class="loading" style="padding:14px">Ma\'lumot yo\'q</div>')+'</div>'+
+      '<div class="sec-title">🔍 Ko\'p qidirilgan</div>'+
+      '<div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px">'+(tsHtml||'<div class="loading" style="padding:14px">Ma\'lumot yo\'q</div>')+'</div>';
+  }).catch(e=>showErr('market-body',e.message));
 }
 
 // ── E'LONLAR ─────────────────────────────────────────────────────────────────
-function annPreview() {
-  var txt = document.getElementById('ann-text').value.trim();
-  if (!txt) return;
-  var prev = document.getElementById('ann-preview');
-  prev.style.display = 'block';
-  prev.innerHTML = '📢 <b>E\'lon</b><br><br>' + esc(txt).replace(/\n/g,'<br>');
+function annPrev(){
+  var txt=document.getElementById('ann-text').value.trim(); if(!txt) return;
+  var p=document.getElementById('ann-preview');
+  p.style.display='block'; p.innerHTML='📢 <b>E\'lon</b><br><br>'+esc(txt).replace(/\n/g,'<br>');
 }
-
-function annSend() {
-  var txt = document.getElementById('ann-text').value.trim();
-  if (!txt) { alert('Matnni kiriting!'); return; }
-
-  var auds = Array.from(document.querySelectorAll('#ann-aud input:checked')).map(i=>i.value);
-  var regs = Array.from(document.querySelectorAll('#ann-reg input:checked')).map(i=>i.value);
-  var single_uid = parseInt(document.getElementById('ann-uid').value)||0;
-
-  if (!auds.length && !single_uid) { alert('Kimga yuborishni tanlang!'); return; }
-
-  var res = document.getElementById('ann-result');
-  res.textContent = '⏳ Yuborilmoqda...'; res.style.color = 'var(--hint)';
-
-  apiPost('/api/admin/announce', {text:txt, audiences:auds, regions:regs, single_uid:single_uid})
-    .then(d => {
-      if (d.ok) {
-        res.textContent = '✅ '+d.sent+' ta foydalanuvchiga yuborildi!';
-        res.style.color = 'var(--green)';
-        document.getElementById('ann-text').value = '';
-        document.getElementById('ann-preview').style.display = 'none';
-        loadAnnHistory();
-      } else {
-        res.textContent = '❌ '+(d.error||'Xato');
-        res.style.color = 'var(--red)';
-      }
-    });
+function annSend(){
+  var txt=document.getElementById('ann-text').value.trim();
+  if(!txt){alert('Matnni kiriting!');return;}
+  var auds=Array.from(document.querySelectorAll('#ann-aud input:checked')).map(i=>i.value);
+  var regs=Array.from(document.querySelectorAll('#ann-reg input:checked')).map(i=>i.value);
+  var suid=parseInt(document.getElementById('ann-uid').value)||0;
+  if(!auds.length&&!suid){alert('Kimga yuborishni tanlang!');return;}
+  var res=document.getElementById('ann-res');
+  res.textContent='⏳ Yuborilmoqda...';res.style.color='var(--hint)';
+  apiPost('/api/admin/announce',{text:txt,audiences:auds,regions:regs,single_uid:suid}).then(d=>{
+    if(d.ok){res.textContent='✅ '+d.sent+' ta yuborildi!';res.style.color='var(--green)';
+      document.getElementById('ann-text').value='';
+      document.getElementById('ann-preview').style.display='none';
+      loadAnnHistory();
+    }else{res.textContent='❌ '+(d.error||'Xato');res.style.color='var(--red)';}
+  });
 }
-
-function loadAnnHistory() {
-  api('/api/admin/announce_history').then(d => {
-    if (!d.ok || !d.data||!d.data.length) {
-      document.getElementById('ann-history').innerHTML =
-        '<div style="color:var(--hint);font-size:13px;padding:8px">Hali e\'lon yo\'q</div>'; return;
-    }
-    var html = '';
-    d.data.forEach(a => {
-      html += '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="font-size:13px;font-weight:600">'+esc(a.text.slice(0,60))+(a.text.length>60?'...':'')+'</div>' +
-        '<div style="font-size:11px;color:var(--hint);margin-top:3px">'+fmtDate(a.created_at)+' · '+a.sent_count+' ta yuborildi</div>' +
-      '</div>';
-    });
-    document.getElementById('ann-history').innerHTML = html;
+function chkRegs(c){document.querySelectorAll('#ann-reg input').forEach(i=>{i.checked=c;i.closest('.fcheck').classList.toggle('on',c);});}
+function loadAnnHistory(){
+  api('/api/admin/announce_history').then(d=>{
+    if(!d.ok||!d.data||!d.data.length){document.getElementById('ann-history').innerHTML='<div style="color:var(--hint);font-size:13px;padding:8px">Hali e\'lon yo\'q</div>';return;}
+    document.getElementById('ann-history').innerHTML=d.data.map(a=>
+      '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
+        '<div style="font-size:13px;font-weight:600">'+esc(a.text.slice(0,60))+(a.text.length>60?'...':'')+'</div>'+
+        '<div style="font-size:11px;color:var(--hint);margin-top:3px">'+fmtDate(a.created_at)+' · '+a.sent_count+' ta</div>'+
+      '</div>'
+    ).join('');
   });
 }
 
-// ── OBUNA ─────────────────────────────────────────────────────────────────────
-function loadSubs() {
-  api('/api/admin/subscriptions').then(d => {
-    if (!d.ok) { showErr('subs-body', d.error||'xato'); return; }
-    var subs = d.data||[], stats = d.stats||{};
-    document.getElementById('sub-total').textContent   = stats.total||0;
-    document.getElementById('sub-active').textContent  = stats.active||0;
-    document.getElementById('sub-trial').textContent   = stats.trial||0;
-    document.getElementById('sub-expired').textContent = stats.expired||0;
-
-    if (!subs.length) {
-      document.getElementById('subs-body').innerHTML =
-        '<div class="loading">Obunachi yo\'q</div>'; return;
-    }
-    var html = '';
-    subs.forEach(s => {
-      var daysLeft = s.days_left||0;
-      var pct = Math.min(100, Math.max(0, daysLeft/30*100));
-      var barClass = daysLeft > 7 ? '' : daysLeft > 3 ? 'warn' : 'err';
-      var badge = s.status==='active'
-        ? '<span class="badge ok">Faol</span>'
-        : s.status==='trial'
-        ? '<span class="badge info">Trial</span>'
-        : '<span class="badge err">Tugagan</span>';
-      html += '<div class="sub-card">' +
-        '<div class="sub-row">' +
-          '<div style="font-size:22px">🏪</div>' +
-          '<div class="sub-info">' +
-            '<div class="sub-name">'+esc(s.shop_name||s.name||'?')+'</div>' +
-            '<div class="sub-dates">'+esc(s.region||'')+(s.paid_until?' · '+fmtDate(s.paid_until)+' gacha':'')+'</div>' +
-          '</div>' +
-          badge +
-        '</div>' +
-        (daysLeft >= 0 ?
-          '<div class="progress-wrap">' +
-            '<div style="font-size:11px;color:var(--hint);margin-bottom:4px">'+daysLeft+' kun qoldi</div>' +
-            '<div class="progress"><div class="progress-bar '+barClass+'" style="width:'+pct+'%"></div></div>' +
-          '</div>' : '') +
-        '<div class="btn-row" style="margin-top:8px">' +
-          '<button class="btn sm" onclick="extendSub('+s.user_id+')">+30 kun</button>' +
-          '<button class="btn sm outline" onclick="msgUser('+s.user_id+')">✉️ Xabar</button>' +
-          (s.status==='expired'?'<button class="btn sm red" onclick="blockShop('+s.user_id+')">🔒 Muzlat</button>':'') +
-        '</div>' +
-      '</div>';
-    });
-    document.getElementById('subs-body').innerHTML = html;
-  }).catch(e => showErr('subs-body', e.message));
+// ── OBUNA ────────────────────────────────────────────────────────────────────
+function loadSubs(){
+  api('/api/admin/subscriptions').then(d=>{
+    if(!d.ok){showErr('subs-body',d.error||'xato');return;}
+    var subs=d.data||[], st=d.stats||{};
+    document.getElementById('sub-total').textContent=st.total||0;
+    document.getElementById('sub-active').textContent=st.active||0;
+    document.getElementById('sub-trial').textContent=st.trial||0;
+    document.getElementById('sub-expired').textContent=st.expired||0;
+    if(!subs.length){document.getElementById('subs-body').innerHTML='<div class="loading">Obunachi yo\'q</div>';return;}
+    document.getElementById('subs-body').innerHTML=subs.map(s=>{
+      var dl=s.days_left||0, pct=Math.min(100,Math.max(0,dl/30*100));
+      var bc=dl>7?'':dl>3?'warn':'err';
+      var badge=s.status==='active'?'<span class="badge ok">Faol</span>':s.status==='trial'?'<span class="badge info">Trial</span>':'<span class="badge err">Tugagan</span>';
+      return '<div class="sub-card"><div class="sub-row"><div style="font-size:22px">🏪</div>'+
+        '<div class="sub-info"><div class="sub-name">'+esc(s.shop_name||s.name||'?')+'</div>'+
+        '<div class="sub-dates">'+esc(s.region||'')+(s.paid_until?' · '+fmtDate(s.paid_until)+' gacha':'')+'</div></div>'+
+        badge+'</div>'+
+        '<div class="progress-wrap"><div style="font-size:11px;color:var(--hint);margin-bottom:4px">'+dl+' kun qoldi</div>'+
+        '<div class="progress"><div class="progress-bar '+bc+'" style="width:'+pct+'%"></div></div></div>'+
+        '<div class="btn-row" style="margin-top:8px">'+
+          '<button class="btn sm" onclick="extSub('+s.user_id+')">+30 kun</button>'+
+          '<button class="btn sm outline" onclick="msgUser('+s.user_id+')">✉️</button>'+
+          (s.status==='expired'?'<button class="btn sm red" onclick="blkShop('+s.user_id+')">🔒</button>':'')+
+        '</div></div>';
+    }).join('');
+  }).catch(e=>showErr('subs-body',e.message));
 }
+function extSub(uid){apiPost('/api/admin/extend_sub',{target_uid:uid}).then(d=>{if(d.ok){loaded.subs=false;loadSubs();alert('✅ 30 kun qo\'shildi');}});}
+function blkShop(uid){if(!confirm('Muzlatish?'))return;apiPost('/api/admin/toggle_block',{target_uid:uid,block:1}).then(d=>{if(d.ok){loaded.subs=false;loadSubs();}});}
 
-function extendSub(uid) {
-  apiPost('/api/admin/extend_sub', {target_uid:uid})
-    .then(d => { if(d.ok) { loaded.subs=false; loadSubs(); alert('✅ 30 kun qo\'shildi'); } });
+// ── SHIKOYATLAR ──────────────────────────────────────────────────────────────
+function setCF(f,btn){curCF=f;document.querySelectorAll('#pg-complaints .ptab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');loaded.complaints=true;loadComplaints();}
+function loadComplaints(){
+  api('/api/admin/complaints?status='+curCF).then(d=>{
+    if(!d.ok){showErr('complaints-body',d.error||'xato');return;}
+    var items=d.data||[];
+    if(!items.length){document.getElementById('complaints-body').innerHTML='<div class="loading">Shikoyat yo\'q</div>';return;}
+    document.getElementById('complaints-body').innerHTML=items.map(c=>
+      '<div class="complaint-card">'+
+        '<div class="cc-header"><div>'+
+          '<div style="font-size:14px;font-weight:600">'+esc(c.from_name||'?')+' → '+esc(c.against_name||'?')+'</div>'+
+          '<div style="font-size:11px;color:var(--hint)">'+fmtDate(c.created_at)+'</div>'+
+        '</div><span class="badge '+(c.status==='new'?'err':c.status==='closed'?'ok':'warn')+'">'+esc(c.status)+'</span></div>'+
+        '<div class="cc-msg">'+esc(c.reason)+'</div>'+
+        '<div class="cc-acts">'+
+          '<button class="btn sm outline" onclick="warnU('+c.against_user_id+')">⚠️ Ogohlantir</button>'+
+          '<button class="btn sm red" onclick="toggleBlock('+c.against_user_id+',1)">🔒 Blok</button>'+
+          '<button class="btn sm green" onclick="closeC('+c.id+')">✅ Yopish</button>'+
+        '</div></div>'
+    ).join('');
+  }).catch(e=>showErr('complaints-body',e.message));
 }
+function closeC(cid){apiPost('/api/admin/close_complaint',{complaint_id:cid}).then(d=>{if(d.ok){loaded.complaints=false;loadComplaints();}});}
+function warnU(uid){apiPost('/api/admin/msg_user',{target_uid:uid,text:"⚠️ Profilingizga shikoyat tushdi. Qoidalarga rioya qiling."}).then(d=>alert(d.ok?'✅ Yuborildi':'❌ Xato'));}
 
-// ── USERS ─────────────────────────────────────────────────────────────────────
-function setUserFilter(f, btn) {
-  curUserFilter = f;
-  document.querySelectorAll('#pg-users .ptab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  // Statistikani yangilamasdan faqat ro'yxatni yangilaymiz
-  var q = document.getElementById('user-search') ? document.getElementById('user-search').value.trim() : '';
-  var url = '/api/admin/users?filter='+f+'&uid='+UID;
-  if (q) url += '&q='+encodeURIComponent(q);
-  document.getElementById('users-body').innerHTML = '<div class="loading"><div class="spin"></div></div>';
-  fetch(url).then(r=>r.json()).then(d => {
-    if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
-    renderUsers(d.data||[]);
-  }).catch(e => showErr('users-body', e.message));
+// ── CHEKLAR ──────────────────────────────────────────────────────────────────
+function loadChecks(){
+  api('/api/admin/checks').then(d=>{
+    if(!d.ok){showErr('checks-body',d.error||'xato');return;}
+    var items=d.data||[];
+    if(!items.length){document.getElementById('checks-body').innerHTML='<div class="loading">✅ Cheklar yo\'q</div>';return;}
+    document.getElementById('checks-body').innerHTML=items.map(tx=>
+      '<div class="sub-card" id="chk-'+tx.id+'">'+
+        '<div class="sub-row"><div style="font-size:22px">💳</div>'+
+          '<div class="sub-info"><div class="sub-name">'+esc(tx.name||'?')+'</div>'+
+          '<div class="sub-dates">'+fmtDate(tx.created_at)+'</div></div>'+
+          '<div style="font-size:16px;font-weight:700;color:var(--green)">'+fmt(tx.amount)+" so'm"+
+            '<br><span style="font-size:12px;color:var(--btn)">→ '+tx.balls+' ball</span></div>'+
+        '</div>'+
+        '<div class="btn-row" style="margin-top:8px">'+
+          '<button class="btn sm green" onclick="appr('+tx.id+','+tx.user_id+','+tx.balls+')">✅ Tasdiqlash</button>'+
+          '<button class="btn sm red" onclick="rej('+tx.id+','+tx.user_id+')">❌ Rad</button>'+
+        '</div></div>'
+    ).join('');
+  }).catch(e=>showErr('checks-body',e.message));
 }
-
-function loadUsers() {
-  // Statistikani yuklash
-  fetch('/api/admin/user_stats?uid='+UID).then(r=>r.json()).then(d => {
-    if (!d.ok) return;
-    renderUserStats(d.data||{});
-  }).catch(()=>{});
-
-  // Ro'yxatni yuklash
-  var q = document.getElementById('user-search') ? document.getElementById('user-search').value.trim() : '';
-  var url = '/api/admin/users?filter='+curUserFilter+'&uid='+UID;
-  if (q) url += '&q='+encodeURIComponent(q);
-  fetch(url).then(r=>r.json()).then(d => {
-    if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
-    renderUsers(d.data||[]);
-  }).catch(e => showErr('users-body', e.message));
-}
-
-function renderUserStats(s) {
-  var total  = s.total||0;
-  var clinic = s.clinic||0;
-  var seller = s.seller||0;
-  var zubtex = s.zubtex||0;
-  var new28  = s.new_28||0;
-  var regions= s.regions||[];
-
-  // 4 ta karta
-  var statsHtml =
-    '<div class="grid2" style="margin-bottom:8px">' +
-      bigCard('👥','Jami users', total, '+'+new28+' oxirgi 28 kunda','blue') +
-      bigCard('🏥','Klinikalar',clinic,'Vrachlar','green') +
-    '</div>' +
-    '<div class="grid2" style="margin-bottom:10px">' +
-      bigCard('🛒','Sotuvchilar',seller,'Do'konlar','amber') +
-      bigCard('🔬','Zubtexniklar',zubtex,'Laboratoriyalar','purple') +
-    '</div>';
-
-  // Hudud jadval
-  var maxR = regions.reduce(function(m,r){return Math.max(m,r.total||0);},1);
-  var regHtml = '<div class="card" style="margin-bottom:10px">' +
-    '<div class="sec-title" style="margin-top:0">📍 Hudud bo'yicha (o'sish bilan)</div>' +
-    '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
-    '<tr style="color:var(--hint);border-bottom:1px solid var(--border)">' +
-      '<th style="text-align:left;padding:6px 8px">Hudud</th>' +
-      '<th style="text-align:center;padding:6px 4px">🏥</th>' +
-      '<th style="text-align:center;padding:6px 4px">🛒</th>' +
-      '<th style="text-align:center;padding:6px 4px">🔬</th>' +
-      '<th style="text-align:right;padding:6px 8px">Jami</th>' +
-      '<th style="text-align:right;padding:6px 8px;color:var(--green)">+28k</th>' +
-    '</tr>';
-
-  regions.forEach(function(r) {
-    var pct = Math.round((r.total||0)/maxR*100);
-    regHtml +=
-      '<tr style="border-bottom:1px solid var(--border)">' +
-        '<td style="padding:7px 8px;font-weight:500">'+esc(r.region||'?')+'</td>' +
-        '<td style="text-align:center;padding:7px 4px;color:var(--green)">'+( r.clinic||0)+'</td>' +
-        '<td style="text-align:center;padding:7px 4px;color:var(--amber)">'+(r.seller||0)+'</td>' +
-        '<td style="text-align:center;padding:7px 4px;color:var(--purple)">'+(r.zubtex||0)+'</td>' +
-        '<td style="text-align:right;padding:7px 8px;font-weight:700">'+(r.total||0)+'</td>' +
-        '<td style="text-align:right;padding:7px 8px;color:var(--green);font-size:11px">'+(r.new_28>0?'+'+r.new_28:'—')+'</td>' +
-      '</tr>' +
-      '<tr><td colspan="6" style="padding:0 8px 4px">' +
-        '<div style="height:3px;background:var(--border);border-radius:2px">' +
-          '<div style="height:3px;width:'+pct+'%;background:var(--btn);border-radius:2px"></div>' +
-        '</div></td></tr>';
-  });
-  regHtml += '</table></div></div>';
-
-  document.getElementById('users-stats').innerHTML  = statsHtml;
-  document.getElementById('users-regions').innerHTML = regHtml;
-}
-
-function renderUsers(rows) {
-  if (!rows.length) {
-    document.getElementById('users-body').innerHTML =
-      '<div class="loading">Foydalanuvchi yo\'q</div>';
-    return;
-  }
-
-  var roleIcon  = {clinic:'🏥', zubtex:'🔬', seller:'🛒', none:'👤'};
-  var roleName  = {clinic:'Klinika', zubtex:'Zubtex', seller:'Sotuvchi', none:'Yangi'};
-  var roleCls   = {clinic:'ok', zubtex:'purple', seller:'pend', none:'warn'};
-
-  var html = '<div style="background:var(--card);border-radius:12px;' +
-             'overflow:hidden;border:1px solid var(--border);margin-bottom:10px">';
-
-  rows.forEach(function(u) {
-    var icon  = roleIcon[u.role]  || '👤';
-    var rname = roleName[u.role]  || u.role || '?';
-    var rcls  = roleCls[u.role]   || 'warn';
-    var badge = u.is_blocked
-      ? '<span class="badge err">🔒 Bloklangan</span>'
-      : '<span class="badge '+rcls+'">'+icon+' '+rname+'</span>';
-
-    var sub1 = [u.region, u.phone].filter(Boolean).join(' · ') || '—';
-    var sub2 = fmtDate(u.created_at) +
-               (u.balance ? ' · 💰 '+fmt(u.balance)+' ball' : '');
-
-    html +=
-      '<div class="litem">' +
-        '<div class="litem-icon" style="background:var(--bg);font-size:22px">'+icon+'</div>' +
-        '<div class="litem-info">' +
-          '<div class="litem-name">'+esc(u.name||String(u.id))+'</div>' +
-          '<div class="litem-sub">'+esc(sub1)+'</div>' +
-          '<div class="litem-sub">'+esc(sub2)+'</div>' +
-        '</div>' +
-        '<div class="litem-right">' +
-          badge +
-          '<div class="btn-row" style="margin-top:5px">' +
-            '<button class="btn sm outline" onclick="msgUser('+u.id+')" ' +
-              'style="font-size:10px;padding:4px 8px;margin:0" title="Xabar">✉️</button>' +
-            (u.is_blocked
-              ? '<button class="btn sm green" onclick="toggleBlock('+u.id+',0)" ' +
-                'style="font-size:10px;padding:4px 8px;margin:0" title="Razblok">✅</button>'
-              : '<button class="btn sm red" onclick="toggleBlock('+u.id+',1)" ' +
-                'style="font-size:10px;padding:4px 8px;margin:0" title="Blok">🔒</button>') +
-          '</div>' +
-        '</div>' +
-      '</div>';
-  });
-
-  html += '</div>';
-  html += '<div style="font-size:12px;color:var(--hint);text-align:center;padding:6px">' +
-          rows.length + ' ta foydalanuvchi</div>';
-
-  document.getElementById('users-body').innerHTML = html;
-}
-
-function toggleBlock(uid, block) {
-  apiPost('/api/admin/toggle_block', {target_uid:uid, block:block})
-    .then(d => { if(d.ok) { loaded.users=false; loadUsers(); } });
-}
-function msgUser(uid) {
-  var txt = prompt('Xabar matni:');
-  if (!txt) return;
-  apiPost('/api/admin/msg_user', {target_uid:uid, text:txt})
-    .then(d => alert(d.ok ? '✅ Yuborildi' : '❌ Xato'));
-}
-
-// ── SHIKOYATLAR ───────────────────────────────────────────────────────────────
-function loadSupport() {
-  fetch('/api/admin/support?uid='+UID).then(function(r){ return r.json(); }).then(function(d) {
-    if (!d.ok) { showErr('support-body', d.error||'xato'); return; }
-    var msgs = d.data || [];
-    if (!msgs.length) {
-      document.getElementById('support-body').innerHTML =
-        '<div class="loading">💬 Xabarlar yo\'q</div>';
-      return;
-    }
-    var html = '';
-    msgs.forEach(function(m) {
-      var badge = m.status === 'replied'
-        ? '<span class="badge ok">✅ Javob berildi</span>'
-        : '<span class="badge err">🔔 Yangi</span>';
-      html +=
-        '<div class="sub-card" id="sup-'+m.id+'">' +
-          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
-            '<div>' +
-              '<div style="font-size:14px;font-weight:600">'+esc(m.name||'?')+'</div>' +
-              '<div style="font-size:11px;color:var(--hint)">'+fmtDate(m.created_at)+
-                (m.phone?' · '+esc(m.phone):'')+'</div>' +
-            '</div>'+badge+
-          '</div>' +
-          '<div style="font-size:14px;padding:10px;background:rgba(0,0,0,.04);' +
-            'border-radius:8px;margin-bottom:8px;line-height:1.5">'+esc(m.message)+'</div>' +
-          (m.admin_reply
-            ? '<div style="font-size:13px;color:var(--green);padding:10px;' +
-              'background:rgba(22,163,74,.08);border-radius:8px;margin-bottom:8px">' +
-              '💬 '+esc(m.admin_reply)+'</div>'
-            : '<div style="display:flex;gap:6px">' +
-              '<input id="ri-'+m.id+'" style="flex:1;padding:8px 12px;border:1px solid var(--border);' +
-                'border-radius:8px;font-size:13px;background:var(--bg);color:var(--text);outline:none" ' +
-                'placeholder="Javob yozing...">' +
-              '<button class="btn sm green" onclick="sendReply('+m.id+','+m.user_id+')">Yuborish</button>' +
-            '</div>') +
-        '</div>';
-    });
-    document.getElementById('support-body').innerHTML = html;
-  }).catch(function(e){ showErr('support-body', e.message); });
-}
-
-function sendReply(mid, uid) {
-  var inp = document.getElementById('ri-'+mid);
-  var txt = inp ? inp.value.trim() : '';
-  if (!txt) return;
-  apiPost('/api/admin/support_reply', {msg_id:mid, user_id:uid, reply:txt})
-    .then(function(d) {
-      if (d.ok) {
-        var card = document.getElementById('sup-'+mid);
-        if (card) {
-          var rr = card.querySelector('[style*="display:flex;gap:6px"]');
-          if (rr) {
-            var div = document.createElement('div');
-            div.style.cssText = 'font-size:13px;color:var(--green);padding:10px;background:rgba(22,163,74,.08);border-radius:8px';
-            div.textContent = '💬 ' + txt;
-            rr.replaceWith(div);
-          }
-        }
-      } else alert('Xato: '+(d.error||'?'));
-    });
-}
-
-function setComplaintFilter(f, btn) {
-  curComplaintFilter = f;
-  document.querySelectorAll('#pg-complaints .ptab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
-  loaded.complaints = true; loadComplaints();
-}
-
-function loadComplaints() {
-  api('/api/admin/complaints?status='+curComplaintFilter).then(d => {
-    if (!d.ok) { showErr('complaints-body', d.error||'xato'); return; }
-    var items = d.data||[];
-    if (!items.length) {
-      document.getElementById('complaints-body').innerHTML =
-        '<div class="loading">Shikoyat yo\'q</div>'; return;
-    }
-    var html = '';
-    items.forEach(c => {
-      html += '<div class="complaint-card">' +
-        '<div class="cc-header">' +
-          '<div>' +
-            '<div style="font-size:14px;font-weight:600">'+esc(c.from_name||'?')+' → '+esc(c.against_name||'?')+'</div>' +
-            '<div style="font-size:11px;color:var(--hint)">'+fmtDate(c.created_at)+'</div>' +
-          '</div>' +
-          '<span class="badge '+(c.status==='new'?'err':c.status==='closed'?'ok':'warn')+'">'+esc(c.status)+'</span>' +
-        '</div>' +
-        '<div class="cc-msg">'+esc(c.reason)+'</div>' +
-        '<div class="cc-acts">' +
-          '<button class="btn sm outline" onclick="warnUser('+c.against_user_id+')">⚠️ Ogohlantir</button>' +
-          '<button class="btn sm red" onclick="toggleBlock('+c.against_user_id+',1)">🔒 Bloklash</button>' +
-          '<button class="btn sm green" onclick="closeComplaint('+c.id+')">✅ Yopish</button>' +
-        '</div>' +
-      '</div>';
-    });
-    document.getElementById('complaints-body').innerHTML = html;
-  }).catch(e => showErr('complaints-body', e.message));
-}
-
-function closeComplaint(cid) {
-  apiPost('/api/admin/close_complaint', {complaint_id:cid})
-    .then(d => { if(d.ok) { loaded.complaints=false; loadComplaints(); } });
-}
-function warnUser(uid) {
-  apiPost('/api/admin/msg_user', {target_uid:uid,
-    text:"⚠️ Profilingizga shikoyat tushdi. Platformamiz qoidalariga rioya qiling."})
-    .then(d => alert(d.ok?'✅ Ogohlantirish yuborildi':'❌ Xato'));
-}
-function blockShop(uid) {
-  if (!confirm('Do\'konni muzlatishni tasdiqlaysizmi?')) return;
-  apiPost('/api/admin/toggle_block', {target_uid:uid, block:1})
-    .then(d => { if(d.ok) { loaded.subs=false; loadSubs(); } });
-}
-
-// ── CHEKLAR ───────────────────────────────────────────────────────────────────
-function loadChecks() {
-  api('/api/admin/checks').then(d => {
-    if (!d.ok) { showErr('checks-body', d.error||'xato'); return; }
-    var items = d.data||[];
-    if (!items.length) {
-      document.getElementById('checks-body').innerHTML =
-        '<div class="loading">✅ Kutayotgan cheklar yo\'q</div>'; return;
-    }
-    var html = '';
-    items.forEach(tx => {
-      html += '<div class="sub-card" id="chk-'+tx.id+'">' +
-        '<div class="sub-row">' +
-          '<div style="font-size:22px">💳</div>' +
-          '<div class="sub-info">' +
-            '<div class="sub-name">'+esc(tx.name||'?')+'</div>' +
-            '<div class="sub-dates">'+fmtDate(tx.created_at)+'</div>' +
-          '</div>' +
-          '<div style="font-size:16px;font-weight:700;color:var(--green)">'+fmt(tx.amount)+" so'm"+'<br>' +
-            '<span style="font-size:12px;color:var(--btn)">→ '+tx.balls+' ball</span></div>' +
-        '</div>' +
-        '<div class="btn-row" style="margin-top:8px">' +
-          '<button class="btn sm green" onclick="apprChk('+tx.id+','+tx.user_id+','+tx.balls+')">✅ Tasdiqlash</button>' +
-          '<button class="btn sm red" onclick="rejChk('+tx.id+','+tx.user_id+')">❌ Rad</button>' +
-        '</div>' +
-      '</div>';
-    });
-    document.getElementById('checks-body').innerHTML = html;
-  }).catch(e => showErr('checks-body', e.message));
-}
-
-function apprChk(txId, userId, balls) {
-  apiPost('/api/admin/check_action', {action:'approve',tx_id:txId,user_id:userId,balls:balls})
-    .then(d => {
-      if (d.ok) { var el=document.getElementById('chk-'+txId); if(el) el.innerHTML='<div style="padding:10px;text-align:center;color:var(--green)">✅ Tasdiqlandi</div>'; }
-    });
-}
-function rejChk(txId, userId) {
-  apiPost('/api/admin/check_action', {action:'reject',tx_id:txId,user_id:userId})
-    .then(d => {
-      if (d.ok) { var el=document.getElementById('chk-'+txId); if(el) el.innerHTML='<div style="padding:10px;text-align:center;color:var(--red)">❌ Rad etildi</div>'; }
-    });
-}
+function appr(ti,ui,b){apiPost('/api/admin/check_action',{action:'approve',tx_id:ti,user_id:ui,balls:b}).then(d=>{if(d.ok){var el=document.getElementById('chk-'+ti);if(el)el.innerHTML='<div style="padding:10px;text-align:center;color:var(--green)">✅ Tasdiqlandi</div>';}});}
+function rej(ti,ui){apiPost('/api/admin/check_action',{action:'reject',tx_id:ti,user_id:ui}).then(d=>{if(d.ok){var el=document.getElementById('chk-'+ti);if(el)el.innerHTML='<div style="padding:10px;text-align:center;color:var(--red)">❌ Rad etildi</div>';}});}
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
-function loadSettings() {
-  api('/api/admin/settings').then(d => {
-    if (!d.ok) { showErr('settings-body', d.error||'xato'); return; }
-    var s = d.data||{};
-    document.getElementById('settings-body').innerHTML =
-      settRow('💰 1 ball narxi (so\'m)', 'si-ball', s.ball_price||'1000', 'number') +
-      settRow('💳 Karta raqami', 'si-card', s.card_number||'') +
-      settRow('📢 E\'lon narxi (ball)', 'si-elon', s.elon_price||'0', 'number') +
-      settRow('🆓 Trial davri (kun)', 'si-trial', s.trial_days||'30', 'number') +
-      settRow('💎 Obuna narxi (so\'m)', 'si-sub', s.sub_price||'300000', 'number') +
-      '<button class="btn" style="margin-top:4px" onclick="saveSettings()">💾 Saqlash</button>';
+function loadSettings(){
+  api('/api/admin/settings').then(d=>{
+    if(!d.ok){showErr('settings-body',d.error||'xato');return;}
+    var s=d.data||{};
+    document.getElementById('settings-body').innerHTML=
+      srow("💰 1 ball narxi (so'm)",'si-ball',s.ball_price||'1000','number')+
+      srow('💳 Karta raqami','si-card',s.card_number||'')+
+      srow("📢 E'lon narxi (ball)",'si-elon',s.elon_price||'0','number')+
+      srow('🆓 Trial davri (kun)','si-trial',s.trial_days||'30','number')+
+      srow("💎 Obuna narxi (so'm)",'si-sub',s.sub_price||'300000','number')+
+      '<button class="btn" style="margin-top:4px" onclick="saveSett()">💾 Saqlash</button>';
   });
 }
-
-function settRow(label, id, val, type) {
-  return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-    '<div class="flabel">'+esc(label)+'</div>' +
-    '<input class="finp" id="'+id+'" value="'+esc(val)+'" type="'+(type||'text')+'" style="margin-bottom:0"></div>';
+function srow(l,id,v,t){return '<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div class="flabel">'+esc(l)+'</div><input class="finp" id="'+id+'" value="'+esc(v)+'" type="'+(t||'text')+'" style="margin-bottom:0"></div>';}
+function saveSett(){
+  apiPost('/api/admin/save_settings',{
+    ball_price:document.getElementById('si-ball').value,
+    card_number:document.getElementById('si-card').value,
+    elon_price:document.getElementById('si-elon').value,
+    trial_days:document.getElementById('si-trial').value,
+    sub_price:document.getElementById('si-sub').value,
+  }).then(d=>alert(d.ok?'✅ Saqlandi!':'❌ Xato'));
 }
 
-function saveSettings() {
-  apiPost('/api/admin/save_settings', {
-    ball_price:  document.getElementById('si-ball').value,
-    card_number: document.getElementById('si-card').value,
-    elon_price:  document.getElementById('si-elon').value,
-    trial_days:  document.getElementById('si-trial').value,
-    sub_price:   document.getElementById('si-sub').value,
-  }).then(d => alert(d.ok?'✅ Saqlandi!':'❌ Xato'));
-}
+function dlExcel(){window.location.href='/api/admin/excel?uid='+UID;}
 
-function dlExcel() { window.location.href='/api/admin/excel?uid='+UID; }
-
-function checkAllRegs(check) {
-  document.querySelectorAll('#ann-reg input[type="checkbox"]')
-    .forEach(inp => {
-      inp.checked = check;
-      inp.closest('.fcheck').classList.toggle('on', check);
-    });
-}
-
-var _userSearchTimer = null;
-function onUserSearch(q) {
-  clearTimeout(_userSearchTimer);
-  _userSearchTimer = setTimeout(function() {
-    loadUsersWithSearch(q.trim());
-  }, 400);
-}
-
-function loadUsersWithSearch(q) {
-  var url = '/api/admin/users?uid='+UID+'&filter='+curUserFilter;
-  if (q) url += '&q='+encodeURIComponent(q);
-  document.getElementById('users-body').innerHTML = '<div class="loading"><div class="spin"></div></div>';
-  fetch(url).then(r=>r.json()).then(d => {
-    if (!d.ok) { showErr('users-body', d.error||'xato'); return; }
-    renderUsers(d.data||[]);
-  }).catch(e => showErr('users-body', e.message));
-}
-
-// Load first tab
+// Start
 fetchPage(curTabId);
 </script>
 </body>
