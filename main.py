@@ -4538,9 +4538,11 @@ async def start_webserver():
                   "role, region, phone, balance, is_blocked, created_at "
                   "FROM users WHERE 1=1")
         params = []
-        if filt == "clinic":   query += " AND role IN ('clinic','zubtex')"
-        elif filt == "seller": query += " AND role='seller'"
-        elif filt == "active": query += " AND is_blocked=0 AND role!='none'"
+        if filt == "clinic":    query += " AND role IN ('clinic','zubtex')"
+        elif filt == "seller":  query += " AND role='seller'"
+        elif filt == "zubtex":  query += " AND role='zubtex'"
+        elif filt == "active":  query += " AND is_blocked=0 AND role!='none'"
+        elif filt == "blocked": query += " AND is_blocked=1"
         if q_search:
             # ID bo'yicha yoki ism bo'yicha qidirish
             if q_search.isdigit():
@@ -4887,6 +4889,40 @@ async def start_webserver():
             return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
                                  content_type="application/json")
     app.router.add_post("/api/admin/toggle_block", _admin_toggle_block)
+
+    async def _admin_user_stats(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}),
+                                 content_type="application/json")
+        now = datetime.now()
+        d28 = (now - timedelta(days=28)).strftime("%Y-%m-%d")
+        total  = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+        clinic = (await db_get("SELECT COUNT(*) as c FROM users WHERE role IN ('clinic','zubtex')"))["c"]
+        seller = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='seller'"))["c"]
+        zubtex = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='zubtex'"))["c"]
+        new_28 = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (d28,)))["c"]
+        regions = await db_all(
+            "SELECT region, "
+            "COUNT(*) as total, "
+            "SUM(CASE WHEN role IN ('clinic','zubtex') THEN 1 ELSE 0 END) as clinic, "
+            "SUM(CASE WHEN role='seller' THEN 1 ELSE 0 END) as seller, "
+            "SUM(CASE WHEN role='zubtex' THEN 1 ELSE 0 END) as zubtex, "
+            "SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as new_28 "
+            "FROM users WHERE region IS NOT NULL AND role != 'none' "
+            "GROUP BY region ORDER BY total DESC LIMIT 15",
+            (d28,)
+        )
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":{
+                "total":total,"clinic":clinic,"seller":seller,
+                "zubtex":zubtex,"new_28":new_28,
+                "regions":[{"region":r["region"],"total":r["total"],
+                            "clinic":r["clinic"],"seller":r["seller"],
+                            "zubtex":r["zubtex"],"new_28":r["new_28"]} for r in regions]
+            }}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/user_stats", _admin_user_stats)
 
     # ── ADMIN STATS — PERIOD SUPPORT ──────────────────────────────────────
     async def _admin_orders(req):
