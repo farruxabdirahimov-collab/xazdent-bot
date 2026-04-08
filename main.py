@@ -3876,7 +3876,8 @@ async def start_webserver():
         try:
             file = await bot.get_file(file_id)
             file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
-            async with aiohttp.ClientSession() as session:
+            import aiohttp as _aiohttp
+            async with _aiohttp.ClientSession() as session:
                 async with session.get(file_url) as resp:
                     data = await resp.read()
                     ctype = resp.headers.get("Content-Type", "image/jpeg")
