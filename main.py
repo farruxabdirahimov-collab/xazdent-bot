@@ -6231,6 +6231,122 @@ async def start_webserver():
             headers={"Access-Control-Allow-Origin":"*"})
     app.router.add_get("/api/admin/user_stats", _admin_user_stats)
 
+    # ── CATALOG ORDERS (admin) ─────────────────────────────────────────
+    async def _admin_catalog_orders(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
+        filter_uid = req.query.get("uid_filter") or req.query.get("uid")
+        # uid_filter — foydalanuvchi buyurtmalari uchun
+        uid_filter = int(req.query.get("uid_filter", 0)) if req.query.get("uid_filter") else 0
+
+        query = (
+            "SELECT co.*, "
+            "COALESCE(ub.clinic_name,ub.full_name,CAST(co.buyer_id AS TEXT)) as buyer_name, "
+            "COALESCE(us.clinic_name,us.full_name,CAST(co.seller_id AS TEXT)) as seller_name "
+            "FROM catalog_orders co "
+            "LEFT JOIN users ub ON co.buyer_id=ub.id "
+            "LEFT JOIN users us ON co.seller_id=us.id "
+            "WHERE 1=1"
+        )
+        params = []
+        if uid_filter:
+            query += " AND (co.buyer_id=? OR co.seller_id=?)"
+            params.extend([uid_filter, uid_filter])
+        query += " ORDER BY co.created_at DESC LIMIT 50"
+        rows = await db_all(query, tuple(params))
+        import json as _pj
+        data = []
+        for r in rows:
+            # Mahsulotlar qisqacha
+            try:
+                items = _pj.loads(r["products_json"] or "[]")
+                products_short = ", ".join([
+                    f"{it.get('name','?')} x{int(it.get('qty',1))}"
+                    for it in items[:2]
+                ])
+                if len(items) > 2:
+                    products_short += f" +{len(items)-2} ta"
+            except Exception:
+                products_short = "?"
+            data.append({
+                "id": r["id"],
+                "buyer_name": r["buyer_name"],
+                "seller_name": r["seller_name"],
+                "buyer_id": r["buyer_id"],
+                "seller_id": r["seller_id"],
+                "products_short": products_short,
+                "total_amount": r["total_amount"],
+                "status": r["status"],
+                "created_at": r["created_at"],
+            })
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/catalog_orders", _admin_catalog_orders)
+
+    # ── ADMIN PRODUCTS ────────────────────────────────────────────────
+    async def _admin_products(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
+        rows = await db_all(
+            "SELECT p.*, s.shop_name "
+            "FROM products p JOIN shops s ON p.shop_id=s.id "
+            "ORDER BY p.created_at DESC LIMIT 100"
+        )
+        data = [{
+            "id": r["id"], "name": r["name"], "price": r["price"],
+            "unit": r["unit"], "shop_name": r["shop_name"],
+            "is_active": r["is_active"], "stock": r["stock"] or 0,
+            "article_code": r.get("article_code") or "",
+        } for r in rows]
+        return _web.Response(
+            text=_json.dumps({"ok":True,"data":data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/products", _admin_products)
+
+    # ── BLOCK/UNBLOCK PRODUCT ─────────────────────────────────────────
+    async def _admin_block_product(req):
+        try:
+            body = await req.json()
+            if int(body.get("admin_id",0)) not in ADMIN_IDS:
+                return _web.Response(text=_json.dumps({"ok":False,"error":"ruxsat yo'q"}),
+                                     content_type="application/json")
+            pid   = int(body.get("product_id",0))
+            block = int(body.get("block",0))
+            await db_run("UPDATE products SET is_active=? WHERE id=?", (0 if block else 1, pid))
+            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+        except Exception as e:
+            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
+                                 content_type="application/json")
+    app.router.add_post("/api/admin/block_product", _admin_block_product)
+
+    # ── USER BALANCE ──────────────────────────────────────────────────
+    async def _admin_user_balance(req):
+        if not int(req.query.get("uid",0)) in ADMIN_IDS:
+            return _web.Response(text=_json.dumps({"ok":False}),
+                                 content_type="application/json",
+                                 headers={"Access-Control-Allow-Origin":"*"})
+        target = int(req.query.get("uid_target", req.query.get("uid",0)))
+        u = await get_user(target)
+        total_paid = await db_get(
+            "SELECT COALESCE(SUM(amount),0) as s FROM transactions "
+            "WHERE user_id=? AND status='confirmed' AND type='topup'", (target,))
+        return _web.Response(
+            text=_json.dumps({
+                "ok": True,
+                "balance": float(u["balance"] or 0) if u else 0,
+                "total_paid": float(total_paid["s"] if total_paid else 0),
+            }),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/user_balance", _admin_user_balance)
+
     # ── ADMIN STATS — PERIOD SUPPORT ──────────────────────────────────────
     async def _admin_orders(req):
         if not int(req.query.get("uid",0)) in ADMIN_IDS:
