@@ -228,6 +228,124 @@ async def get_or_create_room(uid):
     )
     return await db_get("SELECT * FROM rooms WHERE id=?", (rid,))
 
+async def _handle_web_cart(msg: Message, state: FSMContext, u, cart_data: str):
+    """Web saytdan savat buyurtmasi. Format: 123x2,456x1"""
+    uid = msg.from_user.id
+
+    # Savat ma'lumotlarini parse qilish
+    items_raw = []
+    try:
+        for part in cart_data.split(','):
+            if 'x' in part:
+                pid, qty = part.split('x', 1)
+                items_raw.append({'pid': int(pid), 'qty': int(qty)})
+    except Exception:
+        items_raw = []
+
+    if not items_raw:
+        await msg.answer("⚠️ Savat bo'sh yoki xato. Qayta urinib ko'ring.")
+        return
+
+    # Ro'yxatdan o'tmagan bo'lsa
+    if not u or not u.get('phone') or not u.get('region'):
+        # Savatni state ga saqlaymiz
+        await state.update_data(web_cart=cart_data)
+        if not u:
+            await db_run(
+                "INSERT INTO users(id,username,full_name) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING",
+                (uid, msg.from_user.username, msg.from_user.full_name)
+            )
+        lg = 'uz'
+        await state.set_state(RegState.phone)
+        kb = rk([KeyboardButton(text="📱 Telefon yuborish", request_contact=True)], one_time=True)
+        await msg.answer(
+            "🛒 *Savatdagi buyurtmangiz tayyor!*\n\n"
+            "Buyurtmani rasmiylashtirish uchun\n"
+            "telefon raqamingizni yuboring:",
+            reply_markup=kb
+        )
+        return
+
+    # Ro'yxatdan o'tgan — buyurtmani yaratamiz
+    await _create_web_cart_order(msg, u, items_raw)
+
+async def _create_web_cart_order(msg, u, items_raw):
+    """Web cart dan buyurtma yaratish."""
+    uid = msg.from_user.id
+    uname = u.get("clinic_name") or u.get("full_name") or str(uid)
+    uphone = u.get("phone") or "—"
+    uregion = u.get("region") or "—"
+    import json as _pj2
+    seller_map = {}
+    for item in items_raw:
+        prod = await db_get(
+            "SELECT p.*, s.owner_id as seller_id, s.shop_name "
+            "FROM products p JOIN shops s ON p.shop_id=s.id WHERE p.id=?",
+            (item["pid"],)
+        )
+        if not prod: continue
+        sid = prod["seller_id"]
+        if sid not in seller_map:
+            seller_map[sid] = {"shop_name": prod["shop_name"], "items": []}
+        seller_map[sid]["items"].append({
+            "name": prod["name"], "qty": item["qty"],
+            "price": prod["price"], "unit": prod["unit"],
+            "product_id": prod["id"]
+        })
+    if not seller_map:
+        await msg.answer("Mahsulotlar topilmadi. Katalog yangilangan bolishi mumkin.")
+        return
+    sent = 0
+    for seller_id, data in seller_map.items():
+        items = data["items"]
+        total = sum(i["price"] * i["qty"] for i in items)
+        lines_list = []
+        for i, it in enumerate(items):
+            lines_list.append(
+                f"{i+1}. *{it['name']}* — {it['qty']} {it['unit']} x "
+                f"{fmt_price(it['price'])} = *{fmt_price(it['price']*it['qty'])} som*"
+            )
+        lines_txt = "\n".join(lines_list)
+        order_id = await db_insert(
+            "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) VALUES(?,?,?,?)",
+            (uid, seller_id, _pj2.dumps(items, ensure_ascii=False), total)
+        )
+        msg_txt = (
+            f"🌐 *Veb-saytdan buyurtma #{order_id}!*\n\n"
+            f"📦 *{data['shop_name']}:*\n{lines_txt}\n\n"
+            f"💰 *Jami: {fmt_price(total)} som*\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🏥 *{uname}*\n"
+            f"📞 {uphone}\n"
+            f"📍 {uregion}"
+        )
+        confirm_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Qabul qildim", callback_data=f"co_confirm_{order_id}_{uid}"),
+            InlineKeyboardButton(text="❌ Mavjud emas", callback_data=f"co_reject_{order_id}_{uid}")
+        ]])
+        try:
+            await bot.send_message(seller_id, msg_txt, reply_markup=confirm_kb)
+            sent += 1
+        except Exception as e:
+            log.error(f"Web cart seller notify: {e}")
+    lg = await lang(uid)
+    if not u.get("role") or u["role"] in (None,"none",""):
+        await db_run("UPDATE users SET role=? WHERE id=?", ("clinic", uid))
+        u2 = await get_user(uid)
+    else:
+        u2 = u
+    kb = kb_clinic(lg) if u2 and u2.get("role") in ("clinic","zubtex") else kb_seller(lg)
+    await msg.answer(
+        f"✅ *Buyurtmangiz yuborildi!*\n\n"
+        f"📦 {sent} ta sotuvchiga xabar ketdi.\n"
+        f"Sotuvchilar tez orada boglanadi.",
+        reply_markup=kb
+    )
+
+
+def fmt_price(n):
+    return f"{int(n):,}".replace(',', ' ')
+
 async def post_to_channel(need_id, need):
     """1 ta ehtiyoj uchun kanal posti (qayta post uchun)."""
     dl_map = {2:"2 soat",24:"24 soat",72:"3 kun",168:"1 hafta",240:"10 kun"}
@@ -389,6 +507,12 @@ async def cmd_start(msg: Message, state: FSMContext):
                 # Standart registration flow
         except Exception as e:
             log.error(f"p_ deep link xato: {e}")
+
+    # Web saytdan savat buyurtmasi
+    if args.startswith("web_cart_"):
+        cart_data = args[9:]  # "web_cart_" dan keyin
+        await _handle_web_cart(msg, state, u, cart_data)
+        return
 
     if args.startswith("offer_") and u and u["role"] in ("seller",):
         try:
@@ -5930,6 +6054,14 @@ async def start_webserver():
             return _web.FileResponse(path)
         return _web.Response(text="admin.html topilmadi", status=404)
     app.router.add_get("/admin", _admin_page)
+
+    async def _site_page(req):
+        path = os.path.join(BASE_DIR, "webapp", "site.html")
+        if os.path.exists(path):
+            return _web.FileResponse(path)
+        return _web.Response(text="site.html topilmadi", status=404)
+    app.router.add_get("/site", _site_page)
+    app.router.add_get("/", _site_page)
 
     async def _admin_excel_dl(req):
         if not int(req.query.get("uid",0)) in ADMIN_IDS:
