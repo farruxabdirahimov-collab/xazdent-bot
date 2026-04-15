@@ -2422,6 +2422,50 @@ async def cmd_broadcast(msg: Message):
         except Exception: pass
     await msg.answer(f"✅ Yuborildi: *{sent}* ta")
 
+@router.message(Command("debug"))
+async def cmd_debug(msg: Message):
+    if msg.from_user.id not in ADMIN_IDS:
+        return
+    try:
+        total_u   = (await db_get("SELECT COUNT(*) as c FROM users"))["c"]
+        total_p   = (await db_get("SELECT COUNT(*) as c FROM products"))["c"]
+        active_p  = (await db_get("SELECT COUNT(*) as c FROM products WHERE COALESCE(is_active,1)=1"))["c"]
+        total_s   = (await db_get("SELECT COUNT(*) as c FROM shops"))["c"]
+        active_s  = (await db_get("SELECT COUNT(*) as c FROM shops WHERE status='active'"))["c"]
+        # is_active ustuni bormi?
+        try:
+            test = await db_get("SELECT is_active FROM products LIMIT 1")
+            ia_col = f"✅ is_active: {test['is_active'] if test else 'NULL'}"
+        except Exception as e:
+            ia_col = f"❌ is_active ustun yo'q: {e}"
+        # price ustuni variantlarda bormi?
+        try:
+            test2 = await db_get("SELECT price FROM product_variants LIMIT 1")
+            pv_col = f"✅ variant.price: {test2['price'] if test2 else 'NULL'}"
+        except Exception as e:
+            pv_col = f"❌ variant.price yo'q: {e}"
+        # Catalog query test
+        test_rows = await db_all(
+            "SELECT p.id, p.name, COALESCE(p.is_active,1) as ia, s.status "
+            "FROM products p JOIN shops s ON p.shop_id=s.id LIMIT 3"
+        )
+        prod_sample = "\n".join([
+            f"  #{r['id']} {r['name'][:20]} ia={r['ia']} shop={r['status']}"
+            for r in test_rows
+        ]) or "  (bo'sh)"
+
+        await msg.answer(
+            f"🔍 *Debug Info*\n\n"
+            f"👥 Users: {total_u}\n"
+            f"📦 Products: {total_p} (aktiv: {active_p})\n"
+            f"🏪 Shops: {total_s} (aktiv: {active_s})\n\n"
+            f"{ia_col}\n"
+            f"{pv_col}\n\n"
+            f"📋 Mahsulot namuna:\n{prod_sample}"
+        )
+    except Exception as e:
+        await msg.answer(f"❌ Debug xato: {e}")
+
 @router.message(Command("help"))
 async def cmd_help(msg: Message):
     uid = msg.from_user.id
@@ -5258,7 +5302,8 @@ async def start_webserver():
         q    = req.query.get("q", "").lower().strip()
         params = []
         # Faqat aktiv do'kon va aktiv mahsulotlar
-        where = "s.status='active' AND COALESCE(p.is_active,1)=1"
+        # is_active NULL yoki 1 bo'lsa ko'rsatamiz
+        where = "s.status='active' AND (p.is_active IS NULL OR p.is_active = 1)"
         if cat:
             where += " AND p.category_id=?"
             params.append(int(cat))
