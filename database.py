@@ -105,8 +105,10 @@ async def init_db():
             category TEXT NOT NULL, phone TEXT, region TEXT,
             status TEXT DEFAULT 'pending', rating REAL DEFAULT 0,
             total_deals INTEGER DEFAULT 0,
+            group_chat_id BIGINT DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+        await c.execute("ALTER TABLE shops ADD COLUMN IF NOT EXISTS group_chat_id BIGINT")
 
         # products — avval CREATE, keyin ALTER
         await c.execute("""
@@ -117,11 +119,17 @@ async def init_db():
             photo_file_id TEXT DEFAULT NULL,
             stock INTEGER DEFAULT 0,
             category_id INTEGER DEFAULT 1,
+            article_code TEXT UNIQUE DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS photo_file_id TEXT")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER DEFAULT 1")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT")
+        # article_code unique index
+        await c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_products_article_code
+        ON products(article_code) WHERE article_code IS NOT NULL""")
 
         # transactions
         await c.execute("""
@@ -229,8 +237,12 @@ async def init_db():
             confirmed_at TEXT,
             delivered_at TEXT,
             notify_sent INTEGER DEFAULT 0,
+            claimed_by BIGINT DEFAULT NULL,
+            group_message_id BIGINT DEFAULT NULL,
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
+        await c.execute("ALTER TABLE catalog_orders ADD COLUMN IF NOT EXISTS claimed_by BIGINT")
+        await c.execute("ALTER TABLE catalog_orders ADD COLUMN IF NOT EXISTS group_message_id BIGINT")
 
         # reviews — baholar
         await c.execute("""
