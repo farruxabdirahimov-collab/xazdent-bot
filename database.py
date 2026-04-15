@@ -168,9 +168,11 @@ async def init_db():
             size_name TEXT,
             article TEXT,
             stock INTEGER DEFAULT 0,
+            price REAL DEFAULT 0,
             extra_price REAL DEFAULT 0,
             created_at TEXT DEFAULT to_char(now(),\'YYYY-MM-DD HH24:MI:SS\')
         )""")
+        await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
 
         # product_photos — bir mahsulot uchun ko'p rasm
         await c.execute("""
