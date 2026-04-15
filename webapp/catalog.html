@@ -543,6 +543,8 @@ function loadCatalog() {
         document.getElementById('main').innerHTML = '<div class="empty"><div class="empty-ic">🔍</div>Mahsulot topilmadi</div>';
         return;
       }
+      // Debug: mahsulot soni
+      console.log('[CATALOG] prods:', prods.length, 'first:', prods[0] && prods[0].name);
       // BIG karta: Uskunalar(5), Rentgen(6), CAD/CAM(7)
       var BIG_CATS = [5, 6, 7];
       var html = '<div class="grid">';
@@ -592,9 +594,15 @@ function loadCatalog() {
         }
       });
       html += '</div>';
-      document.getElementById('main').innerHTML = html;
+      try {
+        document.getElementById('main').innerHTML = html;
+      } catch(renderErr) {
+        console.error('[RENDER ERROR]', renderErr);
+        document.getElementById('main').innerHTML = '<div class="empty">❌ Render xatosi: '+renderErr.message+'</div>';
+      }
     }).catch(function(e){
-      document.getElementById('main').innerHTML = '<div class="empty">❌ '+e.message+'</div>';
+      console.error('[CATALOG ERROR]', e);
+      document.getElementById('main').innerHTML = '<div class="empty">❌ '+esc(e.message)+'</div>';
     });
 }
 
@@ -945,9 +953,15 @@ function loadMy() {
         '</div>';
       });
       html += '</div>';
-      document.getElementById('main').innerHTML = html;
+      try {
+        document.getElementById('main').innerHTML = html;
+      } catch(renderErr) {
+        console.error('[RENDER ERROR]', renderErr);
+        document.getElementById('main').innerHTML = '<div class="empty">❌ Render xatosi: '+renderErr.message+'</div>';
+      }
     }).catch(function(e){
-      document.getElementById('main').innerHTML = '<div class="empty">❌ '+e.message+'</div>';
+      console.error('[CATALOG ERROR]', e);
+      document.getElementById('main').innerHTML = '<div class="empty">❌ '+esc(e.message)+'</div>';
     });
 }
 
