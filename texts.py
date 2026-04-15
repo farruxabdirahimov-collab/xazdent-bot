@@ -1,4 +1,5 @@
 REGIONS = [
+    "🌍 O'zbekiston bo'ylab",
     "🏙 Toshkent shahri", "🌆 Toshkent viloyati", "🏛 Samarqand",
     "🕌 Buxoro", "🌸 Farg'ona", "🏔 Andijon", "🌿 Namangan",
     "🌊 Xorazm", "🌵 Qashqadaryo", "🏜 Surxondaryo",
@@ -6,6 +7,7 @@ REGIONS = [
 ]
 
 REGIONS_RU = [
+    "🌍 По всему Узбекистану",
     "🏙 г.Ташкент", "🌆 Ташкентская обл.", "🏛 Самарканд",
     "🕌 Бухара", "🌸 Фергана", "🏔 Андижан", "🌿 Наманган",
     "🌊 Хорезм", "🌵 Кашкадарья", "🏜 Сурхандарья",
