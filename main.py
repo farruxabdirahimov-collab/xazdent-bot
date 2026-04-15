@@ -154,16 +154,19 @@ def kb_seller(lg, uid=0, webapp_url=""):
                            web_app=WebAppInfo(url=mkt_url))],
             [KeyboardButton(text="➕ Mahsulot qo\'shish",
                            web_app=WebAppInfo(url=add_url)),
-             KeyboardButton(text="🔔 Buyurtmalar",
-                           web_app=WebAppInfo(url=ord_url))],
-            [KeyboardButton(text="👤 Profil")],
+             KeyboardButton(text="🔔 Buyurtmalar")],
+            [KeyboardButton(text="💰 Hisobim"),
+             KeyboardButton(text="⚙️ Profil")],
+            [KeyboardButton(text="📖 Yordam")],
         )
     # Fallback — WebApp URL yo'q
     return rk(
         [KeyboardButton(text="🛍 Dental Market")],
         [KeyboardButton(text="➕ Mahsulot qo\'shish"),
          KeyboardButton(text="🔔 Buyurtmalar")],
-        [KeyboardButton(text="👤 Profil")],
+        [KeyboardButton(text="💰 Hisobim"),
+         KeyboardButton(text="⚙️ Profil")],
+        [KeyboardButton(text="📖 Yordam")],
     )
 
 def kb_regions(lg):
@@ -567,16 +570,27 @@ async def cmd_start(msg: Message, state: FSMContext):
             else:
                 await msg.answer(txt, reply_markup=kb)
         else:
-            shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
-            avg = await db_get("SELECT AVG(rating) as a, COUNT(*) as c FROM reviews WHERE seller_id=?", (uid,))
-            prod_count = (await db_get("SELECT COUNT(*) as c FROM products WHERE shop_id=(SELECT id FROM shops WHERE owner_id=? LIMIT 1) AND is_active=1", (uid,)))["c"] if shop else 0
+            shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
+            if not shop and u:
+                sname0 = u.get("clinic_name") or u.get("full_name") or "Do\'konim"
+                new_sid = await db_insert(
+                    "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+                    "VALUES(?,?,?,?,?,'active')",
+                    (uid, sname0, "Stomatologiya", u.get("phone",""), u.get("region",""))
+                )
+                shop = await db_get("SELECT * FROM shops WHERE id=?", (new_sid,))
+            avg = await db_get("SELECT AVG(rating) as a FROM reviews WHERE seller_id=?", (uid,))
+            prod_count = 0
+            if shop:
+                pc = await db_get(
+                    "SELECT COUNT(*) as c FROM products WHERE shop_id=? AND is_active=1",
+                    (shop["id"],))
+                prod_count = pc["c"] if pc else 0
             deal_count = shop["total_deals"] if shop else 0
-            rating = float(avg["a"] or 0) if avg else 0
+            rating = float(avg["a"] or 0) if avg and avg["a"] else 0
             stars = ("⭐ %.1f" % rating) if rating > 0 else "⭐ Yangi do\'kon"
-
-            shop_name = shop["shop_name"] if shop else "Do\'koningiz"
-            region = shop["region"] if shop else ""
-
+            shop_name = shop["shop_name"] if shop else "Do\'konim"
+            region = shop["region"] if shop else (u.get("region") if u else "")
             txt = (
                 f"🏪 *{shop_name}*\n"
                 f"📍 {region} · {stars}\n"
@@ -586,8 +600,8 @@ async def cmd_start(msg: Message, state: FSMContext):
                 mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller"
                 add_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller&action=add"
                 inline_kb = ik(
-                    [ib("🛍 MY Dental Market", web_app=WebAppInfo(url=mkt_url))],
-                    [ib("➕ Mahsulot qo\'shish", web_app=WebAppInfo(url=add_url))],
+                    [ib("🛍 Dental Market →", web_app=WebAppInfo(url=mkt_url))],
+                    [ib("➕ Mahsulot qo\'shish →", web_app=WebAppInfo(url=add_url))],
                 )
                 await msg.answer(txt, reply_markup=kb)
                 await msg.answer("👆 Do\'koningizni boshqaring:", reply_markup=inline_kb)
@@ -692,14 +706,24 @@ async def reg_location_skip(msg: Message, state: FSMContext):
     await _finish_reg(msg, state)
 
 async def _finish_reg(msg: Message, state: FSMContext):
+    uid = msg.from_user.id
     await state.clear()
-    lg = await lang(msg.from_user.id)
-    u  = await get_user(msg.from_user.id)
-    if u["role"] in ("clinic", "zubtex"):
+    lg = await lang(uid)
+    u  = await get_user(uid)
+    if u and u["role"] in ("clinic", "zubtex"):
         kb    = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL)
         panel = "🏥 *Klinika paneli*"
     else:
-        kb = kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
+        # Sotuvchi — do'kon yo'q bo'lsa avtomatik yaratamiz
+        shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+        if not shop and u:
+            sname = u.get("clinic_name") or u.get("full_name") or "Do\'konim"
+            await db_insert(
+                "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+                "VALUES(?,?,?,?,?,'active')",
+                (uid, sname, "Stomatologiya", u.get("phone",""), u.get("region",""))
+            )
+        kb    = kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
         panel = "🛒 *Sotuvchi paneli*"
     await msg.answer(f"✅ Profil saqlandi!\n\n{panel}", reply_markup=kb)
 
@@ -5282,9 +5306,23 @@ async def start_webserver():
                     content_type="application/json")
             shop = await db_get("SELECT * FROM shops WHERE owner_id=? AND status='active'", (uid,))
             if not shop:
-                return _web.Response(
-                    text=_json.dumps({"ok":False,"error":"do\'kon yo\'q yoki tasdiqlanmagan"}),
-                    content_type="application/json")
+                u2 = await get_user(uid)
+                if u2:
+                    sname2 = u2.get("clinic_name") or u2.get("full_name") or "Do\'konim"
+                    new_sid2 = await db_insert(
+                        "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+                        "VALUES(?,?,?,?,?,'active')",
+                        (uid, sname2, "Stomatologiya",
+                         u2.get("phone",""), u2.get("region",""))
+                    )
+                    shop = await db_get("SELECT * FROM shops WHERE id=?", (new_sid2,))
+                if not shop:
+                    return _web.Response(
+                        text=_json.dumps({
+                            "ok": False,
+                            "error": "Avval botda ro\'yxatdan o\'ting"
+                        }),
+                        content_type="application/json")
 
             # Asosiy mahsulot yozish
             # Avtomatik artikul kod
