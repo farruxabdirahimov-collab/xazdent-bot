@@ -5257,14 +5257,14 @@ async def start_webserver():
         cat  = req.query.get("cat", "")
         q    = req.query.get("q", "").lower().strip()
         params = []
-        # is_active ustuni yo'q bo'lishi mumkin — COALESCE bilan
-        where = "s.status='active'"
+        # Faqat aktiv do'kon va aktiv mahsulotlar
+        where = "s.status='active' AND COALESCE(p.is_active,1)=1"
         if cat:
             where += " AND p.category_id=?"
             params.append(int(cat))
         if q:
-            where += " AND LOWER(p.name) LIKE ?"
-            params.append(f"%{q}%")
+            where += " AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.article_code,'')) LIKE ?)"
+            params.extend([f"%{q}%", f"%{q}%"])
         query = (
             "SELECT p.*, s.shop_name, s.owner_id as seller_id, u.region "
             "FROM products p "
@@ -5278,25 +5278,27 @@ async def start_webserver():
         cats = {1:"🦷 Terapevtik",2:"⚙️ Jarrohlik",3:"🔬 Zubtexnik",
                 4:"🧪 Dezinfeksiya",5:"💡 Uskunalar",6:"📸 Rentgen",
                 7:"🖥 CAD/CAM",8:"🦴 Implantlar",9:"💻 Stom Soft",10:"🎓 Kurslar"}
-        # Har mahsulot uchun rasmlar va variantlar
         data = []
         for r in rows:
             photos_rows = await db_all(
                 "SELECT file_id FROM product_photos WHERE product_id=? ORDER BY sort_order",
                 (r["id"],))
             vars_rows = await db_all(
-                "SELECT size_name, article, stock FROM product_variants WHERE product_id=? ORDER BY id",
+                "SELECT size_name, article, stock, COALESCE(price,0) as price "
+                "FROM product_variants WHERE product_id=? ORDER BY id",
                 (r["id"],))
             data.append({
-                "id": r["id"], "name": r["name"], "price": r["price"],
+                "id": r["id"], "name": r["name"], "price": float(r["price"] or 0),
                 "unit": r["unit"], "shop_name": r["shop_name"],
                 "seller_id": r["seller_id"],
                 "region": r["region"], "stock": r["stock"] or 0,
                 "category": cats.get(r["category_id"] or 1,""),
+                "category_id": r["category_id"] or 1,
                 "description": r["description"] or "",
-                "article_code": r["article_code"] or "",
+                "article_code": r.get("article_code") or "",
                 "photos": [f"/api/photo/{p['file_id']}" for p in photos_rows],
-                "variants": [{"size_name":v["size_name"],"article":v["article"],"stock":v["stock"]} for v in vars_rows]
+                "variants": [{"size_name":v["size_name"],"article":v["article"] or "",
+                               "stock":v["stock"] or 0,"price":float(v["price"] or 0)} for v in vars_rows]
             })
         return _web.Response(
             text=_json.dumps({"products": data}, ensure_ascii=False),
@@ -5388,11 +5390,12 @@ async def start_webserver():
                          u2.get("phone",""), u2.get("region",""))
                     )
                     shop = await db_get("SELECT * FROM shops WHERE id=?", (new_sid2,))
+                    log.info(f"🏪 Auto-shop yaratildi uid={uid}")
                 if not shop:
                     return _web.Response(
                         text=_json.dumps({
                             "ok": False,
-                            "error": "Avval botda ro\'yxatdan o\'ting"
+                            "error": "Do\'kon topilmadi. Botni qayta oching: /start"
                         }),
                         content_type="application/json")
 
@@ -5459,13 +5462,16 @@ async def start_webserver():
                 except Exception as e:
                     log.error(f"❌ Photo upload xato ({i}): {e}", exc_info=True)
 
-            # Variantlar
+            # Variantlar — price bilan
             for v in variants:
                 size = (v.get("size_name") or "").strip()
                 if not size: continue
+                vp = float(v.get("price") or 0)
                 await db_insert(
-                    "INSERT INTO product_variants(product_id,size_name,article,stock) VALUES(?,?,?,?)",
-                    (pid, size, v.get("article",""), int(v.get("stock",0)))
+                    "INSERT INTO product_variants(product_id,size_name,article,stock,price) "
+                    "VALUES(?,?,?,?,?)",
+                    (pid, size, v.get("article","") or "",
+                     int(v.get("stock") or 0), vp)
                 )
 
             # Kanalga post yuborish — barcha rasmlar bilan
