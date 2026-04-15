@@ -2445,10 +2445,19 @@ async def cmd_debug(msg: Message):
         except Exception as e:
             pv_col = f"❌ variant.price yo'q: {e}"
         # Catalog query test
+        # Catalog query test — aynan ishlatadigan query
         test_rows = await db_all(
             "SELECT p.id, p.name, COALESCE(p.is_active,1) as ia, s.status "
             "FROM products p JOIN shops s ON p.shop_id=s.id LIMIT 3"
         )
+        # Catalog filtri test
+        cat_test = await db_all(
+            "SELECT COUNT(*) as c FROM products p "
+            "JOIN shops s ON p.shop_id=s.id "
+            "WHERE s.status=\'active\' "
+            "AND (p.is_active IS NULL OR p.is_active = 1)"
+        )
+        cat_count = cat_test[0]["c"] if cat_test else "?"
         prod_sample = "\n".join([
             f"  #{r['id']} {r['name'][:20]} ia={r['ia']} shop={r['status']}"
             for r in test_rows
@@ -2458,7 +2467,8 @@ async def cmd_debug(msg: Message):
             f"DEBUG INFO\n\n"
             f"Users: {total_u}\n"
             f"Products: {total_p} (aktiv: {active_p})\n"
-            f"Shops: {total_s} (aktiv: {active_s})\n\n"
+            f"Shops: {total_s} (aktiv: {active_s})\n"
+            f"Catalog query: {cat_count} ta\n\n"
             f"{ia_col}\n"
             f"{pv_col}\n\n"
             f"Sample:\n{prod_sample}"
@@ -5309,10 +5319,16 @@ async def start_webserver():
             where += " AND p.category_id=?"
             params.append(int(cat))
         if q:
-            where += " AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.article_code,'')) LIKE ?)"
-            params.extend([f"%{q}%", f"%{q}%"])
+            where += " AND LOWER(p.name) LIKE ?"
+            params.append(f"%{q}%")
         query = (
-            "SELECT p.*, s.shop_name, s.owner_id as seller_id, u.region "
+            "SELECT p.id, p.name, p.price, p.unit, p.description, "
+            "COALESCE(p.is_active,1) as is_active, "
+            "COALESCE(p.stock,0) as stock, "
+            "COALESCE(p.category_id,1) as category_id, "
+            "COALESCE(p.article_code,'') as article_code, "
+            "p.photo_file_id, p.shop_id, "
+            "s.shop_name, s.owner_id as seller_id, u.region "
             "FROM products p "
             "JOIN shops s ON p.shop_id=s.id "
             "JOIN users u ON s.owner_id=u.id "
@@ -6722,6 +6738,20 @@ async def expire_checker():
 
 async def main():
     await init_db()
+    # Yangi ustunlarni bazaga qo'shamiz (migration)
+    try:
+        from database import get_pool
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0"
+            )
+            await conn.execute(
+                "ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT"
+            )
+        log.info("✅ Migration OK")
+    except Exception as e:
+        log.warning(f"Migration: {e}")
     dp.include_router(router)
     log.info("🦷 XAZDENT Bot ishga tushdi!")
     await start_webserver()
