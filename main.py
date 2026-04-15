@@ -50,11 +50,10 @@ router = Router()
 
 # ── STATES ────────────────────────────────────────────────────────────────────
 class RegState(StatesGroup):
-    name     = State()
-    phone    = State()
-    region   = State()
-    addr     = State()
-    location = State()
+    name   = State()
+    phone  = State()
+    region = State()
+    terms  = State()
 
 class AdminState(StatesGroup):
     setting_input = State()
@@ -611,6 +610,23 @@ async def cmd_start(msg: Message, state: FSMContext):
 
     await msg.answer(t("uz", "welcome"), reply_markup=kb_lang())
 
+@router.callback_query(F.data == "terms_accept", RegState.terms)
+async def terms_accept(call: CallbackQuery, state: FSMContext):
+    d   = await state.get_data()
+    uid = call.from_user.id
+    # Foydalanuvchi ma'lumotlarini saqlaymiz
+    clinic_name = d.get("clinic_name", "")
+    phone       = d.get("phone", "")
+    region      = d.get("region", "")
+    full_name   = d.get("full_name", "") or call.from_user.full_name or ""
+    await db_run(
+        "UPDATE users SET clinic_name=?, phone=?, region=?, full_name=? WHERE id=?",
+        (clinic_name, phone, region, full_name, uid)
+    )
+    await call.message.edit_reply_markup(reply_markup=None)
+    await _finish_reg(call.message, state)
+    await call.answer()
+
 @router.callback_query(F.data == "skip_notify")
 async def skip_notify(call: CallbackQuery):
     try:
@@ -648,7 +664,11 @@ async def cb_role(call: CallbackQuery, state: FSMContext):
 # ── RO'YXATDAN O'TISH ─────────────────────────────────────────────────────────
 @router.message(RegState.name)
 async def reg_name(msg: Message, state: FSMContext):
-    await state.update_data(clinic_name=msg.text)
+    name = (msg.text or "").strip()
+    if len(name) < 2:
+        await msg.answer("⚠️ Kamida 2 ta harf kiriting.")
+        return
+    await state.update_data(clinic_name=name)
     lg = await lang(msg.from_user.id)
     kb = rk([KeyboardButton(text=t(lg, "btn_send_phone"), request_contact=True)], one_time=True)
     await state.set_state(RegState.phone)
@@ -656,7 +676,10 @@ async def reg_name(msg: Message, state: FSMContext):
 
 @router.message(RegState.phone, F.contact)
 async def reg_phone(msg: Message, state: FSMContext):
-    await state.update_data(phone=msg.contact.phone_number)
+    await state.update_data(
+        phone=msg.contact.phone_number,
+        full_name=msg.contact.first_name or msg.from_user.full_name or ""
+    )
     lg = await lang(msg.from_user.id)
     await state.set_state(RegState.region)
     await msg.answer(t(lg, "ask_region"), reply_markup=kb_regions(lg))
@@ -668,42 +691,40 @@ async def reg_region(call: CallbackQuery, state: FSMContext):
     regs = REGIONS if lg != "ru" else REGIONS_RU
     reg  = regs[idx].split(" ", 1)[1] if " " in regs[idx] else regs[idx]
     await state.update_data(region=reg)
-    await state.set_state(RegState.addr)
-    await call.message.answer(t(lg, "ask_address"), reply_markup=ReplyKeyboardRemove())
+    await state.set_state(RegState.terms)
+    u = await get_user(call.from_user.id)
+    role = u["role"] if u else "clinic"
+    # Foydalanish shartlari + obuna xabari
+    if role == "seller":
+        terms_txt = (
+            "📋 *Foydalanish shartlari*\n\n"
+            "XazDent B2B dental platformasiga xush kelibsiz!\n\n"
+            "✅ *Bepul davr:* 1 Avgustgacha to'liq bepul\n"
+            "💰 *Oylik obuna:* miqdori haqida keyinroq "
+            "xabardor qilinasiz\n\n"
+            "📌 *Qoidalar:*\n"
+            "• Faqat stomatologik mahsulotlar joylash mumkin\n"
+            "• Narxlar so'mda ko'rsatilsin\n"
+            "• Soxta mahsulot va ma'lumot joylash taqiqlanadi\n\n"
+            "Davom etish uchun shartlarni qabul qiling:"
+        )
+    else:
+        terms_txt = (
+            "📋 *XazDent*ga xush kelibsiz!\n\n"
+            "✅ Dental materiallar eng qulay narxda\n"
+            "✅ 100+ ishonchli sotuvchi\n"
+            "✅ Butun O'zbekiston bo'ylab yetkazib berish\n\n"
+            "Davom etish uchun qabul qiling:"
+        )
+    await call.message.answer(
+        terms_txt,
+        reply_markup=ik([ib("✅ Qabul qilaman — Davom etish", "terms_accept")])
+    )
     await call.answer()
 
-@router.message(RegState.addr)
-async def reg_addr(msg: Message, state: FSMContext):
-    await state.update_data(address=msg.text)
-    await state.set_state(RegState.location)
-    kb = rk(
-        [KeyboardButton(text="📍 Lokatsiya yuborish", request_location=True)],
-        [KeyboardButton(text="⏭ O\'tkazib yuborish")],
-        one_time=True,
-    )
-    await msg.answer(
-        "📍 Lokatsiyangizni yuboring\n_(ixtiyoriy — sotuvchi topishi osonlashadi)_",
-        reply_markup=kb,
-    )
+# addr handler olib tashlandi — manzil so'ralmaydi
 
-@router.message(RegState.location, F.location)
-async def reg_location(msg: Message, state: FSMContext):
-    d = await state.get_data()
-    await db_run(
-        "UPDATE users SET clinic_name=?,phone=?,region=?,address=?,latitude=?,longitude=? WHERE id=?",
-        (d["clinic_name"], d["phone"], d["region"], d["address"],
-         msg.location.latitude, msg.location.longitude, msg.from_user.id),
-    )
-    await _finish_reg(msg, state)
-
-@router.message(RegState.location, F.text == "⏭ O\'tkazib yuborish")
-async def reg_location_skip(msg: Message, state: FSMContext):
-    d = await state.get_data()
-    await db_run(
-        "UPDATE users SET clinic_name=?,phone=?,region=?,address=? WHERE id=?",
-        (d["clinic_name"], d["phone"], d["region"], d["address"], msg.from_user.id),
-    )
-    await _finish_reg(msg, state)
+# location handler olib tashlandi
 
 async def _finish_reg(msg: Message, state: FSMContext):
     uid = msg.from_user.id
@@ -712,9 +733,15 @@ async def _finish_reg(msg: Message, state: FSMContext):
     u  = await get_user(uid)
     if u and u["role"] in ("clinic", "zubtex"):
         kb    = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL)
-        panel = "🏥 *Klinika paneli*"
+        txt   = (
+            f"✅ *Ro\'yxatdan o\'tdingiz!*\n\n"
+            f"🏥 {u.get('clinic_name','')}\n"
+            f"📍 {u.get('region','')}\n\n"
+            f"🛍 Dental Market orqali materiallar buyurtma qiling!"
+        )
+        await msg.answer(txt, reply_markup=kb)
     else:
-        # Sotuvchi — do'kon yo'q bo'lsa avtomatik yaratamiz
+        # Do'kon yo'q bo'lsa avtomatik yaratamiz
         shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
         if not shop and u:
             sname = u.get("clinic_name") or u.get("full_name") or "Do\'konim"
@@ -723,9 +750,28 @@ async def _finish_reg(msg: Message, state: FSMContext):
                 "VALUES(?,?,?,?,?,'active')",
                 (uid, sname, "Stomatologiya", u.get("phone",""), u.get("region",""))
             )
-        kb    = kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
-        panel = "🛒 *Sotuvchi paneli*"
-    await msg.answer(f"✅ Profil saqlandi!\n\n{panel}", reply_markup=kb)
+        kb  = kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
+        txt = (
+            f"✅ *Do\'koningiz ochildi!*\n\n"
+            f"🏪 {u.get('clinic_name','')}\n"
+            f"📍 {u.get('region','')}\n\n"
+            f"➕ Mahsulot qo\'shing va xaridorlar sizni topsın!"
+        )
+        await msg.answer(txt, reply_markup=kb)
+        # Adminga xabar
+        for aid in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    aid,
+                    f"🆕 *Yangi sotuvchi!*\n\n"
+                    f"🏪 {u.get('clinic_name','')}\n"
+                    f"👤 {u.get('full_name','')}\n"
+                    f"📞 {u.get('phone','')}\n"
+                    f"📍 {u.get('region','')}\n"
+                    f"🆔 ID: `{uid}`"
+                )
+            except Exception:
+                pass
 
 # ── PROFIL ─────────────────────────────────────────────────────────────────────
 @router.message(F.text == "⚙️ Profil")
@@ -823,7 +869,12 @@ async def edit_profile(call: CallbackQuery, state: FSMContext):
     lg = await lang(call.from_user.id)
     u  = await get_user(call.from_user.id)
     await state.set_state(RegState.name)
-    ask = t(lg, "ask_clinic_name") if u and u["role"] in ("clinic", "zubtex") else "🏪 Do'kon nomingizni kiriting:"
+    if u and u["role"] == "seller":
+        ask = "🏪 Do'kon/kompaniya nomingizni kiriting:"
+    elif u and u["role"] == "zubtex":
+        ask = "🔬 Ismingiz va ish joyingizni kiriting:"
+    else:
+        ask = "🏥 Klinika nomingizni kiriting:"
     await call.message.answer(ask, reply_markup=ReplyKeyboardRemove())
     await call.answer()
 
@@ -2125,36 +2176,57 @@ async def shop_cat(call: CallbackQuery, state: FSMContext):
         "cat_4": "🧪 Dezinfeksiya",
         "cat_5": "💡 Asbob-uskunalar",
     }
-    await state.update_data(cat=cats.get(call.data, call.data))
+    await state.update_data(cat=cats.get(call.data, "Stomatologiya"))
     await state.set_state(ShopState.name)
-    await call.message.answer("🏪 Do'kon nomini kiriting:\n\n_Masalan: DentalPlus Toshkent_")
+    await call.message.answer(
+        "🏪 Do'kon nomini kiriting:\n\n_Masalan: DentalPlus Toshkent_",
+        reply_markup=ReplyKeyboardRemove()
+    )
     await call.answer()
 
 @router.message(ShopState.name)
 async def shop_name(msg: Message, state: FSMContext):
-    d = await state.get_data()
-    u = await get_user(msg.from_user.id)
-    await db_insert(
-        "INSERT INTO shops(owner_id,shop_name,category,phone,region) VALUES(?,?,?,?,?)",
-        (msg.from_user.id, msg.text, d["cat"], u["phone"], u["region"]),
-    )
+    d   = await state.get_data()
+    u   = await get_user(msg.from_user.id)
+    uid = msg.from_user.id
+    sname = (msg.text or "").strip()
+    if not sname:
+        await msg.answer("⚠️ Do'kon nomini kiriting.")
+        return
+    # Mavjud do'konni yangilaymiz yoki yangisini yaratamiz
+    existing = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+    if existing:
+        await db_run(
+            "UPDATE shops SET shop_name=?, category=?, status='active' WHERE owner_id=?",
+            (sname, d.get("cat","Stomatologiya"), uid)
+        )
+    else:
+        await db_insert(
+            "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+            "VALUES(?,?,?,?,?,'active')",
+            (uid, sname, d.get("cat","Stomatologiya"),
+             u.get("phone","") if u else "",
+             u.get("region","") if u else "")
+        )
     await state.clear()
+    await msg.answer(
+        f"✅ *Do'kon yangilandi!*\n\n🏪 {sname}",
+        reply_markup=kb_seller(u["lang"] or "uz", uid=uid, webapp_url=WEBAPP_URL) if u else None
+    )
+    # Adminga xabar
     for aid in ADMIN_IDS:
         try:
             await bot.send_message(
                 aid,
-                f"🏪 *Yangi do'kon!*\n\n"
-                f"📛 {msg.text}\n"
-                f"👤 {u['clinic_name'] or u['full_name']}\n"
-                f"📞 {u['phone']}",
-                reply_markup=ik(
-                    [ib("✅ Tasdiqlash", f"shopok_{msg.from_user.id}"),
-                     ib("❌ Rad", f"shoprej_{msg.from_user.id}")],
-                ),
+                f"🔄 *Do'kon yangilandi*\n\n"
+                f"🏪 {sname}\n"
+                f"👤 {u.get('full_name','') if u else ''}\n"
+                f"📞 {u.get('phone','') if u else ''}\n"
+                f"📍 {u.get('region','') if u else ''}\n"
+                f"🆔 `{uid}`"
             )
         except Exception:
             pass
-    await msg.answer("⏳ Do'kon admin tasdiqlashini kutmoqda.")
 
 @router.callback_query(F.data == "group_info")
 async def cb_group_info(call: CallbackQuery):
