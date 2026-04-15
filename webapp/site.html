@@ -782,7 +782,7 @@ function renderGrid(prods){
           '<div class="pshop">🏪 '+esc(p.shop_name||'?')+'</div>'+
           '<div class="pname" onclick="openDet('+p.id+')">'+esc(p.name)+'</div>'+
           (p.article_code?'<div class="pcode">'+esc(p.article_code)+'</div>':'')+
-          '<div class="pprice">'+fmt(p.price)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
+          '<div class="pprice">'+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
           '<div class="card-actions">'+qtyCtrl+
             '<button class="fav-btn'+(isFav?' on':'')+'" onclick="event.stopPropagation();togFav('+p.id+')">'+
               (isFav?'❤️':'🤍')+
@@ -797,7 +797,7 @@ function renderGrid(prods){
           '<div class="pshop">🏪 '+esc(p.shop_name||'?')+'</div>'+
           '<div class="pname" onclick="openDet('+p.id+')">'+esc(p.name)+'</div>'+
           (p.article_code?'<div class="pcode">'+esc(p.article_code)+'</div>':'')+
-          '<div class="pprice">'+fmt(p.price)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
+          '<div class="pprice">'+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
           '<div class="card-actions">'+qtyCtrl+
             '<button class="fav-btn'+(isFav?' on':'')+'" onclick="event.stopPropagation();togFav('+p.id+')">'+
               (isFav?'❤️':'🤍')+
@@ -814,7 +814,7 @@ function renderGrid(prods){
 // ── DETAIL ────────────────────────────────────────────────────────────
 function openDet(pid){
   var p = _prods[pid]; if(!p) return;
-  detPid = pid; detQty = 1;
+  detPid = pid; detQty = 1; detVarId = null; detVarPrice = 0; _detProd = p;
   var firstPh = p.photos && p.photos[0];
   var imgH = firstPh
     ? '<img src="'+API_BASE+firstPh+'" onerror="this.innerHTML=\'🦷\'">'
@@ -837,7 +837,7 @@ function openDet(pid){
     '<div class="det-body">'+
       '<div class="det-name">'+esc(p.name)+'</div>'+
       '<div class="det-shop">🏪 '+esc(p.shop_name||'?')+' · 📍 '+esc(p.region||'')+'</div>'+
-      '<div class="det-price">'+fmt(p.price)+' <span style="font-size:14px;font-weight:400;color:var(--text2)">so\'m/'+esc(p.unit)+'</span></div>'+
+      '<div class="det-price">'+(hasVars?'<span style="font-size:13px;font-weight:400;color:var(--text2)">dan </span>':'')+minPriceStr(p)+' <span style="font-size:14px;font-weight:400;color:var(--text2)">so\'m/'+esc(p.unit)+'</span></div>'+
       (p.description?'<div class="det-desc">'+esc(p.description)+'</div>':'')+
       varsHtml+
       '<div class="det-qty-row">'+
@@ -858,25 +858,58 @@ function openDet(pid){
   openPanel('det-panel');
 }
 
-var detVarId = null;
-function selDetVar(btn, vid){
-  document.querySelectorAll('[onclick^="selDetVar"]').forEach(function(b){
+var detVarId = null, detVarPrice = 0;
+function selDetVar(btn, vid, price){
+  document.querySelectorAll('#site-var-list button').forEach(function(b){
     b.style.background='transparent'; b.style.borderColor='var(--border)'; b.style.color='var(--text)';
   });
   btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#fff';
   detVarId = vid;
+  detVarPrice = price || 0;
+  // Narxni yangilaymiz
+  var pEl = document.querySelector('.det-price');
+  if (pEl && price > 0) {
+    pEl.innerHTML = fmt(price)+' <span style="font-size:14px;font-weight:400;color:var(--text2)">so'm/'+esc((_detProd||{}).unit||'dona')+'</span>';
+  }
 }
+function siteFilterVars(q){
+  var btns = document.querySelectorAll('#site-var-list button');
+  var low = (q||'').toLowerCase();
+  btns.forEach(function(b){
+    var nm = (b.dataset.vname||'').toLowerCase();
+    b.style.display = (!low||nm.indexOf(low)>-1)?'':'none';
+  });
+}
+var _detProd = null;
 function detQtyChange(d){
   detQty = Math.max(1, detQty+d);
   document.getElementById('det-qty-n').textContent = detQty;
 }
 function detAddCart(){
-  addCart(detPid, detQty);
+  var p = _prods[detPid]; if(!p) return;
+  if(p.variants && p.variants.length && !detVarId){
+    toast('⚠️ Variant tanlang!'); return;
+  }
+  var pr = (detVarPrice > 0) ? detVarPrice : p.price;
+  var pCopy = Object.assign({}, p, {price: pr});
+  var key = detVarId ? detPid+'_v_'+detVarId : ''+detPid;
+  if(!cart[key]) cart[key] = {product:pCopy, variantId:detVarId, qty:0, key:key};
+  cart[key].qty += detQty;
+  saveCart(); updateCartBadge();
   closePanel('det-panel');
   toast('✅ Savatga qo\'shildi!');
 }
 function detQuick(){
-  addCart(detPid, detQty);
+  var p = _prods[detPid]; if(!p) return;
+  if(p.variants && p.variants.length && !detVarId){
+    toast('⚠️ Variant tanlang!'); return;
+  }
+  var pr = (detVarPrice > 0) ? detVarPrice : p.price;
+  var pCopy = Object.assign({}, p, {price: pr});
+  var key = detVarId ? detPid+'_v_'+detVarId : ''+detPid;
+  if(!cart[key]) cart[key] = {product:pCopy, variantId:detVarId, qty:0, key:key};
+  cart[key].qty += detQty;
+  saveCart(); updateCartBadge();
   closePanel('det-panel');
   checkout();
 }
@@ -884,12 +917,17 @@ function detQuick(){
 // ── CART ──────────────────────────────────────────────────────────────
 function addCart(pid, qty){
   var p = _prods[pid]; if(!p) return;
+  // Variantli mahsulotda to'g'ridan savatga solmaymiz - detail ochisin
+  if(p.variants && p.variants.length > 0){
+    openDet(pid); return;
+  }
   if(!cart[pid]) cart[pid] = {product:p, qty:0};
   cart[pid].qty += (qty||1);
   saveCart(); updateCartBadge();
   if(curView==='home'||curView==='catalog') loadCatalog();
 }
 function chQty(pid, d){
+  // pid key bo'lishi mumkin: "123" yoki "123_v_Propilen 50sm"
   if(!cart[pid]) return;
   cart[pid].qty += d;
   if(cart[pid].qty <= 0) delete cart[pid];
@@ -1017,7 +1055,7 @@ function renderFavs(){
       '<div class="pimg" onclick="openDet('+pid+')">'+imgH+'</div>'+
       '<div class="pbody">'+
         '<div class="pname">'+esc(p.name)+'</div>'+
-        '<div class="pprice">'+fmt(p.price)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
+        '<div class="pprice">'+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
         '<div class="card-actions">'+
           '<button class="add-btn" onclick="event.stopPropagation();addCart('+pid+',1)">+ Savat</button>'+
           '<button class="fav-btn on" onclick="event.stopPropagation();togFav('+pid+')">❤️</button>'+
@@ -1092,6 +1130,12 @@ function toast(msg){
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────
+function minPriceStr(p){
+  if(!p.variants||!p.variants.length) return fmt(p.price);
+  var prices=[p.price];
+  p.variants.forEach(function(v){ if(v.price&&v.price>0) prices.push(v.price); });
+  return fmt(Math.min.apply(null,prices));
+}
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmt(n){ return Math.round(n||0).toLocaleString('uz-UZ'); }
 </script>
