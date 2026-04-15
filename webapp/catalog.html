@@ -388,7 +388,7 @@ body{
     </div>
     <div class="citems" id="citems"></div>
     <div class="cftr">
-      <div class="ctotal">Jami: <span id="ctotal">0 so'm</span></div>
+      <div class="ctotal">Jami: <span id="ctotal">0 so&#39;m</span></div>
       <button class="obtn" id="obtn" onclick="submitOrder()">📦 Buyurtma berish</button>
     </div>
   </div>
@@ -432,7 +432,7 @@ body{
 
     <div class="flabel">Narx va birlik *</div>
     <div class="frow">
-      <input class="finp" id="f-price" type="number" placeholder="Narx (so'm)" style="flex:2">
+      <input class="finp" id="f-price" type="number" placeholder="Narx (so&#39;m)" style="flex:2">
       <select class="finp" id="f-unit" style="flex:1;color:#1a1a3e;background:#fff">
         <option>dona</option><option>quti</option><option>kg</option>
         <option>litr</option><option>ml</option><option>paket</option>
@@ -708,7 +708,7 @@ function openDetail(pid) {
         return '<div class="var-multi-row" data-vname="'+esc(v.size_name||'')+'">'+
           '<div class="var-multi-info">'+
             '<div class="var-multi-name">'+esc(v.size_name||'')+(v.article?' <span style="font-size:10px;color:var(--hint)">'+esc(v.article)+'</span>':'')+'</div>'+
-            '<div style="font-size:12px;font-weight:700;color:var(--btn)">'+fmt(vPrice)+' so'm</div>'+
+            '<div style="font-size:12px;font-weight:700;color:var(--btn)">'+fmt(vPrice)+' so&#39;m</div>'+
             (ok?'<div class="var-multi-stock">✅ '+v.stock+' ta</div>':'<div class="var-multi-stock" style="color:var(--red)">❌ Tugagan</div>')+
           '</div>'+
           '<div class="var-multi-ctrl">'+
@@ -802,7 +802,7 @@ function updVarUI(name) {
     total += pr * varSelections[n];
   });
   var tel = document.getElementById('var-total');
-  if (tel) tel.textContent = total > 0 ? '💰 Jami: '+fmt(total)+' so'm' : '';
+  if (tel) tel.textContent = total > 0 ? '💰 Jami: '+fmt(total)+' so\'m' : '';
 }
 
 function detAddCart() {
@@ -1127,7 +1127,7 @@ function addVarRow() {
   row.innerHTML =
     '<div style="display:flex;gap:4px;flex:1;flex-wrap:wrap">'+
       '<input class="finp" id="vs-'+id+'" placeholder="Razmer (Propilen 50sm 1ig)" style="min-width:120px;flex:2;margin-bottom:4px">'+
-      '<input class="finp" id="vp-'+id+'" placeholder="Narx (so'm)" type="number" style="min-width:80px;flex:1;margin-bottom:4px">'+
+      '<input class="finp" id="vp-'+id+'" placeholder="Narx (so&#39;m)" type="number" style="min-width:80px;flex:1;margin-bottom:4px">'+
       '<input class="finp" id="vq-'+id+'" placeholder="Stok" type="number" style="min-width:60px;flex:.7;margin-bottom:4px">'+
       '<input class="finp" id="va-'+id+'" placeholder="Artikul" style="min-width:70px;flex:.8;margin-bottom:4px">'+
     '</div>'+
