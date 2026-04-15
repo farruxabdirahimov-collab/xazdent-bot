@@ -2454,15 +2454,16 @@ async def cmd_debug(msg: Message):
             for r in test_rows
         ]) or "  (bo'sh)"
 
-        await msg.answer(
-            f"🔍 *Debug Info*\n\n"
-            f"👥 Users: {total_u}\n"
-            f"📦 Products: {total_p} (aktiv: {active_p})\n"
-            f"🏪 Shops: {total_s} (aktiv: {active_s})\n\n"
+        text = (
+            f"DEBUG INFO\n\n"
+            f"Users: {total_u}\n"
+            f"Products: {total_p} (aktiv: {active_p})\n"
+            f"Shops: {total_s} (aktiv: {active_s})\n\n"
             f"{ia_col}\n"
             f"{pv_col}\n\n"
-            f"📋 Mahsulot namuna:\n{prod_sample}"
+            f"Sample:\n{prod_sample}"
         )
+        await msg.answer(text, parse_mode=None)
     except Exception as e:
         await msg.answer(f"❌ Debug xato: {e}")
 
@@ -6049,7 +6050,7 @@ async def start_webserver():
         rev_all  = await db_get("SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'")
         rev_p    = await db_get(f"SELECT COALESCE(SUM(amount),0) as s FROM transactions WHERE status='confirmed'{p_filter()}")
         regions  = await db_all(
-            "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(n.id) as needs "
+             "SELECT u.region, COUNT(DISTINCT u.id) as users, COUNT(DISTINCT n.id) as needs "
             "FROM users u LEFT JOIN needs n ON n.owner_id=u.id "
             "WHERE u.role IN ('clinic','zubtex') AND u.region IS NOT NULL "
             "GROUP BY u.region ORDER BY needs DESC LIMIT 10")
@@ -6252,20 +6253,20 @@ async def start_webserver():
         no_photo = (await db_get("SELECT COUNT(*) as c FROM products WHERE photo_file_id IS NULL AND is_active=1"))["c"]
         no_stock = (await db_get("SELECT COUNT(*) as c FROM products WHERE stock=0 AND is_active=1"))["c"]
         top_viewed = await db_all(
-            "SELECT p.name, s.shop_name, COUNT(v.id) as views "
+            "SELECT p.name, MAX(s.shop_name) as shop_name, COUNT(v.id) as views "
             "FROM product_views v JOIN products p ON v.product_id=p.id "
             "JOIN shops s ON p.shop_id=s.id "
-            "GROUP BY p.id ORDER BY views DESC LIMIT 10")
+            "GROUP BY p.id, p.name ORDER BY views DESC LIMIT 10")
         top_searches = await db_all(
             "SELECT query, COUNT(*) as cnt FROM search_logs "
             "GROUP BY query ORDER BY cnt DESC LIMIT 10")
         top_ordered = await db_all(
-            "SELECT p.name, s.shop_name, COUNT(o.id) as orders "
+            "SELECT p.name, MAX(s.shop_name) as shop_name, COUNT(o.id) as orders "
             "FROM offers o JOIN needs n ON o.need_id=n.id "
             "JOIN products p ON p.name=n.product_name "
             "JOIN shops s ON p.shop_id=s.id "
             "WHERE o.status='accepted' "
-            "GROUP BY p.id ORDER BY orders DESC LIMIT 10")
+            "GROUP BY p.id, p.name ORDER BY orders DESC LIMIT 10")
         return _web.Response(
             text=_json.dumps({"ok":True,"data":{
                 "total_products":total_p,"total_shops":total_s,
@@ -6502,14 +6503,14 @@ async def start_webserver():
         zubtex = (await db_get("SELECT COUNT(*) as c FROM users WHERE role='zubtex'"))["c"]
         new_28 = (await db_get("SELECT COUNT(*) as c FROM users WHERE created_at >= ?", (d28,)))["c"]
         regions = await db_all(
-            "SELECT region, "
-            "COUNT(*) as total, "
-            "SUM(CASE WHEN role IN ('clinic','zubtex') THEN 1 ELSE 0 END) as clinic, "
-            "SUM(CASE WHEN role='seller' THEN 1 ELSE 0 END) as seller, "
-            "SUM(CASE WHEN role='zubtex' THEN 1 ELSE 0 END) as zubtex, "
-            "SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) as new_28 "
-            "FROM users WHERE region IS NOT NULL AND role != 'none' "
-            "GROUP BY region ORDER BY total DESC LIMIT 15",
+             "SELECT u.region, "
+             "COUNT(*) as total, "
+             "SUM(CASE WHEN u.role IN ('clinic','zubtex') THEN 1 ELSE 0 END) as clinic, "
+             "SUM(CASE WHEN u.role='seller' THEN 1 ELSE 0 END) as seller, "
+             "SUM(CASE WHEN u.role='zubtex' THEN 1 ELSE 0 END) as zubtex, "
+             "SUM(CASE WHEN u.created_at >= ? THEN 1 ELSE 0 END) as new_28 "
+             "FROM users u WHERE u.region IS NOT NULL AND u.role != 'none' "
+             "GROUP BY u.region ORDER BY total DESC LIMIT 15",
             (d28,)
         )
         return _web.Response(
@@ -6647,10 +6648,11 @@ async def start_webserver():
         filt = req.query.get("filter","all")
         query = (
             "SELECT b.id, b.created_at, "
-            "COALESCE(u.clinic_name,u.full_name) as clinic_name, u.region, "
+            "MAX(COALESCE(u.clinic_name,u.full_name)) as clinic_name, "
+            "MAX(u.region) as region, "
             "COUNT(DISTINCT n.id) as prod_count, "
             "COUNT(DISTINCT o.id) as offer_count, "
-            "b.expires_at, b.status "
+            "MAX(b.expires_at) as expires_at, MAX(b.status) as status "
             "FROM batches b "
             "JOIN users u ON b.owner_id=u.id "
             "LEFT JOIN needs n ON n.batch_id=b.id "
