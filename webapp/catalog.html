@@ -466,7 +466,7 @@ ROLE = _qp.get('role') || 'clinic';
 
 var cart = {}, curCat = '', curSearch = '', curView = 'catalog';
 var formPhotos = [], varCount = 0, _prods = {};
-var varSelections = {}, detPid = null, detProd = null, detQty = 1;
+var varSelections = {}, varPrices = {}, detPid = null, detProd = null, detQty = 1;
 
 // Category checkboxes
 document.querySelectorAll('.cat-chk').forEach(function(lbl) {
@@ -494,8 +494,28 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
   }
 })();
 
+function minPriceStr(p){
+  if(!p.variants||!p.variants.length) return fmt(p.price);
+  var prices=[p.price];
+  p.variants.forEach(function(v){ if(v.price&&v.price>0) prices.push(v.price); });
+  return fmt(Math.min.apply(null,prices));
+}
+function filterVars(q) {
+  var rows = document.querySelectorAll('#var-list .var-multi-row');
+  var low = (q||'').toLowerCase();
+  rows.forEach(function(row){
+    var name = (row.dataset.vname||'').toLowerCase();
+    row.style.display = (!low || name.indexOf(low) > -1) ? '' : 'none';
+  });
+}
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmt(n){ return Math.round(n||0).toLocaleString(); }
+function minPrice(p){
+  if(!p.variants||!p.variants.length) return fmt(p.price);
+  var prices=[p.price];
+  p.variants.forEach(function(v){ if(v.price&&v.price>0) prices.push(v.price); });
+  return fmt(Math.min.apply(null,prices));
+}
 
 // ── VIEW ─────────────────────────────────────────────────────────────────────
 function showView(v, btn) {
@@ -545,7 +565,7 @@ function loadCatalog() {
                 (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
               '</div>'+
               '<div>'+
-                '<div class="pprice">'+fmt(p.price)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
+                '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+(hasVars?' ↑':'')+'</span></div>'+
                 '<div style="display:flex;gap:8px;align-items:center;margin-top:8px">'+
                   '<button class="abtn" onclick="openDetail('+p.id+')" style="font-size:13px">Ko\'rish</button>'+
                   '<button class="share-btn" onclick="event.stopPropagation();shareProd('+p.id+')">📤</button>'+
@@ -559,7 +579,7 @@ function loadCatalog() {
               '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
               '<div class="pshop">🏪 '+esc(p.shop_name||'?')+'</div>'+
               (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
-              '<div class="pprice">'+fmt(p.price)+' <span class="punit">so\'m/'+esc(p.unit)+'</span></div>'+
+              '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+(hasVars?' ↑':'')+'</span></div>'+
               '<div style="display:flex;gap:6px;align-items:center;margin-top:auto">'+
                 (ROLE!=='seller'?(
                   hasVars?
@@ -629,7 +649,7 @@ function onSearch(q) {
 // ── DETAIL ───────────────────────────────────────────────────────────────────
 function openDetail(pid) {
   var p = _prods[pid]; if (!p) return;
-  detPid = pid; detProd = p; detQty = 1; varSelections = {};
+  detPid = pid; detProd = p; detQty = 1; varSelections = {}; varPrices = {};
   var ds = document.getElementById('dsheet');
   var hasVars = p.variants && p.variants.length > 0;
 
@@ -662,24 +682,37 @@ function openDetail(pid) {
   // Variants
   var varsHtml = '';
   if (hasVars) {
+    var varCount = p.variants.length;
+    var varSearchHtml = varCount > 9 ?
+      '<input id="var-search" placeholder="🔍 Variant qidiring..." '+
+        'oninput="filterVars(this.value)" '+
+        'style="width:100%;padding:9px 12px;border:1.5px solid var(--border);'+
+        'border-radius:10px;font-size:14px;margin-bottom:8px;'+
+        'background:var(--bg);color:var(--text);outline:none;font-family:inherit">'+
+      '<div style="font-size:11px;color:var(--hint);margin-bottom:6px">'+varCount+' ta variant</div>'
+      : '';
     varsHtml = '<div class="var-label">Razmer / Variantlar:</div>'+
-      '<div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px">'+
+      varSearchHtml+
+      '<div id="var-list" style="border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;max-height:320px;overflow-y:auto">'+
       p.variants.map(function(v){
         var ok = v.stock > 0;
-        return '<div class="var-multi-row">'+
+        var vPrice = (v.price&&v.price>0)?v.price:detProd.price;
+        return '<div class="var-multi-row" data-vname="'+esc(v.size_name||'')+'">'+
           '<div class="var-multi-info">'+
             '<div class="var-multi-name">'+esc(v.size_name||'')+(v.article?' <span style="font-size:10px;color:var(--hint)">'+esc(v.article)+'</span>':'')+'</div>'+
-            (ok?'<div class="var-multi-stock">✅ '+v.stock+' ta mavjud</div>':'<div class="var-multi-stock" style="color:var(--red)">❌ Tugagan</div>')+
+            '<div style="font-size:12px;font-weight:700;color:var(--btn)">'+fmt(vPrice)+' so'm</div>'+
+            (ok?'<div class="var-multi-stock">✅ '+v.stock+' ta</div>':'<div class="var-multi-stock" style="color:var(--red)">❌ Tugagan</div>')+
           '</div>'+
           '<div class="var-multi-ctrl">'+
             '<button class="vmbtn" onclick="varMinus(\''+esc(v.size_name)+'\')">−</button>'+
             '<span class="vmnum" id="vn-'+esc(v.size_name)+'">0</span>'+
-            '<button class="vmbtn" onclick="varPlus(\''+esc(v.size_name)+'\''+(ok?','+v.stock:',0')+')">+</button>'+
+            '<button class="vmbtn" '+(ok?'onclick="varPlus(\''+esc(v.size_name)+'\','+v.stock+','+vPrice+')"':'disabled style="opacity:.4"')+'>+</button>'+
           '</div>'+
         '</div>';
       }).join('')+
       '</div>'+
-      '<div id="var-total" style="font-size:13px;color:var(--btn);font-weight:600;margin-bottom:10px;text-align:right"></div>';
+      '<div id="var-total" style="font-size:13px;color:var(--btn);font-weight:600;margin-bottom:10px;text-align:right"></div>'+
+      '<div id="var-price-hint" style="font-size:12px;color:var(--hint);margin-bottom:6px"></div>';
   }
 
   // Buyer actions
@@ -736,27 +769,32 @@ function closeDpBg(e){ if(e.target===document.getElementById('dpanel')) closeDp(
 function dQty(d){ detQty=Math.max(1,detQty+d); document.getElementById('det-qty-n').textContent=detQty; }
 
 // Variant ctrl
-window.varPlus = function(name, maxStock) {
+window.varPlus = function(name, maxStock, price) {
   if (!varSelections[name]) varSelections[name] = 0;
   if (maxStock > 0 && varSelections[name] >= maxStock) return;
   if (maxStock === 0) return; // Tugagan
   varSelections[name]++;
+  if (price && price > 0) varPrices[name] = price;
   updVarUI(name);
 };
 window.varMinus = function(name) {
   if (!varSelections[name] || varSelections[name] <= 0) return;
   varSelections[name]--;
-  if (!varSelections[name]) delete varSelections[name];
+  if (!varSelections[name]) { delete varSelections[name]; delete varPrices[name]; }
   updVarUI(name);
 };
 function updVarUI(name) {
   var el = document.getElementById('vn-'+name);
   var qty = varSelections[name] || 0;
   if (el) { el.textContent = qty; el.classList.toggle('active', qty > 0); }
-  var total = 0, price = detProd ? detProd.price : 0;
-  Object.values(varSelections).forEach(function(q){ total += q; });
+  // Narxlar bo'yicha jami
+  var total = 0;
+  Object.keys(varSelections).forEach(function(n){
+    var pr = varPrices[n] || (detProd ? detProd.price : 0);
+    total += pr * varSelections[n];
+  });
   var tel = document.getElementById('var-total');
-  if (tel) tel.textContent = total > 0 ? 'Jami: '+total+' dona · '+fmt(price*total)+' so\'m' : '';
+  if (tel) tel.textContent = total > 0 ? '💰 Jami: '+fmt(total)+' so'm' : '';
 }
 
 function detAddCart() {
@@ -767,9 +805,11 @@ function detAddCart() {
     if (!keys.length) { alert('Kamida bitta variant tanlang!'); return; }
     keys.forEach(function(name) {
       var key = detPid+'_v_'+name;
-      cart[key] = {product:p, variantId:name, qty:varSelections[name], key:key};
+      var pr = varPrices[name] || p.price;
+      var pCopy = Object.assign({}, p, {price: pr});
+      cart[key] = {product:pCopy, variantId:name, qty:varSelections[name], key:key};
     });
-    varSelections = {};
+    varSelections = {}; varPrices = {};
   } else {
     cart[detPid] = {product:p, qty:detQty};
   }
@@ -784,7 +824,7 @@ function detQuick() {
   if (hasVars) {
     var keys = Object.keys(varSelections);
     if (!keys.length) { alert('Kamida bitta variant tanlang!'); return; }
-    keys.forEach(function(name){ items.push({size_name:name, qty:varSelections[name]}); });
+    keys.forEach(function(name){ items.push({size_name:name, qty:varSelections[name], price:varPrices[name]||0}); });
   } else {
     items.push({size_name:null, qty:detQty});
   }
@@ -1071,9 +1111,12 @@ function addVarRow() {
   row.className = 'var-item';
   row.id = 'vr-'+id;
   row.innerHTML =
-    '<input class="finp" id="vs-'+id+'" placeholder="Razmer (masalan: 4008)">' +
-    '<input class="finp" id="va-'+id+'" placeholder="Artikul (ixtiyoriy)" style="flex:.8">' +
-    '<input class="finp" id="vq-'+id+'" placeholder="Stok" type="number" style="flex:.5">' +
+    '<div style="display:flex;gap:4px;flex:1;flex-wrap:wrap">'+
+      '<input class="finp" id="vs-'+id+'" placeholder="Razmer (Propilen 50sm 1ig)" style="min-width:120px;flex:2;margin-bottom:4px">'+
+      '<input class="finp" id="vp-'+id+'" placeholder="Narx (so'm)" type="number" style="min-width:80px;flex:1;margin-bottom:4px">'+
+      '<input class="finp" id="vq-'+id+'" placeholder="Stok" type="number" style="min-width:60px;flex:.7;margin-bottom:4px">'+
+      '<input class="finp" id="va-'+id+'" placeholder="Artikul" style="min-width:70px;flex:.8;margin-bottom:4px">'+
+    '</div>'+
     '<button class="var-del" onclick="this.parentNode.remove()">✕</button>';
   document.getElementById('var-editor').appendChild(row);
 }
@@ -1097,7 +1140,13 @@ function saveProduct() {
     var s=document.getElementById('vs-'+id);
     var a=document.getElementById('va-'+id);
     var q=document.getElementById('vq-'+id);
-    if(s&&s.value.trim()) variants.push({size_name:s.value.trim(),article:a?a.value.trim():'',stock:q?parseInt(q.value)||0:0});
+    var vp=document.getElementById('vp-'+id);
+    if(s&&s.value.trim()) variants.push({
+      size_name:s.value.trim(),
+      article:a?a.value.trim():'',
+      stock:q?parseInt(q.value)||0:0,
+      price:vp?parseFloat(vp.value)||0:0
+    });
   });
   // formPhotos - to'liq dataUrl (data:image/jpeg;base64,...)
   // API ga faqat base64 qismini yuboramiz
