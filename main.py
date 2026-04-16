@@ -552,6 +552,35 @@ async def cmd_start(msg: Message, state: FSMContext):
             await _show_product_start(msg, pending_pid)
             return
 
+        # ── Eski user — ma'lumotlar to'liqmi? ───────────────────────
+        missing_region = not u.get("region")
+        missing_phone  = not u.get("phone")
+        lg = u["lang"] or "uz"
+
+        if missing_region:
+            await state.set_state(RegState.region)
+            await msg.answer(
+                "📍 *Viloyatingizni tanlang*\n"
+                "_Bu ma'lumot sotuvchilarga buyurtmangizni\n"
+                "tez yetkazishga yordam beradi_",
+                reply_markup=kb_regions(lg)
+            )
+            return
+
+        if missing_phone:
+            await state.set_state(RegState.phone)
+            kb_ph = rk(
+                [KeyboardButton(text=t(lg, "btn_send_phone"), request_contact=True)],
+                one_time=True
+            )
+            await msg.answer(
+                "📞 *Telefon raqamingizni yuboring*\n"
+                "_Sotuvchi siz bilan bog'lanishi uchun kerak_",
+                reply_markup=kb_ph
+            )
+            return
+        # ─────────────────────────────────────────────────────────────
+
         lg  = u["lang"] or "uz"
         kb   = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL) if u["role"] in ("clinic", "zubtex") else kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
         role = u["role"]
@@ -745,6 +774,7 @@ async def reg_region(call: CallbackQuery, state: FSMContext):
     regs = REGIONS if lg != "ru" else REGIONS_RU
     reg  = regs[idx].split(" ", 1)[1] if " " in regs[idx] else regs[idx]
     await state.update_data(region=reg)
+    await state.update_data(is_new_reg=True)
     await state.set_state(RegState.phone)
     kb_ph = rk([KeyboardButton(text=t(lg, "btn_send_phone"), request_contact=True)], one_time=True)
     await call.message.answer(t(lg, "ask_phone"), reply_markup=kb_ph)
@@ -752,13 +782,36 @@ async def reg_region(call: CallbackQuery, state: FSMContext):
 
 @router.message(RegState.phone, F.contact)
 async def reg_phone(msg: Message, state: FSMContext):
-    await state.update_data(
-        phone=msg.contact.phone_number,
-        full_name=msg.contact.first_name or msg.from_user.full_name or ""
+    uid = msg.from_user.id
+    phone = msg.contact.phone_number
+    full_name = msg.contact.first_name or msg.from_user.full_name or ""
+    await state.update_data(phone=phone, full_name=full_name)
+    # Telefon raqamini bazaga darhol saqlaymiz
+    await db_run(
+        "UPDATE users SET phone=?, full_name=COALESCE(NULLIF(full_name,''),?) WHERE id=?",
+        (phone, full_name, uid)
     )
-    lg   = await lang(msg.from_user.id)
-    u    = await get_user(msg.from_user.id)
+    lg   = await lang(uid)
+    u    = await get_user(uid)
     role = u["role"] if u else "clinic"
+    # Eski user (role bor) — shartlar kerak emas, to'g'ridan panel
+    if role not in (None, "none", ""):
+        d = await state.get_data()
+        if not d.get("is_new_reg"):
+            await state.clear()
+            kb = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL) if role in ("clinic","zubtex") else kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
+            await msg.answer(
+                "✅ *Telefon saqlandi!*\n\n"
+                "Endi barcha buyurtmalaringiz to\'liq ko\'rinadi.",
+                reply_markup=kb
+            )
+            if WEBAPP_URL:
+                mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role={role}"
+                await msg.answer(
+                    "👇 Dental Market:",
+                    reply_markup=ik([ib("🛍 Dental Market →", web_app=WebAppInfo(url=mkt_url))])
+                )
+            return
     await state.set_state(RegState.terms)
     # ── Shartlar matni — rol bo'yicha ────────────────────────────────
     if role == "seller":
