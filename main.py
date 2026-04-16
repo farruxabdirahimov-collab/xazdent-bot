@@ -733,9 +733,8 @@ async def reg_name(msg: Message, state: FSMContext):
         return
     await state.update_data(clinic_name=name)
     lg = await lang(msg.from_user.id)
-    kb = rk([KeyboardButton(text=t(lg, "btn_send_phone"), request_contact=True)], one_time=True)
-    await state.set_state(RegState.phone)
-    await msg.answer(t(lg, "ask_phone"), reply_markup=kb)
+    await state.set_state(RegState.region)
+    await msg.answer(t(lg, "ask_region"), reply_markup=kb_regions(lg))
 
 # reg_phone eski versiya olib tashlandi
 
