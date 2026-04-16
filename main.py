@@ -614,7 +614,6 @@ async def cmd_start(msg: Message, state: FSMContext):
 async def terms_accept(call: CallbackQuery, state: FSMContext):
     d   = await state.get_data()
     uid = call.from_user.id
-    # Foydalanuvchi ma'lumotlarini saqlaymiz
     clinic_name = d.get("clinic_name", "")
     phone       = d.get("phone", "")
     region      = d.get("region", "")
@@ -623,9 +622,73 @@ async def terms_accept(call: CallbackQuery, state: FSMContext):
         "UPDATE users SET clinic_name=?, phone=?, region=?, full_name=? WHERE id=?",
         (clinic_name, phone, region, full_name, uid)
     )
-    await call.message.edit_reply_markup(reply_markup=None)
-    await _finish_reg(call.message, state)
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await call.answer()
+    # _finish_reg ga call.from_user.id ni to'g'ri uzatish uchun
+    # msg.from_user.id ishlatiladi — shuning uchun to'g'ridan chaqiramiz
+    lg = await lang(uid)
+    u  = await get_user(uid)
+    await state.clear()
+    if u and u["role"] in ("clinic", "zubtex"):
+        kb  = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL)
+        role_icon = "🏥" if u["role"] == "clinic" else "🔬"
+        txt = (
+            f"✅ *Xush kelibsiz!*\n\n"
+            f"{role_icon} {u.get('clinic_name','')}\n"
+            f"📍 {u.get('region','')}\n\n"
+            f"🎁 Birinchi buyurtmangizda bonus ball yig\'asiz!"
+        )
+        await call.message.answer(txt, reply_markup=kb)
+        # Inline Dental Market tugmasi — bir bosishda ochiladi
+        if WEBAPP_URL:
+            mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=clinic"
+            await call.message.answer(
+                "👇 Dental Market — hoziroq xarid boshlang:",
+                reply_markup=ik([ib("🛍 Dental Market — Hoziroq!", web_app=WebAppInfo(url=mkt_url))])
+            )
+    else:
+        shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+        if not shop and u:
+            sname = u.get("clinic_name") or u.get("full_name") or "Do\'konim"
+            await db_insert(
+                "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+                "VALUES(?,?,?,?,?,'active')",
+                (uid, sname, "Stomatologiya", u.get("phone",""), u.get("region",""))
+            )
+        kb  = kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
+        txt = (
+            f"✅ *Do\'koningiz ochildi!*\n\n"
+            f"🏪 {u.get('clinic_name','')}\n"
+            f"📍 {u.get('region','')}\n\n"
+            f"➕ Mahsulot qo\'shing — xaridorlar sizni topsın!"
+        )
+        await call.message.answer(txt, reply_markup=kb)
+        if WEBAPP_URL:
+            mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller"
+            add_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller&action=add"
+            await call.message.answer(
+                "👇 Do\'koningizni boshqaring:",
+                reply_markup=ik(
+                    [ib("🛍 Dental Market →", web_app=WebAppInfo(url=mkt_url))],
+                    [ib("➕ Mahsulot qo\'shish →", web_app=WebAppInfo(url=add_url))],
+                )
+            )
+        for aid in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    aid,
+                    f"🆕 *Yangi sotuvchi!*\n\n"
+                    f"🏪 {u.get('clinic_name','')}\n"
+                    f"👤 {u.get('full_name','')}\n"
+                    f"📞 {u.get('phone','')}\n"
+                    f"📍 {u.get('region','')}\n"
+                    f"🆔 ID: `{uid}`"
+                )
+            except Exception:
+                pass
 
 @router.callback_query(F.data == "skip_notify")
 async def skip_notify(call: CallbackQuery):
@@ -674,15 +737,7 @@ async def reg_name(msg: Message, state: FSMContext):
     await state.set_state(RegState.phone)
     await msg.answer(t(lg, "ask_phone"), reply_markup=kb)
 
-@router.message(RegState.phone, F.contact)
-async def reg_phone(msg: Message, state: FSMContext):
-    await state.update_data(
-        phone=msg.contact.phone_number,
-        full_name=msg.contact.first_name or msg.from_user.full_name or ""
-    )
-    lg = await lang(msg.from_user.id)
-    await state.set_state(RegState.region)
-    await msg.answer(t(lg, "ask_region"), reply_markup=kb_regions(lg))
+# reg_phone eski versiya olib tashlandi
 
 @router.callback_query(F.data.startswith("reg_"), RegState.region)
 async def reg_region(call: CallbackQuery, state: FSMContext):
@@ -691,36 +746,56 @@ async def reg_region(call: CallbackQuery, state: FSMContext):
     regs = REGIONS if lg != "ru" else REGIONS_RU
     reg  = regs[idx].split(" ", 1)[1] if " " in regs[idx] else regs[idx]
     await state.update_data(region=reg)
-    await state.set_state(RegState.terms)
-    u = await get_user(call.from_user.id)
+    await state.set_state(RegState.phone)
+    kb_ph = rk([KeyboardButton(text=t(lg, "btn_send_phone"), request_contact=True)], one_time=True)
+    await call.message.answer(t(lg, "ask_phone"), reply_markup=kb_ph)
+    await call.answer()
+
+@router.message(RegState.phone, F.contact)
+async def reg_phone(msg: Message, state: FSMContext):
+    await state.update_data(
+        phone=msg.contact.phone_number,
+        full_name=msg.contact.first_name or msg.from_user.full_name or ""
+    )
+    lg   = await lang(msg.from_user.id)
+    u    = await get_user(msg.from_user.id)
     role = u["role"] if u else "clinic"
-    # Foydalanish shartlari + obuna xabari
+    await state.set_state(RegState.terms)
+    # ── Shartlar matni — rol bo'yicha ────────────────────────────────
     if role == "seller":
         terms_txt = (
-            "📋 *Foydalanish shartlari*\n\n"
-            "XazDent B2B dental platformasiga xush kelibsiz!\n\n"
-            "✅ *Bepul davr:* 1 Avgustgacha to'liq bepul\n"
-            "💰 *Oylik obuna:* miqdori haqida keyinroq "
+            "🏪 *XazDent Sotuvchi Platformasi*\n\n"
+            "Stomatologik materiallar bozorining eng yirik "
+            "B2B tarmog'iga xush kelibsiz!\n\n"
+            "✅ *1 Avgustgacha:* To'liq bepul\n"
+            "💰 *Oylik obuna:* Miqdori haqida keyinroq "
             "xabardor qilinasiz\n\n"
+            "🎁 *Bonus tizimi:*\n"
+            "Har yangi mijozning birinchi buyurtmasidan "
+            "sizga bonus ball tushadi — uni obuna uchun "
+            "ishlatishingiz mumkin!\n\n"
             "📌 *Qoidalar:*\n"
-            "• Faqat stomatologik mahsulotlar joylash mumkin\n"
-            "• Narxlar so'mda ko'rsatilsin\n"
-            "• Soxta mahsulot va ma'lumot joylash taqiqlanadi\n\n"
-            "Davom etish uchun shartlarni qabul qiling:"
+            "• Faqat stomatologik mahsulotlar\n"
+            "• Narxlar so'mda\n"
+            "• Soxta ma'lumot taqiqlanadi"
         )
+        btn_txt = "✅ Qabul qilaman — Boshlaymiz!"
     else:
         terms_txt = (
-            "📋 *XazDent*ga xush kelibsiz!\n\n"
-            "✅ Dental materiallar eng qulay narxda\n"
-            "✅ 100+ ishonchli sotuvchi\n"
-            "✅ Butun O'zbekiston bo'ylab yetkazib berish\n\n"
-            "Davom etish uchun qabul qiling:"
+            "⚡ *500+ stomatologik mahsulot —*\n"
+            "*birgina bosishda sizniki!*\n\n"
+            "🔥 Eng arzon narxlar — kafolat\n"
+            "🚀 Tez yetkazib berish — butun UZ\n"
+            "✅ Baholangan, ishonchli sotuvchilar\n"
+            "🏆 Eng yaxshi brendlar — bir joyda\n\n"
+            "🎁 *Birinchi buyurtmangizda bonus sizni kutyapti!*\n\n"
+            "👇 Vaqtni boy bermang"
         )
-    await call.message.answer(
+        btn_txt = "🛍 Hoziroq boshlayman!"
+    await msg.answer(
         terms_txt,
-        reply_markup=ik([ib("✅ Qabul qilaman — Davom etish", "terms_accept")])
+        reply_markup=ik([ib(btn_txt, "terms_accept")])
     )
-    await call.answer()
 
 # addr handler olib tashlandi — manzil so'ralmaydi
 
@@ -3505,12 +3580,30 @@ async def catalog_order_confirm(call: CallbackQuery):
         (order_id, seller)
     )
 
+    # ── Birinchi buyurtma bonusi — sotuvchi balansiga ────────────────
+    # Xaridorning avvalgi tasdiqlangan buyurtmalari sonini tekshiramiz
+    prev_orders = await db_get(
+        "SELECT COUNT(*) as cnt FROM catalog_orders "
+        "WHERE buyer_id=? AND status='confirmed' AND id!=?",
+        (buyer_id, order_id)
+    )
+    is_first = (prev_orders["cnt"] if prev_orders else 0) == 0
+    bonus_ball = 50  # 50 ball = settings da 1 ball narxi bo'yicha
+    if is_first:
+        await db_run(
+            "UPDATE users SET balance = COALESCE(balance,0) + ? WHERE id=?",
+            (bonus_ball, seller)
+        )
+        log.info(f"🎁 Birinchi buyurtma bonusi: seller={seller}, buyer={buyer_id}, ball={bonus_ball}")
+
     # Sotuvchiga tasdiqlash xabari
     await call.message.edit_reply_markup(reply_markup=None)
+    bonus_msg = f"\n\n🎁 *+{bonus_ball} ball!* Yangi mijoz uchun bonus!" if is_first else ""
     await call.message.answer(
         f"✅ *Buyurtma #{order_id} qabul qilindi!*\n\n"
         f"Xaridorga xabar yuborildi. 48 soatdan keyin\n"
         f"baholash so\'rovi avtomatik ketadi."
+        f"{bonus_msg}"
     )
 
     # Xaridorga xabar
@@ -3518,12 +3611,14 @@ async def catalog_order_confirm(call: CallbackQuery):
     shop = await db_get("SELECT shop_name FROM shops WHERE owner_id=?", (seller,))
     sname = (shop["shop_name"] if shop else None) or (u["clinic_name"] if u else None) or "Sotuvchi"
     try:
+        first_txt = "\n\n🎉 _Birinchi buyurtmangiz uchun tabriklaymiz!_" if is_first else ""
         await bot.send_message(
             buyer_id,
             f"✅ *Buyurtmangiz qabul qilindi!*\n\n"
             f"🏪 *{sname}* buyurtmangizni tasdiqladi va\n"
             f"jo\'natmoqda.\n\n"
             f"_48 soatdan keyin yetib kelganini so\'raymiz._"
+            f"{first_txt}"
         )
     except Exception as e:
         log.error(f"Buyer notify xato: {e}")
