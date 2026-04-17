@@ -173,6 +173,9 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),\'YYYY-MM-DD HH24:MI:SS\')
         )""")
         await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
 
         # product_photos — bir mahsulot uchun ko'p rasm
         await c.execute("""
@@ -245,6 +248,15 @@ async def init_db():
         )""")
         await c.execute("ALTER TABLE catalog_orders ADD COLUMN IF NOT EXISTS claimed_by BIGINT")
         await c.execute("ALTER TABLE catalog_orders ADD COLUMN IF NOT EXISTS group_message_id BIGINT")
+        # Mahsulot yetkazish va muddatli to'lov
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
+        await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
 
         # reviews — baholar
         await c.execute("""
