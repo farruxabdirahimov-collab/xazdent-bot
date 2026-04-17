@@ -480,6 +480,47 @@ textarea.finp{resize:vertical;min-height:80px;}
   border-top:1px solid var(--border);
 }
 .ud-detail.open{display:block;}
+
+/* COUNTDOWN */
+.countdown-bar{
+  background:linear-gradient(135deg,rgba(0,245,160,0.08),rgba(124,58,237,0.08));
+  border-bottom:1px solid var(--border);
+  padding:8px 16px;
+  display:flex;align-items:center;gap:8px;
+  font-family:'Orbitron',monospace;
+  position:sticky;top:57px;z-index:99;
+}
+.cd-label{font-size:9px;color:var(--hint);letter-spacing:1.5px;margin-right:4px;}
+.cd-block{
+  display:flex;flex-direction:column;align-items:center;
+  background:rgba(0,0,0,0.3);
+  border:1px solid var(--border);
+  border-radius:6px;padding:4px 8px;min-width:42px;
+}
+.cd-block span:first-child{font-size:16px;font-weight:700;color:var(--neon1);line-height:1;}
+.cd-unit{font-size:7px;color:var(--hint);letter-spacing:1px;margin-top:2px;}
+.cd-sep{font-size:18px;color:var(--neon1);font-weight:700;opacity:0.5;}
+
+/* 2 QATOR TABS */
+.tabs-wrap{
+  background:var(--bg);
+  border-bottom:1px solid var(--border);
+  position:sticky;top:57px;z-index:98;
+  padding-top:2px;
+}
+.tabs-wrap .tabs{
+  border-bottom:none;
+  padding:4px 12px 2px;
+}
+.tabs-wrap .tabs:last-child{padding-bottom:6px;}
+
+/* ANN TABS */
+.ann-preview{
+  display:none;padding:12px;margin-bottom:10px;
+  background:rgba(0,245,160,0.05);
+  border:1px solid rgba(0,245,160,0.2);
+  border-radius:8px;font-size:13px;line-height:1.5;
+}
 </style>
 </head>
 <body>
@@ -490,17 +531,33 @@ textarea.finp{resize:vertical;min-height:80px;}
   <div class="hdr-time" id="hdr-clock">--:--:--</div>
   <button class="hdr-refresh" onclick="refreshCurrent()" title="Yangilash">↻</button>
 </div>
+<div class="countdown-bar" id="countdown-bar">
+  <span class="cd-label">OY OHIRIGA:</span>
+  <span class="cd-block"><span id="cd-d">--</span><span class="cd-unit">KUN</span></span>
+  <span class="cd-sep">:</span>
+  <span class="cd-block"><span id="cd-h">--</span><span class="cd-unit">SOAT</span></span>
+  <span class="cd-sep">:</span>
+  <span class="cd-block"><span id="cd-m">--</span><span class="cd-unit">DAQIQA</span></span>
+  <span class="cd-sep">:</span>
+  <span class="cd-block"><span id="cd-s">--</span><span class="cd-unit">SEKUND</span></span>
+</div>
 
-<div class="tabs" id="tabs">
-  <button class="tab on"  onclick="fetchPage('stats',this)">📊 BOSH</button>
-  <button class="tab"     onclick="fetchPage('users',this)">👥 USERS</button>
-  <button class="tab"     onclick="fetchPage('orders',this)">🛍 BUYURTMA</button>
-  <button class="tab"     onclick="fetchPage('market',this)">🏪 MARKET</button>
-  <button class="tab"     onclick="fetchPage('announce',this)">📢 E'LON</button>
-  <button class="tab"     onclick="fetchPage('subs',this)">💎 OBUNA</button>
-  <button class="tab"     onclick="fetchPage('complaints',this)">🚨 SHIKOYAT</button>
-  <button class="tab"     onclick="fetchPage('checks',this)">💳 CHEKLAR</button>
-  <button class="tab"     onclick="fetchPage('settings',this)">⚙️ SOZLAM</button>
+<div class="tabs-wrap">
+  <div class="tabs" id="tabs">
+    <button class="tab on"  onclick="fetchPage('stats',this)">📊 BOSH</button>
+    <button class="tab"     onclick="fetchPage('users',this)">👥 USERS</button>
+    <button class="tab"     onclick="fetchPage('orders',this)">🛍 BUYURTMA</button>
+    <button class="tab"     onclick="fetchPage('market',this)">🏪 MARKET</button>
+    <button class="tab"     onclick="fetchPage('announce',this)">📢 E'LON</button>
+    <button class="tab"     onclick="fetchPage('warehouse',this)">📦 OMBOR</button>
+  </div>
+  <div class="tabs" id="tabs2">
+    <button class="tab"     onclick="fetchPage('subs',this)">💎 OBUNA</button>
+    <button class="tab"     onclick="fetchPage('complaints',this)">🚨 SHIKOYAT</button>
+    <button class="tab"     onclick="fetchPage('checks',this)">💳 CHEKLAR</button>
+    <button class="tab"     onclick="fetchPage('categories',this)">🗂 KATEGORIYA</button>
+    <button class="tab"     onclick="fetchPage('settings',this)">⚙️ SOZLAM</button>
+  </div>
 </div>
 
 <!-- STATS -->
@@ -547,49 +604,171 @@ textarea.finp{resize:vertical;min-height:80px;}
 
 <!-- E'LONLAR -->
 <div class="pg" id="pg-announce">
+  <!-- E'lon turi tabs -->
+  <div class="ptabs" style="margin-bottom:12px">
+    <button class="ptab on" onclick="setAnnTab('mass',this)">📢 OMMAVIY</button>
+    <button class="ptab" onclick="setAnnTab('role',this)">🎯 ROL BO'YICHA</button>
+    <button class="ptab" onclick="setAnnTab('region',this)">📍 HUDUD BO'YICHA</button>
+    <button class="ptab" onclick="setAnnTab('single',this)">👤 BITTA USER</button>
+  </div>
+
   <div class="card">
-    <div class="ann-title">▶ YANGI E'LON</div>
-    <div class="flabel">KIMGA:</div>
-    <div class="fcheck-row" id="ann-aud">
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="clinic"> 🏥 KLINIKALAR</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="zubtex"> 🔬 ZUBTEXNIKLAR</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="seller"> 🛒 SOTUVCHILAR</label>
+    <!-- OMMAVIY -->
+    <div id="ann-tab-mass">
+      <div class="sec-title" style="margin-top:0">HAMMAGA YUBORISH</div>
+      <div style="font-size:12px;color:var(--hint);margin-bottom:10px">
+        Barcha foydalanuvchilarga (klinika + sotuvchi + zubtexnik)
+      </div>
     </div>
-    <div class="flabel">HUDUD (bo'sh = hammasi):</div>
-    <div class="fcheck-row" id="ann-reg">
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="O'zbekiston bo'ylab"> 🌍 UZ BO'YLAB</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Toshkent shahri"> 🏙 TOSHKENT</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Samarqand"> SAMARQAND</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Farg'ona"> FARG'ONA</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Andijon"> ANDIJON</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Namangan"> NAMANGAN</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Buxoro"> BUXORO</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Xorazm"> XORAZM</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qashqadaryo"> QASHQADARYO</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Surxondaryo"> SURXONDARYO</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Jizzax"> JIZZAX</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Navoiy"> NAVOIY</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Sirdaryo"> SIRDARYO</label>
-      <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qoraqalpog'iston"> QQR</label>
+
+    <!-- ROL BO'YICHA -->
+    <div id="ann-tab-role" style="display:none">
+      <div class="sec-title" style="margin-top:0">ROL BO'YICHA</div>
+      <div class="fcheck-row" id="ann-aud">
+        <label class="fcheck" onclick="this.classList.toggle('on')">
+          <input type="checkbox" value="clinic"> 🏥 KLINIKALAR
+        </label>
+        <label class="fcheck" onclick="this.classList.toggle('on')">
+          <input type="checkbox" value="zubtex"> 🔬 ZUBTEXNIKLAR
+        </label>
+        <label class="fcheck" onclick="this.classList.toggle('on')">
+          <input type="checkbox" value="seller"> 🛒 SOTUVCHILAR
+        </label>
+      </div>
     </div>
-    <div class="btn-row" style="margin-bottom:10px">
-      <button class="btn btn-outline btn-sm" onclick="chkRegs(true)">✓ HAMMASI</button>
-      <button class="btn btn-outline btn-sm" onclick="chkRegs(false)">✕ TOZALA</button>
+
+    <!-- HUDUD BO'YICHA -->
+    <div id="ann-tab-region" style="display:none">
+      <div class="sec-title" style="margin-top:0">HUDUD BO'YICHA</div>
+      <div class="fcheck-row" id="ann-reg">
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="O'zbekiston bo'ylab"> 🌍 UZ BO'YLAB</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Toshkent shahri"> 🏙 TOSHKENT SH.</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Toshkent viloyati"> 🌆 TOSHKENT VIL.</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Samarqand"> SAMARQAND</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Farg'ona"> FARG'ONA</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Andijon"> ANDIJON</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Namangan"> NAMANGAN</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Buxoro"> BUXORO</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Xorazm"> XORAZM</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qashqadaryo"> QASHQADARYO</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Surxondaryo"> SURXONDARYO</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Jizzax"> JIZZAX</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Navoiy"> NAVOIY</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Sirdaryo"> SIRDARYO</label>
+        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qoraqalpog'iston"> QQR</label>
+      </div>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button class="btn btn-outline btn-sm" onclick="chkRegs(true)">✓ HAMMASI</button>
+        <button class="btn btn-outline btn-sm" onclick="chkRegs(false)">✕ TOZALA</button>
+      </div>
     </div>
-    <div class="flabel">BITTA USER (ID, ixtiyoriy):</div>
-    <input class="finp" id="ann-uid" type="number" placeholder="123456789">
-    <div class="flabel">MATN *</div>
-    <textarea class="finp" id="ann-text" rows="4" placeholder="E'lon matni..."></textarea>
-    <div class="ann-preview" id="ann-preview"></div>
+
+    <!-- BITTA USER -->
+    <div id="ann-tab-single" style="display:none">
+      <div class="sec-title" style="margin-top:0">BITTA FOYDALANUVCHI</div>
+      <div class="flabel">TELEGRAM ID YOKI TELEFON:</div>
+      <input class="finp" id="ann-uid" type="text" placeholder="123456789 yoki +998901234567">
+      <div id="ann-user-info" style="font-size:11px;color:var(--neon1);margin-top:-6px;margin-bottom:8px"></div>
+    </div>
+
+    <!-- MATN — hammada umumiy -->
+    <div class="flabel">XABAR MATNI *</div>
+    <textarea class="finp" id="ann-text" rows="5" placeholder="Xabar matnini kiriting...&#10;&#10;Markdown qo'llab-quvvatlanadi:&#10;*qalin* _kursiv_"></textarea>
+    <div class="ann-preview" id="ann-preview" style="display:none;padding:12px;margin-bottom:10px;background:rgba(0,245,160,0.05);border:1px solid rgba(0,245,160,0.2);border-radius:8px;font-size:13px;line-height:1.5"></div>
     <div class="btn-row">
       <button class="btn btn-outline btn-sm" onclick="annPrev()">👁 KO'RISH</button>
       <button class="btn btn-primary" onclick="annSend()">▶ YUBORISH</button>
     </div>
     <div id="ann-res" style="margin-top:8px;font-size:11px;letter-spacing:1px"></div>
   </div>
+
   <div class="card">
-    <div class="ann-title">▶ OXIRGI E'LONLAR</div>
+    <div class="sec-title" style="margin-top:0">OXIRGI E'LONLAR</div>
     <div id="ann-history"><div class="loading"><div class="cp-loader"></div></div></div>
+  </div>
+</div>
+
+<!-- OMBOR -->
+<div class="pg" id="pg-warehouse">
+  <div id="warehouse-body"><div class="loading"><div class="cp-loader"></div>YUKLANMOQDA...</div></div>
+</div>
+
+<!-- KATEGORIYALAR -->
+<div class="pg" id="pg-categories">
+  <div class="card">
+    <div class="sec-title" style="margin-top:0">KATALOG KATEGORIYALARI</div>
+    <div id="cats-body">
+      <div class="litem">
+        <div class="litem-icon">🦷</div>
+        <div class="litem-info"><div class="litem-name">Terapevtik</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">⚙️</div>
+        <div class="litem-info"><div class="litem-name">Jarrohlik & Implant</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">🔬</div>
+        <div class="litem-info"><div class="litem-name">Zubtexnik</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">🧪</div>
+        <div class="litem-info"><div class="litem-name">Dezinfeksiya</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">💡</div>
+        <div class="litem-info"><div class="litem-name">Uskunalar</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">📸</div>
+        <div class="litem-info"><div class="litem-name">Rentgen</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">🖥</div>
+        <div class="litem-info"><div class="litem-name">CAD/CAM</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">🦴</div>
+        <div class="litem-info"><div class="litem-name">Implantlar</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">💻</div>
+        <div class="litem-info"><div class="litem-name">Stom Soft</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+      <div class="litem">
+        <div class="litem-icon">🎓</div>
+        <div class="litem-info"><div class="litem-name">Kurslar</div></div>
+        <div class="litem-right"><span class="badge badge-ok">AKTIV</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sec-title" style="margin-top:0">GLOBAL OMBOR HOLATI</div>
+    <div id="warehouse-cats">
+      <div class="reg-bar">
+        <div class="reg-name">🟢 Omborda</div>
+        <div class="reg-track"><div class="reg-fill green" style="width:0%" id="wb-local"></div></div>
+        <div class="reg-count" id="wc-local">—</div>
+      </div>
+      <div class="reg-bar">
+        <div class="reg-name">🌍 Global bozor</div>
+        <div class="reg-track"><div class="reg-fill amber" style="width:0%" id="wb-global"></div></div>
+        <div class="reg-count" id="wc-global">—</div>
+      </div>
+      <div class="reg-bar">
+        <div class="reg-name">💳 Muddatli</div>
+        <div class="reg-track"><div class="reg-fill purple" style="width:0%" id="wb-inst"></div></div>
+        <div class="reg-count" id="wc-inst">—</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -677,14 +856,15 @@ function fetchPage(name,btn){
   if(btn) btn.classList.add('on');
   else {
     var tabs=document.querySelectorAll('.tab');
-    var map={stats:0,users:1,orders:2,market:3,announce:4,subs:5,complaints:6,checks:7,settings:8};
+    var map={stats:0,users:1,orders:2,market:3,announce:4,warehouse:5,subs:6,complaints:7,checks:8,categories:9,settings:10};
     if(map[name]!==undefined && tabs[map[name]]) tabs[map[name]].classList.add('on');
   }
   if(!loaded[name]){
     loaded[name]=true;
     var fns={stats:loadStats,users:loadUsers,orders:loadOrders,market:loadMarket,
              announce:loadAnnHistory,subs:loadSubs,complaints:loadComplaints,
-             checks:loadChecks,settings:loadSettings};
+             checks:loadChecks,settings:loadSettings,
+             warehouse:loadWarehouse,categories:loadCategories};
     if(fns[name]) fns[name]();
   }
 }
@@ -1183,9 +1363,21 @@ function annPrev(){
 function annSend(){
   var txt=document.getElementById('ann-text').value.trim();
   if(!txt){alert('MATNNI KIRITING!');return;}
-  var auds=Array.from(document.querySelectorAll('#ann-aud input:checked')).map(function(i){return i.value;});
-  var regs=Array.from(document.querySelectorAll('#ann-reg input:checked')).map(function(i){return i.value;});
-  var suid=parseInt(document.getElementById('ann-uid').value)||0;
+  var auds=[],regs=[],suid=0;
+  if(curAnnTab==='mass'){
+    auds=['clinic','zubtex','seller'];
+  } else if(curAnnTab==='role'){
+    auds=Array.from(document.querySelectorAll('#ann-aud input:checked')).map(function(i){return i.value;});
+    if(!auds.length){alert('ROL TANLANG!');return;}
+  } else if(curAnnTab==='region'){
+    regs=Array.from(document.querySelectorAll('#ann-reg input:checked')).map(function(i){return i.value;});
+    if(!regs.length){alert('HUDUD TANLANG!');return;}
+    auds=['clinic','zubtex','seller'];
+  } else if(curAnnTab==='single'){
+    var uidVal=(document.getElementById('ann-uid').value||'').trim();
+    suid=parseInt(uidVal)||0;
+    if(!suid){alert('USER ID KIRITING!');return;}
+  }
   if(!auds.length&&!suid){alert('KIMGA YUBORISHNI TANLANG!');return;}
   var res=document.getElementById('ann-res');
   res.textContent='// YUBORILMOQDA...';res.style.color='var(--hint)';
@@ -1362,6 +1554,92 @@ function saveSett(){
 }
 
 function dlExcel(){window.location.href='/api/admin/excel?uid='+UID;}
+
+// ── COUNTDOWN ────────────────────────────────────────────────────────────────
+function updateCountdown(){
+  var now=new Date();
+  var end=new Date(now.getFullYear(),now.getMonth()+1,1,0,0,0);
+  var diff=Math.max(0,end-now);
+  var d=Math.floor(diff/86400000);
+  var h2=Math.floor((diff%86400000)/3600000);
+  var m=Math.floor((diff%3600000)/60000);
+  var s=Math.floor((diff%60000)/1000);
+  var z=function(n){return n<10?'0'+n:''+n;};
+  var de=document.getElementById('cd-d');
+  var he=document.getElementById('cd-h');
+  var me=document.getElementById('cd-m');
+  var se=document.getElementById('cd-s');
+  if(de) de.textContent=d;
+  if(he) he.textContent=z(h2);
+  if(me) me.textContent=z(m);
+  if(se) se.textContent=z(s);
+  // Oxirgi 3 kun — qizil rang
+  var bar=document.getElementById('countdown-bar');
+  if(bar){
+    if(d<3) bar.style.background='linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.05))';
+    else if(d<7) bar.style.background='linear-gradient(135deg,rgba(245,158,11,0.1),rgba(245,158,11,0.05))';
+  }
+}
+setInterval(updateCountdown,1000);
+updateCountdown();
+
+// ── ANN TABS ─────────────────────────────────────────────────────────────────
+var curAnnTab='mass';
+function setAnnTab(tab,btn){
+  curAnnTab=tab;
+  ['mass','role','region','single'].forEach(function(t){
+    var el=document.getElementById('ann-tab-'+t);
+    if(el) el.style.display=t===tab?'':'none';
+  });
+  document.querySelectorAll('#pg-announce .ptab').forEach(function(b){b.classList.remove('on');});
+  if(btn) btn.classList.add('on');
+  // ann-uid faqat single da kerak
+  var uid=document.getElementById('ann-uid');
+  if(uid) uid.closest('div') && (uid.parentElement.style.display= tab==='single'?'':'none');
+}
+
+// ── WAREHOUSE ─────────────────────────────────────────────────────────────────
+function loadWarehouse(){
+  document.getElementById('warehouse-body').innerHTML='<div class="loading"><div class="cp-loader"></div></div>';
+  api('/api/admin/market').then(function(d){
+    if(!d.ok) return;
+    var m=d.data||{};
+    // Local vs Global bozor
+    var local=m.local_count||0, glob=m.global_count||0, inst=m.inst_count||0;
+    var total=Math.max(local+glob,1);
+    var el=document.getElementById('wb-local');
+    var eg=document.getElementById('wb-global');
+    var ei=document.getElementById('wb-inst');
+    if(el){el.style.width=Math.round(local/total*100)+'%';}
+    if(eg){eg.style.width=Math.round(glob/total*100)+'%';}
+    if(ei){
+      var ti=Math.max(inst,1);
+      ei.style.width=Math.round(inst/(local+glob||1)*100)+'%';
+    }
+    var wl=document.getElementById('wc-local');
+    var wg=document.getElementById('wc-global');
+    var wi=document.getElementById('wc-inst');
+    if(wl) wl.textContent=local;
+    if(wg) wg.textContent=glob;
+    if(wi) wi.textContent=inst;
+    document.getElementById('warehouse-body').innerHTML=
+      '<div class="card"><div class="sec-title" style="margin-top:0">MAHSULOT TAQSIMOTI</div>'+
+      '<div class="reg-bar"><div class="reg-name">🟢 Omborda</div>'+
+      '<div class="reg-track"><div class="reg-fill green" style="width:'+Math.round(local/total*100)+'%"></div></div>'+
+      '<div class="reg-count">'+local+'</div></div>'+
+      '<div class="reg-bar"><div class="reg-name">🌍 Global bozor</div>'+
+      '<div class="reg-track"><div class="reg-fill amber" style="width:'+Math.round(glob/total*100)+'%"></div></div>'+
+      '<div class="reg-count">'+glob+'</div></div>'+
+      '<div class="reg-bar"><div class="reg-name">💳 Muddatli</div>'+
+      '<div class="reg-track"><div class="reg-fill purple" style="width:'+Math.round(inst/(local+glob||1)*100)+'%"></div></div>'+
+      '<div class="reg-count">'+inst+'</div></div>'+
+      '</div>';
+  }).catch(function(){});
+}
+
+function loadCategories(){
+  // Hozircha statik — keyinroq API dan
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 fetchPage('stats');
