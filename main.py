@@ -585,18 +585,24 @@ async def cmd_start(msg: Message, state: FSMContext):
         kb   = kb_clinic(lg, uid=uid, webapp_url=WEBAPP_URL) if u["role"] in ("clinic", "zubtex") else kb_seller(lg, uid=uid, webapp_url=WEBAPP_URL)
         role = u["role"]
         if role in ("clinic", "zubtex"):
-            txt = "🏥 *Klinika paneli*"
-            # Dental Market inline tugmasi
+            role_icon = "🏥" if role == "clinic" else "🔬"
             if WEBAPP_URL:
                 mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=clinic"
-                inline_kb = ik([ib("🛍 Dental Market — Online do\'kon →", web_app=WebAppInfo(url=mkt_url))])
-                await msg.answer(txt, reply_markup=kb)
+                # Reply keyboard + inline tugma — bitta xabarda
+                from aiogram.utils.keyboard import InlineKeyboardBuilder
+                combined_kb = ik([ib("🛍 Dental Market — Hoziroq kirish →", web_app=WebAppInfo(url=mkt_url))])
                 await msg.answer(
-                    "🛍 *Dental Market*\n_Stomatologik materiallar online do\'koni_",
-                    reply_markup=inline_kb
+                    f"{role_icon} *Xush kelibsiz!*\n\n"
+                    f"👇 Dental Marketga kiring:",
+                    reply_markup=kb
+                )
+                await msg.answer(
+                    f"🛍 *500+ stomatologik mahsulot*\n"
+                    f"_Eng arzon narxlar · Tez yetkazish_",
+                    reply_markup=combined_kb
                 )
             else:
-                await msg.answer(txt, reply_markup=kb)
+                await msg.answer(f"{role_icon} *Panel*", reply_markup=kb)
         else:
             shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
             if not shop and u:
@@ -670,14 +676,15 @@ async def terms_accept(call: CallbackQuery, state: FSMContext):
             f"📍 {u.get('region','')}\n\n"
             f"🎁 Birinchi buyurtmangizda bonus ball yig\'asiz!"
         )
-        await call.message.answer(txt, reply_markup=kb)
-        # Inline Dental Market tugmasi — bir bosishda ochiladi
+        # Inline birinchi, keyin reply keyboard — pastki tugmalar ko'rinadi
         if WEBAPP_URL:
             mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=clinic"
             await call.message.answer(
-                "👇 Dental Market — hoziroq xarid boshlang:",
+                "🛍 *500+ stomatologik mahsulot*\n"
+                "_Eng arzon narxlar · Tez yetkazish_",
                 reply_markup=ik([ib("🛍 Dental Market — Hoziroq!", web_app=WebAppInfo(url=mkt_url))])
             )
+        await call.message.answer(txt, reply_markup=kb)
     else:
         shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
         if not shop and u:
@@ -692,9 +699,9 @@ async def terms_accept(call: CallbackQuery, state: FSMContext):
             f"✅ *Do\'koningiz ochildi!*\n\n"
             f"🏪 {u.get('clinic_name','')}\n"
             f"📍 {u.get('region','')}\n\n"
-            f"➕ Mahsulot qo\'shing — xaridorlar sizni topsın!"
+            f"➕ Mahsulot qo\'shing — xaridorlar sizni topsin!"
         )
-        await call.message.answer(txt, reply_markup=kb)
+        # Inline birinchi, reply keyin — pastki tugmalar saqlanadi
         if WEBAPP_URL:
             mkt_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller"
             add_url = f"{WEBAPP_URL}/catalog?uid={uid}&role=seller&action=add"
@@ -705,6 +712,7 @@ async def terms_accept(call: CallbackQuery, state: FSMContext):
                     [ib("➕ Mahsulot qo\'shish →", web_app=WebAppInfo(url=add_url))],
                 )
             )
+        await call.message.answer(txt, reply_markup=kb)
         for aid in ADMIN_IDS:
             try:
                 await bot.send_message(
