@@ -388,6 +388,26 @@ textarea.finp{resize:vertical;min-height:80px;}
 .fcheck.on{background:rgba(0,245,160,0.1);border-color:rgba(0,245,160,0.3);color:var(--neon1);}
 .fcheck input{display:none;}
 .fcheck-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+/* Ann checkboxlar uchun to'g'ri versiya */
+.fcheck-lbl{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 12px;border-radius:8px;
+  border:1.5px solid var(--border);
+  background:var(--card);
+  cursor:pointer;font-size:12px;font-weight:600;
+  transition:all .2s;user-select:none;
+}
+.fcheck-lbl.on{
+  background:rgba(0,245,160,0.12);
+  border-color:rgba(0,245,160,0.5);
+  color:var(--neon1);
+  box-shadow:0 0 8px rgba(0,245,160,0.15);
+}
+.fcheck-lbl input{
+  width:14px;height:14px;
+  accent-color:var(--neon1);
+  cursor:pointer;
+}
 
 /* LITEM */
 .litem{
@@ -625,14 +645,14 @@ textarea.finp{resize:vertical;min-height:80px;}
     <div id="ann-tab-role" style="display:none">
       <div class="sec-title" style="margin-top:0">ROL BO'YICHA</div>
       <div class="fcheck-row" id="ann-aud">
-        <label class="fcheck" onclick="this.classList.toggle('on')">
-          <input type="checkbox" value="clinic"> 🏥 KLINIKALAR
+        <label class="fcheck-lbl" onclick="togFcheck(this)">
+          <input type="checkbox" value="clinic" onchange="syncFcheck(this)"> 🏥 KLINIKALAR
         </label>
-        <label class="fcheck" onclick="this.classList.toggle('on')">
-          <input type="checkbox" value="zubtex"> 🔬 ZUBTEXNIKLAR
+        <label class="fcheck-lbl" onclick="togFcheck(this)">
+          <input type="checkbox" value="zubtex" onchange="syncFcheck(this)"> 🔬 ZUBTEXNIKLAR
         </label>
-        <label class="fcheck" onclick="this.classList.toggle('on')">
-          <input type="checkbox" value="seller"> 🛒 SOTUVCHILAR
+        <label class="fcheck-lbl" onclick="togFcheck(this)">
+          <input type="checkbox" value="seller" onchange="syncFcheck(this)"> 🛒 SOTUVCHILAR
         </label>
       </div>
     </div>
@@ -641,21 +661,21 @@ textarea.finp{resize:vertical;min-height:80px;}
     <div id="ann-tab-region" style="display:none">
       <div class="sec-title" style="margin-top:0">HUDUD BO'YICHA</div>
       <div class="fcheck-row" id="ann-reg">
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="O'zbekiston bo'ylab"> 🌍 UZ BO'YLAB</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Toshkent shahri"> 🏙 TOSHKENT SH.</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Toshkent viloyati"> 🌆 TOSHKENT VIL.</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Samarqand"> SAMARQAND</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Farg'ona"> FARG'ONA</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Andijon"> ANDIJON</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Namangan"> NAMANGAN</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Buxoro"> BUXORO</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Xorazm"> XORAZM</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qashqadaryo"> QASHQADARYO</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Surxondaryo"> SURXONDARYO</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Jizzax"> JIZZAX</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Navoiy"> NAVOIY</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Sirdaryo"> SIRDARYO</label>
-        <label class="fcheck" onclick="this.classList.toggle('on')"><input type="checkbox" value="Qoraqalpog'iston"> QQR</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="O'zbekiston bo'ylab"> 🌍 UZ BO'YLAB</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Toshkent shahri"> 🏙 TOSHKENT SH.</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Toshkent viloyati"> 🌆 TOSHKENT VIL.</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Samarqand"> SAMARQAND</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Farg'ona"> FARG'ONA</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Andijon"> ANDIJON</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Namangan"> NAMANGAN</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Buxoro"> BUXORO</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Xorazm"> XORAZM</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Qashqadaryo"> QASHQADARYO</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Surxondaryo"> SURXONDARYO</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Jizzax"> JIZZAX</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Navoiy"> NAVOIY</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Sirdaryo"> SIRDARYO</label>
+        <label class="fcheck-lbl" onclick="togFcheck(this)"><input type="checkbox" value="Qoraqalpog'iston"> QQR</label>
       </div>
       <div class="btn-row" style="margin-bottom:8px">
         <button class="btn btn-outline btn-sm" onclick="chkRegs(true)">✓ HAMMASI</button>
@@ -1392,7 +1412,9 @@ function annSend(){
 }
 function chkRegs(c){
   document.querySelectorAll('#ann-reg input').forEach(function(i){
-    i.checked=c;i.closest('.fcheck').classList.toggle('on',c);
+    i.checked=c;
+    var lbl=i.closest('.fcheck-lbl')||i.closest('.fcheck');
+    if(lbl) lbl.classList.toggle('on',c);
   });
 }
 function loadAnnHistory(){
@@ -1585,6 +1607,17 @@ updateCountdown();
 
 // ── ANN TABS ─────────────────────────────────────────────────────────────────
 var curAnnTab='mass';
+
+function togFcheck(label){
+  var inp=label.querySelector('input[type="checkbox"]');
+  if(!inp) return;
+  inp.checked=!inp.checked;
+  label.classList.toggle('on', inp.checked);
+}
+function syncFcheck(inp){
+  var label=inp.closest('.fcheck-lbl');
+  if(label) label.classList.toggle('on', inp.checked);
+}
 function setAnnTab(tab,btn){
   curAnnTab=tab;
   ['mass','role','region','single'].forEach(function(t){
