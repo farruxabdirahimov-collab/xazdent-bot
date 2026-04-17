@@ -53,20 +53,47 @@ body{
 .srch:focus{background:var(--card);border-color:var(--primary);
   box-shadow:0 0 0 3px var(--primary-light)}
 
-/* CATS — horizontal scroll, wrap emas */
+/* CATS */
+.cats-wrap{
+  position:sticky;top:0;z-index:90;
+  background:var(--card);
+  border-bottom:1px solid var(--border);}
 .cats{
-  display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px;
-  background:var(--card);border-bottom:1px solid var(--border);}
+  display:flex;flex-wrap:nowrap;gap:5px;padding:8px 12px;
+  overflow-x:auto;scrollbar-width:none;}
+.cats::-webkit-scrollbar{display:none}
 .cat{
   padding:5px 11px;border-radius:16px;border:1.5px solid var(--border);
   font-size:11px;font-weight:500;cursor:pointer;
   background:var(--card);color:var(--hint);
-  white-space:nowrap;transition:all .2s}
+  white-space:nowrap;transition:all .2s;flex-shrink:0}
 .cat:active{transform:scale(.95)}
 .cat.on{background:var(--text);border-color:var(--text);color:#fff}
+/* DELIVERY FILTER */
+.dfilters{
+  display:flex;gap:6px;padding:6px 12px 8px;
+  overflow-x:auto;scrollbar-width:none;}
+.dfilters::-webkit-scrollbar{display:none}
+.dflt{
+  padding:4px 10px;border-radius:14px;
+  border:1.5px solid var(--border);
+  font-size:11px;font-weight:600;cursor:pointer;
+  background:var(--card);color:var(--hint);
+  white-space:nowrap;transition:all .2s;flex-shrink:0;
+  display:flex;align-items:center;gap:3px;}
+.dflt:active{transform:scale(.95)}
+.dflt.on.local{background:#dcfce7;border-color:#22c55e;color:#15803d;}
+.dflt.on.china{background:#fef3c7;border-color:#f59e0b;color:#b45309;}
+.dflt.on.inst {background:#ede9fe;border-color:#8b5cf6;color:#6d28d9;}
 
 /* GRID */
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;z-index:1}
+/* DELIVERY BADGES */
+.dbadges{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;}
+.dbadge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;}
+.dbadge.local{background:#dcfce7;color:#15803d;}
+.dbadge.china{background:#fef3c7;color:#b45309;}
+.dbadge.inst {background:#ede9fe;color:#6d28d9;}
 
 /* PCARD */
 .pcard{background:var(--card);border-radius:var(--r-lg);overflow:hidden;
@@ -331,6 +358,73 @@ body{
 .loading{text-align:center;padding:50px 20px;color:var(--hint)}
 .empty{text-align:center;padding:50px 20px;color:var(--hint)}
 .empty-ic{font-size:44px;margin-bottom:10px}
+
+/* ── DELIVERY BADGES ──────────────────────────────────────── */
+.dbadge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
+  letter-spacing:.5px;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+.dbadge-local{background:rgba(0,200,100,.15);color:#00c864;border:1px solid rgba(0,200,100,.3);}
+.dbadge-china{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
+.dbadge-inst{background:rgba(99,102,241,.15);color:#818cf8;border:1px solid rgba(99,102,241,.3);}
+/* ── DELIVERY FILTER ──────────────────────────────────────── */
+.dfilter-row{display:flex;gap:6px;padding:6px 12px 0;overflow-x:auto;scrollbar-width:none;}
+.dfilter-row::-webkit-scrollbar{display:none;}
+.dfbtn{flex-shrink:0;padding:5px 12px;border-radius:20px;border:1px solid var(--border);
+  font-size:11px;font-weight:600;background:transparent;color:var(--hint);
+  cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap;}
+.dfbtn.on{background:var(--neon1);color:#060810;border-color:var(--neon1);}
+/* ── DELIVERY FORMA ───────────────────────────────────────── */
+.seg-row{display:flex;gap:6px;margin:4px 0 12px;}
+.seg-btn{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--card);color:var(--hint);font-size:12px;font-weight:600;
+  cursor:pointer;text-align:center;transition:all .2s;font-family:inherit;}
+.seg-btn.on{border-color:var(--neon1);color:var(--neon1);background:rgba(0,245,160,.08);}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);}
+.toggle-label{font-size:13px;font-weight:600;}
+.toggle-sub{font-size:11px;color:var(--hint);margin-top:2px;}
+.toggle-sw{width:44px;height:24px;border-radius:12px;background:var(--border);
+  position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+.toggle-sw.on{background:var(--neon1);}
+.toggle-sw::after{content:'';position:absolute;top:3px;left:3px;
+  width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;}
+.toggle-sw.on::after{transform:translateX(20px);}
+
+/* ── TO'LOV MODAL ──────────────────────────────────────────── */
+.pay-opt{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 12px;border-radius:12px;
+  border:1.5px solid var(--border,#e5e7eb);
+  margin-bottom:10px;cursor:pointer;
+  transition:border-color .2s,background .2s;
+}
+.pay-opt.on{
+  border-color:var(--navy,#1a1a5e);
+  background:rgba(26,26,94,0.05);
+}
+.pay-opt-icon{font-size:22px;width:32px;text-align:center;flex-shrink:0}
+.pay-opt-info{flex:1}
+.pay-opt-title{font-size:14px;font-weight:600}
+.pay-opt-sub{font-size:11px;color:var(--hint,#6b7280);margin-top:2px}
+.pay-opt-check{
+  width:20px;height:20px;border-radius:50%;
+  border:2px solid var(--border,#e5e7eb);
+  flex-shrink:0;transition:all .2s;
+}
+.pay-opt.on .pay-opt-check{
+  background:var(--navy,#1a1a5e);
+  border-color:var(--navy,#1a1a5e);
+}
+.inst-btn{
+  padding:7px 16px;border-radius:20px;
+  border:1.5px solid var(--border,#e5e7eb);
+  background:transparent;font-size:13px;
+  font-weight:700;cursor:pointer;
+  transition:all .2s;font-family:inherit;
+}
+.inst-btn.on{
+  background:var(--navy,#1a1a5e);
+  color:#fff;border-color:var(--navy,#1a1a5e);
+}
 </style>
 </head>
 <body>
@@ -350,18 +444,25 @@ body{
   </div>
 </div>
 
-<div class="cats" id="cats">
-  <button class="cat on" onclick="selCat(this,'')">Hammasi</button>
-  <button class="cat" onclick="selCat(this,'1')">🦷 Terapevtik</button>
-  <button class="cat" onclick="selCat(this,'2')">⚙️ Jarrohlik</button>
-  <button class="cat" onclick="selCat(this,'3')">🔬 Zubtexnik</button>
-  <button class="cat" onclick="selCat(this,'4')">🧪 Dezinfeksiya</button>
-  <button class="cat" onclick="selCat(this,'5')">💡 Uskunalar</button>
-  <button class="cat" onclick="selCat(this,'6')">📸 Rentgen</button>
-  <button class="cat" onclick="selCat(this,'7')">🖥 CAD/CAM</button>
-  <button class="cat" onclick="selCat(this,'8')">🦴 Implantlar</button>
-  <button class="cat" onclick="selCat(this,'9')">💻 Stom Soft</button>
-  <button class="cat" onclick="selCat(this,'10')">🎓 Kurslar</button>
+<div class="cats-wrap">
+  <div class="cats" id="cats">
+    <button class="cat on" onclick="selCat(this,'')">Hammasi</button>
+    <button class="cat" onclick="selCat(this,'1')">🦷 Terapevtik</button>
+    <button class="cat" onclick="selCat(this,'2')">⚙️ Jarrohlik</button>
+    <button class="cat" onclick="selCat(this,'3')">🔬 Zubtexnik</button>
+    <button class="cat" onclick="selCat(this,'4')">🧪 Dezinfeksiya</button>
+    <button class="cat" onclick="selCat(this,'5')">💡 Uskunalar</button>
+    <button class="cat" onclick="selCat(this,'6')">📸 Rentgen</button>
+    <button class="cat" onclick="selCat(this,'7')">🖥 CAD/CAM</button>
+    <button class="cat" onclick="selCat(this,'8')">🦴 Implantlar</button>
+    <button class="cat" onclick="selCat(this,'9')">💻 Stom Soft</button>
+    <button class="cat" onclick="selCat(this,'10')">🎓 Kurslar</button>
+  </div>
+  <div class="dfilters" id="dfilters">
+    <button class="dflt local" id="df-local"  onclick="togDf('local',this)">🟢 Omborda</button>
+    <button class="dflt china" id="df-china"  onclick="togDf('china',this)">🌍 Global bozor</button>
+    <button class="dflt inst"  id="df-inst"   onclick="togDf('inst',this)">💳 Muddatli</button>
+  </div>
 </div>
 
 <div id="main"></div>
@@ -389,9 +490,61 @@ body{
     <div class="citems" id="citems"></div>
     <div class="cftr">
       <div class="ctotal">Jami: <span id="ctotal">0 so&#39;m</span></div>
-      <button class="obtn" id="obtn" onclick="submitOrder()">📦 Buyurtma berish</button>
+      <button class="obtn" id="obtn" onclick="openPayModal()">📦 Buyurtma berish</button>
     </div>
   </div>
+</div>
+
+<!-- TO'LOV MODAL -->
+<div class="modal-overlay" id="pay-overlay" onclick="closePayModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;backdrop-filter:blur(4px)"></div>
+<div class="modal-sheet" id="pay-modal" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:301;background:var(--surface,#fff);border-radius:20px 20px 0 0;padding:20px 16px 32px;max-height:85vh;overflow-y:auto">
+  <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
+  <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 To'lov turini tanlang</div>
+  <div style="font-size:12px;color:var(--hint);margin-bottom:16px" id="pay-summary"></div>
+
+  <!-- 1. Hozir to'lash -->
+  <div class="pay-opt" id="po-now" onclick="selPay('now',this)">
+    <div class="pay-opt-icon">💵</div>
+    <div class="pay-opt-info">
+      <div class="pay-opt-title">Hozir to'lash</div>
+      <div class="pay-opt-sub">Karta orqali — darhol</div>
+    </div>
+    <div class="pay-opt-check" id="pc-now"></div>
+  </div>
+
+  <!-- 2. Muddatli to'lov -->
+  <div class="pay-opt" id="po-inst" onclick="selPay('inst',this)">
+    <div class="pay-opt-icon">📅</div>
+    <div class="pay-opt-info">
+      <div class="pay-opt-title">Muddatli to'lov</div>
+      <div class="pay-opt-sub">3x · 6x · 12x bo'lib to'lash</div>
+    </div>
+    <div class="pay-opt-check" id="pc-inst"></div>
+  </div>
+  <!-- Muddatli variantlar -->
+  <div id="inst-opts" style="display:none;margin:8px 0 4px 48px">
+    <div style="font-size:11px;color:var(--hint);margin-bottom:8px">Bo'lib to'lash muddatini tanlang:</div>
+    <div style="display:flex;gap:8px">
+      <button class="inst-btn" id="ib-3"  onclick="selInst(3,this)">3x</button>
+      <button class="inst-btn" id="ib-6"  onclick="selInst(6,this)">6x</button>
+      <button class="inst-btn" id="ib-12" onclick="selInst(12,this)">12x</button>
+    </div>
+    <div id="inst-calc" style="font-size:12px;color:var(--navy,#1a1a5e);margin-top:8px;font-weight:600"></div>
+  </div>
+
+  <!-- 3. Yetkazilganda -->
+  <div class="pay-opt" id="po-cash" onclick="selPay('cash',this)">
+    <div class="pay-opt-icon">🚚</div>
+    <div class="pay-opt-info">
+      <div class="pay-opt-title">Yetkazilganda to'lash</div>
+      <div class="pay-opt-sub">Naqt · Karta · Bank o'tkazmasi</div>
+    </div>
+    <div class="pay-opt-check" id="pc-cash"></div>
+  </div>
+
+  <button class="obtn" id="pay-confirm-btn" onclick="confirmPay()" style="margin-top:16px;width:100%;opacity:.4;pointer-events:none">
+    ✅ Tasdiqlash
+  </button>
 </div>
 
 <!-- DETAIL -->
@@ -450,6 +603,33 @@ body{
     <div class="var-editor" id="var-editor"></div>
     <button class="add-var-btn" onclick="addVarRow()">+ Razmer / Variant qo'shish</button>
 
+    <!-- Delivery & Installment -->
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px;font-weight:600">📦 MAVJUDLIK</div>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="lbl-local">
+          <input type="radio" name="dtype" value="local" checked onchange="selDtype(this)" style="accent-color:#22c55e"> 🟢 Omborda
+        </label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="lbl-china">
+          <input type="radio" name="dtype" value="china" onchange="selDtype(this)" style="accent-color:#f59e0b"> 🌍 Global bozor
+        </label>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px;font-weight:600">⏳ YETKAZISH MUDDATI</div>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+          <input type="radio" name="ddays" value="2-3" checked style="accent-color:#22c55e"> 🚀 2-3 kun
+        </label>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+          <input type="radio" name="ddays" value="15-30" style="accent-color:#f59e0b"> ⏳ 15-30 kun
+        </label>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+      <input type="checkbox" id="f-inst" style="width:18px;height:18px;accent-color:#8b5cf6">
+      <label for="f-inst" style="cursor:pointer;font-size:13px">💳 Muddatli to'lov mavjud</label>
+    </div>
     <button class="fsave" id="fsave" onclick="saveProduct()">💾 Saqlash</button>
     <button class="fcancel" onclick="closeForm()">Bekor qilish</button>
   </div>
@@ -464,7 +644,7 @@ var _qp = new URLSearchParams(window.location.search);
 if (!UID) UID = parseInt(_qp.get('uid')||'0')||0;
 ROLE = _qp.get('role') || 'clinic';
 
-var cart = {}, curCat = '', curSearch = '', curView = 'catalog';
+var cart = {}, curCat = '', curSearch = '', curView = 'catalog', curDelivery = '', curInst = 0;
 var formPhotos = [], varCount = 0, _prods = {};
 var varSelections = {}, varPrices = {}, detPid = null, detProd = null, detQty = 1;
 
@@ -494,6 +674,20 @@ document.querySelectorAll('.cat-chk').forEach(function(lbl) {
   }
 })();
 
+function deliveryBadge(p){
+  var b='';
+  if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 '+p.delivery_days+' kun</span>';
+  else b+='<span class="dbadge local">🟢 '+p.delivery_days+' kun</span>';
+  if(p.installment) b+='<span class="dbadge inst">💳</span>';
+  return '<div class="dbadges">'+b+'</div>';
+}
+function deliveryBadgeFull(p){
+  var b='';
+  if(p.delivery_type==='china') b+='<span class="dbadge china">🌍 Global bozor · '+p.delivery_days+' kun</span>';
+  else b+='<span class="dbadge local">🟢 Omborda · '+p.delivery_days+' kun</span>';
+  if(p.installment) b+='<span class="dbadge inst">💳 Muddatli to\'lov</span>';
+  return '<div class="dbadges" style="margin:6px 0">'+b+'</div>';
+}
 function minPriceStr(p){
   if(!p.variants||!p.variants.length) return fmt(p.price);
   var prices=[p.price];
@@ -535,7 +729,10 @@ function showView(v, btn) {
 // ── CATALOG ──────────────────────────────────────────────────────────────────
 function loadCatalog() {
   document.getElementById('main').innerHTML = '<div class="loading"><div class="spin"></div></div>';
-  fetch('/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch))
+  var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch);
+  if(curDelivery) _durl+='&delivery='+curDelivery;
+  if(curInst) _durl+='&installment=1';
+  fetch(_durl)
     .then(function(r){ return r.json(); }).then(function(d) {
       var prods = d.products || [];
       prods.forEach(function(p){ _prods[p.id] = p; });
@@ -582,6 +779,7 @@ function loadCatalog() {
               '<div class="pshop">🏪 '+esc(p.shop_name||'?')+'</div>'+
               (p.article_code?'<span class="pcode">'+esc(p.article_code)+'</span>':'')+
               '<div class="pprice">'+(hasVars?'<span style="font-size:10px;color:var(--hint);font-weight:400">dan </span>':'')+minPriceStr(p)+' <span class="punit">so\'m/'+esc(p.unit)+(hasVars?' ↑':'')+'</span></div>'+
+              deliveryBadge(p)+
               '<div style="display:flex;gap:6px;align-items:center;margin-top:auto">'+
                 (ROLE!=='seller'?(
                   hasVars?
@@ -645,6 +843,26 @@ function selCat(btn, c) {
   curCat = c;
   document.querySelectorAll('.cat').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on');
+  loadCatalog();
+}
+
+function selDtype(radio){
+  var lLocal=document.getElementById('lbl-local');
+  var lChina=document.getElementById('lbl-china');
+  if(lLocal) lLocal.style.borderColor=radio.value==='local'?'#22c55e':'var(--border)';
+  if(lChina) lChina.style.borderColor=radio.value==='china'?'#f59e0b':'var(--border)';
+}
+function togDf(type, btn) {
+  if(type === 'local' || type === 'china'){
+    var same = curDelivery === type;
+    curDelivery = same ? '' : type;
+    document.getElementById('df-local').classList.remove('on');
+    document.getElementById('df-china').classList.remove('on');
+    if(!same) btn.classList.add('on');
+  } else if(type === 'inst'){
+    curInst = curInst ? 0 : 1;
+    btn.classList.toggle('on', curInst === 1);
+  }
   loadCatalog();
 }
 
@@ -1031,32 +1249,115 @@ function cChQty(key, d) {
 }
 function cDel(key) { delete cart[key]; updateCartBadge(); renderCart(); }
 
-function submitOrder() {
+// ── TO'LOV MODAL ─────────────────────────────────────────────────────────────
+var _curPay = '', _curInst = 0;
+
+function openPayModal() {
   var items = Object.values(cart);
   if (!items.length) return;
-  document.getElementById('obtn').disabled = true;
-  document.getElementById('obtn').textContent = '⏳ Yuborilmoqda...';
+  // Jami hisoblaymiz
+  var total = items.reduce(function(s,it){ return s + (it.product.price||0)*it.qty; }, 0);
+  // Global bozor mahsulot bormi — muddatli to'lov bo'lsa filter
+  var hasInst = items.some(function(it){ return it.product.installment; });
+  document.getElementById('pay-summary').textContent =
+    items.length + ' ta mahsulot · ' + fmt(total) + ' so\'m';
+  // Muddatli to'lov yo'q bo'lsa o'sha opsiyani yashiramiz
+  document.getElementById('po-inst').style.display = hasInst ? '' : 'none';
+  _curPay = ''; _curInst = 0;
+  document.querySelectorAll('.pay-opt').forEach(function(el){ el.classList.remove('on'); });
+  document.querySelectorAll('.inst-btn').forEach(function(el){ el.classList.remove('on'); });
+  document.getElementById('inst-opts').style.display = 'none';
+  document.getElementById('inst-calc').textContent = '';
+  var btn = document.getElementById('pay-confirm-btn');
+  btn.style.opacity = '.4'; btn.style.pointerEvents = 'none';
+  document.getElementById('pay-overlay').style.display = 'block';
+  document.getElementById('pay-modal').style.display = 'block';
+}
+
+function closePayModal() {
+  document.getElementById('pay-overlay').style.display = 'none';
+  document.getElementById('pay-modal').style.display = 'none';
+}
+
+function selPay(type, el) {
+  _curPay = type; _curInst = 0;
+  document.querySelectorAll('.pay-opt').forEach(function(e){ e.classList.remove('on'); });
+  el.classList.add('on');
+  document.getElementById('inst-opts').style.display = type === 'inst' ? 'block' : 'none';
+  if (type !== 'inst') {
+    document.querySelectorAll('.inst-btn').forEach(function(b){ b.classList.remove('on'); });
+    document.getElementById('inst-calc').textContent = '';
+    var btn = document.getElementById('pay-confirm-btn');
+    btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+  } else {
+    var btn = document.getElementById('pay-confirm-btn');
+    btn.style.opacity = '.4'; btn.style.pointerEvents = 'none';
+  }
+}
+
+function selInst(months, el) {
+  _curInst = months;
+  document.querySelectorAll('.inst-btn').forEach(function(b){ b.classList.remove('on'); });
+  el.classList.add('on');
+  var items = Object.values(cart);
+  var total = items.reduce(function(s,it){ return s+(it.product.price||0)*it.qty; },0);
+  var monthly = Math.ceil(total / months);
+  document.getElementById('inst-calc').textContent =
+    months + 'x · ' + fmt(monthly) + ' so\'m / oy';
+  var btn = document.getElementById('pay-confirm-btn');
+  btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+}
+
+function confirmPay() {
+  if (!_curPay) return;
+  closePayModal();
+  submitOrder(_curPay, _curInst);
+}
+
+function submitOrder(payType, instMonths) {
+  var items = Object.values(cart);
+  if (!items.length) return;
+  var btn = document.getElementById('obtn');
+  btn.disabled = true; btn.textContent = '⏳ Yuborilmoqda...';
+  var payLabel = {
+    'now':  'Hozir karta',
+    'inst': 'Muddatli ' + (instMonths||'') + 'x',
+    'cash': 'Yetkazilganda'
+  }[payType] || payType;
   fetch('/api/catalog/cart_order', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({items:items.map(function(it){
-      return {
-        product_id: it.product.id,
-        seller_id:  it.product.seller_id,
-        qty:        it.qty,
-        variant:    it.variantId || null,
-        price:      it.product.price,
-        name:       it.product.name,
-        unit:       it.product.unit,
-        shop_name:  it.product.shop_name || ''
-      };
-    }), user_id:UID})
+    body:JSON.stringify({
+      items: items.map(function(it){
+        return {
+          product_id:    it.product.id,
+          seller_id:     it.product.seller_id,
+          qty:           it.qty,
+          variant:       it.variantId || null,
+          price:         it.product.price,
+          name:          it.product.name,
+          unit:          it.product.unit,
+          shop_name:     it.product.shop_name || '',
+          delivery_type: it.product.delivery_type || 'local',
+          delivery_days: it.product.delivery_days || '2-3',
+          installment:   it.product.installment || 0
+        };
+      }),
+      user_id:      UID,
+      payment_type: payType,
+      inst_months:  instMonths || 0
+    })
   }).then(function(r){return r.json();}).then(function(d){
+    btn.disabled = false; btn.textContent = '📦 Buyurtma berish';
     if (d.ok) {
       cart = {}; updateCartBadge(); closeCart();
-      if (tg) tg.showAlert('✅ Buyurtma yuborildi! Sotuvchi tez orada bog\'lanadi.');
+      var payMsg = payType === 'now'  ? '💵 To\'lov: Karta' :
+                   payType === 'inst' ? '📅 To\'lov: Muddatli '+instMonths+'x' :
+                                        '🚚 To\'lov: Yetkazilganda';
+      if (tg) tg.showAlert('✅ Buyurtma yuborildi!\n\n' + payMsg + '\n\nSotuvchi tez orada bog\'lanadi.');
     } else { alert('Xato: '+(d.error||'')); }
-    document.getElementById('obtn').disabled = false;
-    document.getElementById('obtn').textContent = '📦 Buyurtma berish';
+  }).catch(function(e){
+    btn.disabled = false; btn.textContent = '📦 Buyurtma berish';
+    alert('Xato: '+e.message);
   });
 }
 
@@ -1169,9 +1470,15 @@ function saveProduct() {
     return ph || '';
   }).filter(function(x){return x && x.length > 10;});
   console.log('[SP] images count='+images64.length);
+  var delivery_type = (document.querySelector('input[name="dtype"]:checked')||{value:'local'}).value;
+  var delivery_days = (document.querySelector('input[name="ddays"]:checked')||{value:'2-3'}).value;
+  var installment   = document.getElementById('f-inst') && document.getElementById('f-inst').checked ? 1 : 0;
   var payload={user_id:UID,name:name,price:price,unit:unit,stock:stock,
     description:desc,category_id:cats[0],categories:cats,
-    images:images64,variants:variants};
+    images:images64,variants:variants,
+    delivery_type:delivery_type,
+    delivery_days:delivery_days,
+    installment:installment};
   var btn=document.getElementById('fsave');
   btn.disabled=true; btn.textContent='⏳ Saqlanmoqda...';
   fetch('/api/catalog/add_product',{
