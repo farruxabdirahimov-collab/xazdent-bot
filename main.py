@@ -5461,6 +5461,8 @@ async def start_webserver():
         params = []
         # Faqat aktiv do'kon va aktiv mahsulotlar
         # is_active NULL yoki 1 bo'lsa ko'rsatamiz
+        delivery  = req.query.get("delivery", "").strip()
+        installment = req.query.get("installment", "").strip()
         where = "s.status='active' AND (p.is_active IS NULL OR p.is_active = 1)"
         if cat:
             where += " AND p.category_id=?"
@@ -5468,12 +5470,20 @@ async def start_webserver():
         if q:
             where += " AND LOWER(p.name) LIKE ?"
             params.append(f"%{q}%")
+        if delivery in ("local", "china"):
+            where += " AND COALESCE(p.delivery_type,'local')=?"
+            params.append(delivery)
+        if installment == "1":
+            where += " AND COALESCE(p.installment,0)=1"
         query = (
             "SELECT p.id, p.name, p.price, p.unit, p.description, "
             "COALESCE(p.is_active,1) as is_active, "
             "COALESCE(p.stock,0) as stock, "
             "COALESCE(p.category_id,1) as category_id, "
             "COALESCE(p.article_code,'') as article_code, "
+            "COALESCE(p.delivery_type,'local') as delivery_type, "
+            "COALESCE(p.delivery_days,'2-3') as delivery_days, "
+            "COALESCE(p.installment,0) as installment, "
             "p.photo_file_id, p.shop_id, "
             "s.shop_name, s.owner_id as seller_id, u.region "
             "FROM products p "
@@ -5505,6 +5515,9 @@ async def start_webserver():
                 "category_id": r["category_id"] or 1,
                 "description": r["description"] or "",
                 "article_code": r.get("article_code") or "",
+                "delivery_type": r.get("delivery_type") or "local",
+                "delivery_days": r.get("delivery_days") or "2-3",
+                "installment":   int(r.get("installment") or 0),
                 "photos": [f"/api/photo/{p['file_id']}" for p in photos_rows],
                 "variants": [{"size_name":v["size_name"],"article":v["article"] or "",
                                "stock":v["stock"] or 0,"price":float(v["price"] or 0)} for v in vars_rows]
@@ -5537,11 +5550,17 @@ async def start_webserver():
                 "SELECT size_name, article, stock FROM product_variants WHERE product_id=? ORDER BY id",
                 (r["id"],))
             data.append({
-                "id":r["id"],"name":r["name"],"price":r["price"],"unit":r["unit"],
+                "id":r["id"],"name":r["name"],"price":float(r["price"] or 0),"unit":r["unit"],
                 "stock":r["stock"] or 0,"is_active":r["is_active"],
                 "category": cats.get(r["category_id"] or 1,""),
+                "category_id": r["category_id"] or 1,
+                "article_code": r.get("article_code") or "",
+                "delivery_type": r.get("delivery_type") or "local",
+                "delivery_days": r.get("delivery_days") or "2-3",
+                "installment":   int(r.get("installment") or 0),
                 "photos":[f"/api/photo/{p['file_id']}" for p in ph_rows],
-                "variants":[{"size_name":v["size_name"],"article":v["article"],"stock":v["stock"]} for v in vr_rows]
+                "variants":[{"size_name":v["size_name"],"article":v["article"] or "",
+                             "stock":v["stock"] or 0} for v in vr_rows]
             })
         return _web.Response(
             text=_json.dumps({"products": data}, ensure_ascii=False),
@@ -5615,10 +5634,15 @@ async def start_webserver():
             categories = body.get("categories", [cat_id])
             if not categories: categories = [cat_id]
             main_cat = int(categories[0])
+            d_type = (body.get("delivery_type") or "local").strip()
+            d_days = (body.get("delivery_days") or "2-3").strip()
+            d_inst = 1 if body.get("installment") else 0
             pid = await db_insert(
-                "INSERT INTO products(shop_id,name,price,unit,description,category_id,article_code,stock) "
-                "VALUES(?,?,?,?,?,?,?,?)",
-                (shop["id"], name, price, unit, desc, main_cat, art_code, int(body.get("stock",0)))
+                "INSERT INTO products(shop_id,name,price,unit,description,category_id,"
+                "article_code,stock,delivery_type,delivery_days,installment) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (shop["id"], name, price, unit, desc, main_cat,
+                 art_code, int(body.get("stock",0)), d_type, d_days, d_inst)
             )
 
             # Rasmlar — Telegram ga yuborib file_id saqlaymiz
@@ -5847,10 +5871,17 @@ async def start_webserver():
                     text=_json.dumps({"ok":False,"error":"foydalanuvchi topilmadi"}),
                     content_type="application/json")
 
-            uname   = u.get("clinic_name") or u.get("full_name") or str(uid)
-            uphone  = u.get("phone") or "—"
-            uregion = u.get("region") or "—"
-            uaddr   = u.get("address") or "—"
+            uname       = u.get("clinic_name") or u.get("full_name") or str(uid)
+            uphone      = u.get("phone") or "—"
+            uregion     = u.get("region") or "—"
+            payment_type = body.get("payment_type") or "cash"
+            inst_months  = int(body.get("inst_months") or 0)
+            pay_labels   = {
+                "now":  "💵 Hozir karta",
+                "inst": f"📅 Muddatli {inst_months}x",
+                "cash": "🚚 Yetkazilganda (naqt/karta/bank)"
+            }
+            pay_label = pay_labels.get(payment_type, "🚚 Yetkazilganda")
 
             # Sotuvchi bo'yicha guruhlash
             seller_map = {}
@@ -5884,13 +5915,18 @@ async def start_webserver():
                     variant  = item.get("variant") or ""
                     name     = item.get("name","?")
                     unit     = item.get("unit","dona")
-                    vstr     = f" ({variant})" if variant else ""
+                    d_type   = item.get("delivery_type") or "local"
+                    d_days   = item.get("delivery_days") or "2-3"
+                    inst     = item.get("installment") or 0
+                    vstr     = f" · {variant}" if variant else ""
+                    dstr     = f"\n   🌍 Global bozor · {d_days} kun" if d_type == "china" else f"\n   🟢 Omborda · {d_days} kun"
+                    istr     = "\n   💳 Muddatli to\'lov" if inst else ""
                     lines.append(
-                        f"{i}. *{name}{vstr}*\n"
+                        f"{i}. *{name}*{vstr}\n"
                         f"   {qty:.0f} {unit} × {price:,.0f} = *{subtotal:,.0f} so\'m*"
+                        f"{dstr}{istr}"
                     )
                 items_txt = "\n".join(lines)
-                # catalog_orders jadvaliga yozamiz
                 import json as _pyjson
                 order_id = await db_insert(
                     "INSERT INTO catalog_orders(buyer_id,seller_id,products_json,total_amount) "
@@ -5898,14 +5934,14 @@ async def start_webserver():
                     (uid, seller_id, _pyjson.dumps(items, ensure_ascii=False), total)
                 )
                 msg = (
-                    f"🛒 *Katalogdan yangi buyurtma!*\n\n"
-                    f"📦 *Buyurtma #{order_id}:*\n{items_txt}\n\n"
-                    f"💰 *Jami: {total:,.0f} so\'m*\n\n"
+                    f"🛒 *Yangi buyurtma #{order_id}!*\n\n"
+                    f"{items_txt}\n\n"
+                    f"💰 *Jami: {total:,.0f} so\'m*\n"
+                    f"{pay_label}\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏥 *{uname}*\n"
+                    f"👤 *{uname}*\n"
                     f"📞 {uphone}\n"
-                    f"📍 {uregion}\n"
-                    f"🏠 {uaddr}"
+                    f"📍 {uregion}"
                 )
                 confirm_kb = InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
@@ -6895,6 +6931,15 @@ async def main():
             )
             await conn.execute(
                 "ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT"
+            )
+            await conn.execute(
+                "ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'"
+            )
+            await conn.execute(
+                "ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'"
+            )
+            await conn.execute(
+                "ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0"
             )
         log.info("✅ Migration OK")
     except Exception as e:
