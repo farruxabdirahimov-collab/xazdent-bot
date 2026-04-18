@@ -254,6 +254,7 @@ async def init_db():
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
         await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT")
+        await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_url TEXT")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
