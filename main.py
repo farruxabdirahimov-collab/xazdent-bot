@@ -5208,6 +5208,192 @@ async def _accept_offers_handler(req):
             text=_json.dumps({"ok": False, "error": str(e)}),
             content_type="application/json", status=500)
 
+
+async def api_partner_add_product(req):
+    """
+    Hamkor bot (AliExpress/1688 scraper) dan mahsulot qabul qiladi.
+    POST /api/partner/add_product
+    Headers: X-Partner-Token: <PARTNER_TOKEN>
+    Body: {uid, name, price, unit, description, images(URL list),
+           variants, delivery_type, delivery_days, installment, source_url}
+    """
+    # 1. Token tekshirish
+    token = req.headers.get("X-Partner-Token", "")
+    p_token = os.getenv("PARTNER_TOKEN", "")
+    if not p_token or token != p_token:
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": "Ruxsat yo\'q"}),
+            content_type="application/json", status=403)
+
+    # 2. JSON olish
+    try:
+        body = await req.json()
+    except Exception:
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": "JSON noto\'g\'ri"}),
+            content_type="application/json", status=400)
+
+    # 3. Maydonlar
+    uid          = int(body.get("uid") or 0)
+    name         = (body.get("name") or "").strip()
+    price        = float(body.get("price") or 0)
+    unit         = body.get("unit") or "dona"
+    description  = body.get("description") or ""
+    images       = (body.get("images") or [])[:5]   # URL list, max 5
+    variants     = body.get("variants") or []
+    delivery_type = body.get("delivery_type") or "local"
+    delivery_days = body.get("delivery_days") or "15-30"
+    installment   = 1 if body.get("installment") else 0
+    source_url    = body.get("source_url") or ""
+    cat_id        = int(body.get("category_id") or 1)
+    stock         = int(body.get("stock") or 999)
+
+    # delivery_type normallashtirish: 'global' → 'china' (ichki qiymat)
+    if delivery_type == "global":
+        delivery_type = "china"
+    if delivery_type not in ("local", "china"):
+        delivery_type = "local"
+
+    if not uid or not name or price <= 0:
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": "uid, name, price majburiy"}),
+            content_type="application/json", status=400)
+
+    try:
+        # 4. Do'kon tekshirish / yaratish
+        shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
+        if not shop:
+            u2 = await get_user(uid)
+            sname = (u2.get("clinic_name") or u2.get("full_name") or f"Do\'kon #{uid}") if u2 else f"Do\'kon #{uid}"
+            new_sid = await db_insert(
+                "INSERT INTO shops(owner_id,shop_name,category,phone,region,status) "
+                "VALUES(?,?,?,?,?,'active')",
+                (uid, sname, "Stomatologiya",
+                 u2.get("phone","") if u2 else "",
+                 u2.get("region","") if u2 else "")
+            )
+            shop = await db_get("SELECT * FROM shops WHERE id=?", (new_sid,))
+
+        if not shop:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "Do\'kon topilmadi. /start bilan boshlang"}),
+                content_type="application/json")
+
+        # 5. Artikul kodi
+        art_code = await _generate_article_code()
+
+        # 6. Mahsulot INSERT
+        pid = await db_insert(
+            "INSERT INTO products(shop_id,name,price,unit,description,category_id,"
+            "article_code,stock,delivery_type,delivery_days,installment,source_url) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (shop["id"], name, price, unit, description, cat_id,
+             art_code, stock, delivery_type, delivery_days, installment, source_url)
+        )
+
+        # 7. Rasmlarni URL dan yuklab Telegram ga yuborish
+        import aiohttp as _aiohttp
+        all_photo_ids = []
+        storage_uid = uid
+        # Admin ga yuborib file_id olamiz (o'chiramiz)
+        admin_id = ADMIN_IDS[0] if ADMIN_IDS else None
+
+        async with _aiohttp.ClientSession() as session:
+            for i, img_url in enumerate(images):
+                if not img_url: continue
+                try:
+                    async with session.get(
+                        img_url,
+                        timeout=_aiohttp.ClientTimeout(total=15),
+                        ssl=False,
+                        headers={"User-Agent": "Mozilla/5.0"}
+                    ) as resp:
+                        if resp.status != 200:
+                            log.warning(f"[PARTNER] Rasm {i} yuklanmadi: {resp.status}")
+                            continue
+                        img_bytes = await resp.read()
+                    if len(img_bytes) < 500:
+                        continue
+                    import hashlib as _hl
+                    fname = _hl.md5(img_url.encode()).hexdigest()[:8] + ".jpg"
+                    buf = BufferedInputFile(img_bytes, filename=fname)
+                    # Sotuvchiga yuborib saqlashga urinamiz, bo'lmasa adminga
+                    try:
+                        sent = await bot.send_photo(storage_uid, buf,
+                            caption=f"📦 #{art_code} rasm {i+1}")
+                    except Exception:
+                        if admin_id:
+                            sent = await bot.send_photo(admin_id, buf,
+                                caption=f"📦 #{art_code} rasm {i+1}")
+                        else:
+                            continue
+                    fid = sent.photo[-1].file_id
+                    all_photo_ids.append(fid)
+                    await db_insert(
+                        "INSERT INTO product_photos(product_id,file_id,sort_order) VALUES(?,?,?)",
+                        (pid, fid, i)
+                    )
+                    if i == 0:
+                        await db_run(
+                            "UPDATE products SET photo_file_id=? WHERE id=?",
+                            (fid, pid))
+                    log.info(f"[PARTNER] Rasm {i+1} saqlandi")
+                except Exception as e:
+                    log.error(f"[PARTNER] Rasm {i} xato: {e}")
+
+        # 8. Variantlar
+        for v in variants:
+            size = (v.get("size_name") or "").strip()
+            if not size: continue
+            await db_insert(
+                "INSERT INTO product_variants(product_id,size_name,article,stock,price) "
+                "VALUES(?,?,?,?,?)",
+                (pid, size, v.get("article") or art_code,
+                 int(v.get("stock") or 999),
+                 float(v.get("price") or price))
+            )
+
+        # 9. Kanalga post (mahsulot qo'shildi)
+        try:
+            shop_info = await db_get("SELECT * FROM shops WHERE id=?", (shop["id"],))
+            bot_info  = await bot.get_me()
+            channel_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="🛍 Ko\'rish va buyurtma →",
+                    url=f"https://t.me/{bot_info.username}?start=xz_{art_code}"
+                )
+            ]])
+            d_badge = "🌍 Global bozor" if delivery_type == "china" else "🟢 Omborda"
+            caption = (
+                f"🆕 *Yangi mahsulot!*\n\n"
+                f"🦷 *{name}*\n"
+                f"📌 {art_code}\n"
+                f"💰 *{price:,.0f} so\'m/{unit}*\n"
+                f"{d_badge} · {delivery_days} kun\n"
+                f"🏪 {shop_info['shop_name'] if shop_info else '?'}"
+            )
+            if all_photo_ids:
+                await bot.send_photo(CHANNEL_ID or "@testxzd",
+                    photo=all_photo_ids[0], caption=caption, reply_markup=channel_kb)
+            else:
+                await bot.send_message(CHANNEL_ID or "@testxzd",
+                    caption, reply_markup=channel_kb)
+        except Exception as ch_e:
+            log.error(f"[PARTNER] Kanal post xato: {ch_e}")
+
+        log.info(f"[PARTNER] Yangi mahsulot: {art_code} — {name} uid={uid}")
+        return _web.Response(
+            text=_json.dumps({"ok": True, "product_id": pid, "article_code": art_code}),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+
+    except Exception as e:
+        log.error(f"[PARTNER] Xatolik: {e}", exc_info=True)
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": str(e)}),
+            content_type="application/json", status=500)
+
+
 async def start_webserver():
     app = _web.Application(client_max_size=50*1024*1024)  # 50MB
     # ── GET /order ────────────────────────────────────────────────────
@@ -5811,6 +5997,7 @@ async def start_webserver():
             return _web.Response(
                 text=_json.dumps({"ok":False,"error":str(e)}),
                 content_type="application/json")
+    app.router.add_post("/api/partner/add_product", api_partner_add_product)
     app.router.add_post("/api/catalog/add_product", _api_add_product)
 
     async def _api_del_product(req):
