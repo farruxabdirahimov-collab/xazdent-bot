@@ -230,6 +230,26 @@ async def init_db():
             created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
         )""")
 
+        # cart_adds — savatga qo'shishlar
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS cart_adds (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            product_id INTEGER,
+            category_id INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
+        # category_clicks — kategoriya kliklari
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS category_clicks (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT,
+            category_id INTEGER NOT NULL,
+            category_name TEXT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
+
         # catalog_orders — savat buyurtmalari tracking
         await c.execute("""
         CREATE TABLE IF NOT EXISTS catalog_orders (
