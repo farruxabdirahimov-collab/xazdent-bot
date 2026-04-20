@@ -389,6 +389,33 @@ body{
   width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;}
 .toggle-sw.on::after{transform:translateX(20px);}
 
+/* ARXIV badge */
+.arxiv-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:rgba(245,158,11,0.15);
+  border:1px solid rgba(245,158,11,0.3);
+  color:#f59e0b;font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:10px;
+  letter-spacing:.5px;
+}
+.card-archived{opacity:.75;position:relative;}
+.card-archived::after{
+  content:'🗂 ARXIV';
+  position:absolute;top:8px;right:8px;
+  background:rgba(245,158,11,0.9);
+  color:#fff;font-size:9px;font-weight:700;
+  padding:3px 7px;border-radius:6px;
+  letter-spacing:1px;
+}
+.archived-overlay{
+  padding:10px 12px;
+  background:rgba(245,158,11,0.08);
+  border:1px solid rgba(245,158,11,0.2);
+  border-radius:8px;
+  font-size:12px;color:#f59e0b;
+  text-align:center;margin-top:6px;
+}
+
 /* ── TO'LOV MODAL ──────────────────────────────────────────── */
 .pay-opt{
   display:flex;align-items:center;gap:12px;
@@ -636,6 +663,16 @@ body{
 </div>
 
 <script>
+
+// ── TRACKING ──────────────────────────────────────────────────────────────────
+function track(event, data){
+  if(!UID) return;
+  fetch('/api/track',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({uid:UID,event:event},data||{}))
+  }).catch(function(){});  // xato bo'lsa jimgina o'tkazamiz
+}
 var tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 var UID = 0, ROLE = 'clinic';
@@ -728,6 +765,9 @@ function showView(v, btn) {
 
 // ── CATALOG ──────────────────────────────────────────────────────────────────
 function loadCatalog() {
+  if(curSearch && curSearch.length >= 3){
+    track('search',{query:curSearch,results_count:0});
+  }
   document.getElementById('main').innerHTML = '<div class="loading"><div class="spin"></div></div>';
   var _durl='/api/catalog?uid='+UID+'&cat='+curCat+'&q='+encodeURIComponent(curSearch);
   if(curDelivery) _durl+='&delivery='+curDelivery;
@@ -772,7 +812,7 @@ function loadCatalog() {
               '</div>'+
             '</div></div>';
         } else {
-          html += '<div class="pcard">'+
+          html += '<div class="pcard'+(p.is_archived?' card-archived':'')+'">'+
             '<div class="pimg" onclick="openDetail('+p.id+')">'+imgH+'</div>'+
             '<div class="pbody">'+
               '<div class="pname" onclick="openDetail('+p.id+')">'+esc(p.name)+'</div>'+
@@ -841,6 +881,7 @@ function updateCartBadge() {
 // ── CATS ─────────────────────────────────────────────────────────────────────
 function selCat(btn, c) {
   curCat = c;
+  if(c) track('category',{category_id:parseInt(c),category_name:btn.textContent.trim()});
   document.querySelectorAll('.cat').forEach(function(b){b.classList.remove('on');});
   btn.classList.add('on');
   loadCatalog();
@@ -875,6 +916,7 @@ function onSearch(q) {
 // ── DETAIL ───────────────────────────────────────────────────────────────────
 function openDetail(pid) {
   var p = _prods[pid]; if (!p) return;
+  track('view',{product_id:pid,category_id:p.category_id||1});
   detPid = pid; detProd = p; detQty = 1; varSelections = {}; varPrices = {};
   var ds = document.getElementById('dsheet');
   var hasVars = p.variants && p.variants.length > 0;
@@ -947,7 +989,7 @@ function openDetail(pid) {
     if (hasVars) {
       buyerHtml = varsHtml+
         '<div style="display:flex;gap:8px;margin-bottom:8px">'+
-          '<button class="dabtn" onclick="detAddCart()">🛒 Savatga</button>'+
+          (p.is_archived?'<div class="archived-overlay">🗂 Arxivda — buyurtma berib bo\'lmaydi</div>':'<button class="dabtn" onclick="detAddCart()">🛒 Savatga</button>')+
           '<button class="dabtn green" onclick="detQuick()">⚡ Hozir</button>'+
         '</div>';
     } else {
@@ -961,7 +1003,7 @@ function openDetail(pid) {
             '<span style="font-size:13px;color:var(--hint)">'+esc(p.unit)+'</span>'+
           '</div></div>'+
         '<div style="display:flex;gap:8px;margin-bottom:8px">'+
-          '<button class="dabtn" onclick="detAddCart()">🛒 Savatga</button>'+
+          (p.is_archived?'<div class="archived-overlay">🗂 Arxivda — buyurtma berib bo\'lmaydi</div>':'<button class="dabtn" onclick="detAddCart()">🛒 Savatga</button>')+
           '<button class="dabtn green" onclick="detQuick()">⚡ Hozir</button>'+
         '</div>';
     }
@@ -1039,6 +1081,7 @@ function detAddCart() {
   } else {
     cart[detPid] = {product:p, qty:detQty};
   }
+  track('cart_add',{product_id:detPid,category_id:(p.category_id||1)});
   updateCartBadge(); renderQtyRow(detPid); closeDp();
   if (tg) tg.showAlert('✅ Savatga qo\'shildi!');
 }
@@ -1166,7 +1209,7 @@ function loadMy() {
           '</div>'+
           '<div class="mpbtns">'+
             '<button class="mpbtn share" onclick="shareProdMy('+p.id+',\''+esc(p.article_code||'')+'\')">📤</button>'+
-            '<button class="mpbtn del" onclick="delProd('+p.id+')">🗑</button>'+
+            (p.is_active===2?'<button class="mpbtn" onclick="archiveProd('+p.id+',\'restore\')">✅</button>':'<button class="mpbtn" onclick="archiveProd('+p.id+',\'archive\')">🗂</button>')+
           '</div>'+
         '</div>';
       });
@@ -1189,14 +1232,19 @@ function shareProdMy(pid, code) {
   shareProd(pid);
 }
 
-function delProd(pid) {
-  if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
-  fetch('/api/catalog/del_product', {
+function delProd(pid){ archiveProd(pid,'archive'); }
+
+function archiveProd(pid, action){
+  var msg = action==='archive' ? 'Arxivga o\'tkazilsinmi?' : 'Faollashtirilsinmi?';
+  if(!confirm(msg)) return;
+  fetch('/api/catalog/del_product',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({product_id:pid, user_id:UID})
+    body:JSON.stringify({product_id:pid, user_id:UID, action:action})
   }).then(function(r){return r.json();}).then(function(d){
-    if (d.ok) loadMy();
-    else alert('Xato: '+(d.error||''));
+    if(d.ok){
+      toast(action==='archive'?'🗂 Arxivga o\'tkazildi':'✅ Faollashtirildi');
+      loadMy(); loadCatalog();
+    } else { alert('Xato: '+(d.error||'')); }
   });
 }
 
