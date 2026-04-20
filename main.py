@@ -5647,6 +5647,84 @@ async def start_webserver():
                 html = f.read()
             return _web.Response(text=html, content_type="text/html", charset="utf-8")
         return _web.Response(text="catalog.html topilmadi", status=404, content_type="text/html")
+
+    async def _api_tracking_stats(req):
+        """Kategoriya, ko'rish, savat, qidiruv statistikasi."""
+        uid = int(req.query.get("uid",0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":"ruxsat yo\'q"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin":"*"})
+        period = req.query.get("period","week")
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        if period == "today":
+            since = now.strftime("%Y-%m-%d")
+        elif period == "week":
+            since = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+        else:  # 28kun
+            since = (now - timedelta(days=28)).strftime("%Y-%m-%d")
+
+        # Top kategoriyalar
+        top_cats = await db_all(
+            "SELECT category_id, category_name, COUNT(*) as cnt "
+            "FROM category_clicks WHERE created_at >= ? "
+            "GROUP BY category_id, category_name ORDER BY cnt DESC LIMIT 10",
+            (since,))
+
+        # Top ko'rilgan mahsulotlar
+        top_views = await db_all(
+            "SELECT v.product_id, p.name, p.price, COUNT(*) as cnt "
+            "FROM product_views v LEFT JOIN products p ON v.product_id=p.id "
+            "WHERE v.created_at >= ? "
+            "GROUP BY v.product_id, p.name, p.price ORDER BY cnt DESC LIMIT 10",
+            (since,))
+
+        # Savatga ko'p solingan
+        top_cart = await db_all(
+            "SELECT c.product_id, p.name, p.price, COUNT(*) as cnt "
+            "FROM cart_adds c LEFT JOIN products p ON c.product_id=p.id "
+            "WHERE c.created_at >= ? "
+            "GROUP BY c.product_id, p.name, p.price ORDER BY cnt DESC LIMIT 10",
+            (since,))
+
+        # Top qidiruvlar
+        top_search = await db_all(
+            "SELECT query, COUNT(*) as cnt FROM search_logs "
+            "WHERE created_at >= ? AND query != \'\'  "
+            "GROUP BY query ORDER BY cnt DESC LIMIT 15",
+            (since,))
+
+        # Jami sonlar
+        total_views  = (await db_get("SELECT COUNT(*) as c FROM product_views WHERE created_at >= ?", (since,)))["c"]
+        total_cart   = (await db_get("SELECT COUNT(*) as c FROM cart_adds WHERE created_at >= ?", (since,)))["c"]
+        total_search = (await db_get("SELECT COUNT(*) as c FROM search_logs WHERE created_at >= ?", (since,)))["c"]
+        total_cats   = (await db_get("SELECT COUNT(*) as c FROM category_clicks WHERE created_at >= ?", (since,)))["c"]
+
+        # Konversiya: ko'rdi → savatga soldi
+        conv_rate = round(total_cart / total_views * 100, 1) if total_views > 0 else 0
+
+        return _web.Response(
+            text=_json.dumps({
+                "ok": True,
+                "period": period,
+                "summary": {
+                    "views": total_views,
+                    "cart_adds": total_cart,
+                    "searches": total_search,
+                    "cat_clicks": total_cats,
+                    "conversion": conv_rate
+                },
+                "top_categories": [{"id":r["category_id"],"name":r["category_name"],"cnt":r["cnt"]} for r in top_cats],
+                "top_views":      [{"id":r["product_id"],"name":r["name"],"price":float(r["price"] or 0),"cnt":r["cnt"]} for r in top_views],
+                "top_cart":       [{"id":r["product_id"],"name":r["name"],"price":float(r["price"] or 0),"cnt":r["cnt"]} for r in top_cart],
+                "top_searches":   [{"query":r["query"],"cnt":r["cnt"]} for r in top_search],
+            }, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin":"*"})
+    app.router.add_get("/api/admin/tracking", _api_tracking_stats)
+
     app.router.add_get("/catalog", _catalog_page)
 
     async def _api_catalog(req):
@@ -5657,7 +5735,7 @@ async def start_webserver():
         # is_active NULL yoki 1 bo'lsa ko'rsatamiz
         delivery  = req.query.get("delivery", "").strip()
         installment = req.query.get("installment", "").strip()
-        where = "s.status='active' AND (p.is_active IS NULL OR p.is_active = 1)"
+        where = "s.status='active' AND (p.is_active IS NULL OR p.is_active IN (1,2))"
         if cat:
             where += " AND p.category_id=?"
             params.append(int(cat))
@@ -5712,6 +5790,7 @@ async def start_webserver():
                 "delivery_type": r.get("delivery_type") or "local",
                 "delivery_days": r.get("delivery_days") or "2-3",
                 "installment":   int(r.get("installment") or 0),
+                "is_archived":   int(r.get("is_active") or 1) == 2,
                 "photos": [f"/api/photo/{p['file_id']}" for p in photos_rows],
                 "variants": [{"size_name":v["size_name"],"article":v["article"] or "",
                                "stock":v["stock"] or 0,"price":float(v["price"] or 0)} for v in vars_rows]
@@ -6001,18 +6080,38 @@ async def start_webserver():
     app.router.add_post("/api/catalog/add_product", _api_add_product)
 
     async def _api_del_product(req):
+        """Mahsulotni arxivga o'tkazadi (o'chirmaydi).
+        is_active=2 → arxiv: katalogda ko'rinadi lekin buyurtma berib bo'lmaydi.
+        """
         try:
-            body = await req.json()
-            uid  = int(body.get("user_id", 0))
-            pid  = int(body.get("product_id", 0))
-            shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
-            if not shop: return _web.Response(
-                text=_json.dumps({"ok":False}), content_type="application/json")
-            await db_run("DELETE FROM products WHERE id=? AND shop_id=?", (pid, shop["id"]))
-            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+            body   = await req.json()
+            uid    = int(body.get("user_id", 0))
+            pid    = int(body.get("product_id", 0))
+            action = body.get("action", "archive")  # "archive" yoki "restore"
+            shop   = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+            if not shop:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"do\'kon topilmadi"}),
+                    content_type="application/json")
+            if action == "restore":
+                await db_run(
+                    "UPDATE products SET is_active=1 WHERE id=? AND shop_id=?",
+                    (pid, shop["id"]))
+                return _web.Response(
+                    text=_json.dumps({"ok":True,"status":"active"}),
+                    content_type="application/json")
+            else:
+                # Arxivlash: is_active=2
+                await db_run(
+                    "UPDATE products SET is_active=2 WHERE id=? AND shop_id=?",
+                    (pid, shop["id"]))
+                return _web.Response(
+                    text=_json.dumps({"ok":True,"status":"archived"}),
+                    content_type="application/json")
         except Exception as e:
-            return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
-                                 content_type="application/json")
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":str(e)}),
+                content_type="application/json")
     app.router.add_post("/api/catalog/del_product", _api_del_product)
 
     async def _api_quick_order(req):
@@ -6065,6 +6164,19 @@ async def start_webserver():
                 return _web.Response(
                     text=_json.dumps({"ok":False,"error":"foydalanuvchi topilmadi"}),
                     content_type="application/json")
+            # Arxiv mahsulotlarga buyurtma blok
+            for it in flat_items:
+                pid_check = int(it.get("product_id") or 0)
+                if pid_check:
+                    p_check = await db_get(
+                        "SELECT is_active, name FROM products WHERE id=?", (pid_check,))
+                    if p_check and int(p_check.get("is_active") or 1) == 2:
+                        return _web.Response(
+                            text=_json.dumps({
+                                "ok": False,
+                                "error": f"'{p_check['name']}' mahsuloti arxivda — buyurtma berib bo\'lmaydi"
+                            }),
+                            content_type="application/json")
 
             uname       = u.get("clinic_name") or u.get("full_name") or str(uid)
             uphone      = u.get("phone") or "—"
@@ -6631,6 +6743,50 @@ async def start_webserver():
     app.router.add_get("/api/admin/excel", _admin_excel_dl)
 
     # ── MARKET ANALYTICS ──────────────────────────────────────────────────
+
+    async def _api_track(req):
+        """Foydalanuvchi harakatlari: view, cart_add, category, search."""
+        try:
+            body = await req.json()
+            uid      = int(body.get("uid") or 0)
+            event    = body.get("event") or ""
+            prod_id  = int(body.get("product_id") or 0)
+            cat_id   = int(body.get("category_id") or 0)
+            cat_name = body.get("category_name") or ""
+            query    = body.get("query") or ""
+            results  = int(body.get("results_count") or 0)
+
+            if event == "view" and prod_id:
+                await db_insert(
+                    "INSERT INTO product_views(product_id,user_id) VALUES(?,?)",
+                    (prod_id, uid or None))
+
+            elif event == "cart_add" and prod_id:
+                await db_insert(
+                    "INSERT INTO cart_adds(user_id,product_id,category_id) VALUES(?,?,?)",
+                    (uid or None, prod_id, cat_id or 1))
+
+            elif event == "category" and cat_id:
+                await db_insert(
+                    "INSERT INTO category_clicks(user_id,category_id,category_name) VALUES(?,?,?)",
+                    (uid or None, cat_id, cat_name))
+
+            elif event == "search" and query:
+                await db_insert(
+                    "INSERT INTO search_logs(user_id,query,results_count) VALUES(?,?,?)",
+                    (uid or None, query.strip()[:100], results))
+
+            return _web.Response(
+                text=_json.dumps({"ok": True}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+        except Exception as e:
+            return _web.Response(
+                text=_json.dumps({"ok": False}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_post("/api/track", _api_track)
+
     async def _admin_market(req):
         if not int(req.query.get("uid",0)) in ADMIN_IDS:
             return _web.Response(text=_json.dumps({"ok":False}),
