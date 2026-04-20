@@ -55,7 +55,7 @@ body{
 
 /* CATS */
 .cats-wrap{
-  position:sticky;top:0;z-index:90;
+  position:sticky;top:0;z-index:5;
   background:var(--card);
   border-bottom:1px solid var(--border);}
 .cats{
@@ -242,11 +242,12 @@ body{
 .dabtn.green{background:var(--text)}
 
 /* FORM */
-.fpanel{display:none;position:fixed;inset:0;z-index:60;
+.fpanel{display:none;position:fixed;inset:0;z-index:200;
   background:rgba(0,0,0,.4);align-items:flex-end}
 .fpanel.on{display:flex}
 .fsheet{background:var(--card);border-radius:24px 24px 0 0;
-  padding:20px;width:100%;max-height:92vh;overflow-y:auto}
+  padding:20px 16px 40px;width:100%;max-height:96vh;overflow-y:auto;
+  -webkit-overflow-scrolling:touch}
 .ftitle{font-size:17px;font-weight:700;margin-bottom:16px;color:var(--text)}
 .flabel{font-size:12px;color:var(--hint);font-weight:600;
   text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
@@ -268,7 +269,7 @@ body{
 .cat-chk span{color:var(--text) !important}
 .cat-chk.on span{color:var(--primary) !important}
 
-.photos-row{display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;
+.photos-row{display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;position:relative;z-index:1;
   padding-bottom:4px;scrollbar-width:none}
 .photos-row::-webkit-scrollbar{display:none}
 .photo-thumb{width:80px;height:80px;border-radius:var(--r-md);
@@ -583,13 +584,11 @@ body{
 
 <div class="fpanel" id="fpanel">
   <div class="fsheet" id="fsheet">
-    <div class="ftitle">➕ Mahsulot qo'shish</div>
-
-    <div class="flabel">Rasmlar (max 5 ta)</div>
-    <div class="photos-row" id="photos-row">
-      <div class="add-photo-btn" onclick="triggerPhoto()">
-        <span>📷</span><span>Rasm qo'sh</span>
-      </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="ftitle" style="margin-bottom:0">➕ Mahsulot qo'shish</div>
+      <button onclick="closeForm()" style="width:32px;height:32px;border-radius:50%;
+        border:none;background:var(--border);color:var(--text);font-size:16px;
+        cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
     <input type="file" id="photo-inp" accept="image/*" style="display:none" onchange="onPhoto(this)">
 
@@ -625,6 +624,13 @@ body{
 
     <div class="flabel">Tavsif</div>
     <textarea class="finp" id="f-desc" rows="2" placeholder="Mahsulot haqida qisqacha..."></textarea>
+
+    <div class="flabel">📷 Rasmlar (max 5 ta)</div>
+    <div class="photos-row" id="photos-row">
+      <div class="add-photo-btn" onclick="triggerPhoto()">
+        <span>📷</span><span>Rasm qo'sh</span>
+      </div>
+    </div>
 
     <div class="flabel">Razmerlar / Variantlar</div>
     <div class="var-editor" id="var-editor"></div>
@@ -1410,9 +1416,21 @@ function submitOrder(payType, instMonths) {
 }
 
 // ── FORM ─────────────────────────────────────────────────────────────────────
-function openForm() { document.getElementById('fpanel').classList.add('on'); }
+function openForm() {
+  document.getElementById('fpanel').classList.add('on');
+  // Kategoriya va filter tablari formanin ustiga chiqmasin
+  var cw = document.querySelector('.cats-wrap');
+  if(cw) cw.style.visibility = 'hidden';
+  var sb = document.querySelector('.search-bar');
+  if(sb) sb.style.visibility = 'hidden';
+}
 function closeForm() {
   document.getElementById('fpanel').classList.remove('on');
+  // Kategoriya va filter tablari qayta ko'rinsin
+  var cw = document.querySelector('.cats-wrap');
+  if(cw) cw.style.visibility = 'visible';
+  var sb = document.querySelector('.search-bar');
+  if(sb) sb.style.visibility = 'visible';
   document.getElementById('f-name').value = '';
   document.getElementById('f-price').value = '';
   document.getElementById('f-stock').value = '';
