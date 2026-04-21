@@ -6000,20 +6000,44 @@ async def start_webserver():
     async def _api_catalog_product(req):
         pid  = int(req.match_info.get("product_id", 0))
         row  = await db_get(
-            "SELECT p.*, s.shop_name, u.region "
+            "SELECT p.*, s.shop_name, s.owner_id as seller_id, u.region "
             "FROM products p JOIN shops s ON p.shop_id=s.id "
             "JOIN users u ON s.owner_id=u.id WHERE p.id=?", (pid,))
         if not row:
             return _web.Response(
-                text=_json.dumps({"ok":False,"error":"topilmadi"}),
+                text=_json.dumps({"error":"topilmadi"}),
                 content_type="application/json")
+        # Variantlar
+        vars_rows = await db_all(
+            "SELECT size_name, article, stock, COALESCE(price,0) as price "
+            "FROM product_variants WHERE product_id=? ORDER BY id", (pid,))
+        # Rasmlar
+        photos_rows = await db_all(
+            "SELECT file_id FROM product_photos WHERE product_id=? ORDER BY sort_order", (pid,))
+        # openEdit kutgan format — to'g'ridan object (product wrap emas)
+        data = {
+            "id":            row["id"],
+            "name":          row["name"],
+            "price":         float(row["price"] or 0),
+            "unit":          row["unit"],
+            "description":   row["description"] or "",
+            "shop_name":     row["shop_name"],
+            "seller_id":     row["seller_id"],
+            "region":        row["region"],
+            "stock":         row["stock"] or 0,
+            "category_id":   row["category_id"] or 1,
+            "delivery_type": row.get("delivery_type") or "local",
+            "delivery_days": row.get("delivery_days") or "2-3",
+            "installment":   int(row.get("installment") or 0),
+            "article_code":  row.get("article_code") or "",
+            "is_active":     row.get("is_active"),
+            "photos":        [f"/api/photo/{p['file_id']}" for p in photos_rows],
+            "variants":      [{"size_name":v["size_name"],"article":v["article"] or "",
+                               "stock":v["stock"] or 0,"price":float(v["price"] or 0)}
+                              for v in vars_rows]
+        }
         return _web.Response(
-            text=_json.dumps({"ok":True,"product":{
-                "id":row["id"],"name":row["name"],"price":row["price"],
-                "unit":row["unit"],"description":row["description"],
-                "shop_name":row["shop_name"],"region":row["region"],
-                "stock":row["stock"] or 0,"photo":None
-            }}, ensure_ascii=False),
+            text=_json.dumps(data, ensure_ascii=False),
             content_type="application/json",
             headers={"Access-Control-Allow-Origin":"*"})
     app.router.add_get("/api/catalog/product/{product_id}", _api_catalog_product)
