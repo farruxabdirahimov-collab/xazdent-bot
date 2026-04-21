@@ -5880,7 +5880,7 @@ async def start_webserver():
         # is_active NULL yoki 1 bo'lsa ko'rsatamiz
         delivery  = req.query.get("delivery", "").strip()
         installment = req.query.get("installment", "").strip()
-        where = "s.status='active' AND (p.is_active IS NULL OR p.is_active IN (1,2))"
+        where = "s.status='active' AND (p.is_active IS NULL OR p.is_active = 1)"
         if cat:
             where += " AND p.category_id=?"
             params.append(int(cat))
