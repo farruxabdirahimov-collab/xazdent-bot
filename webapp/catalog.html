@@ -330,6 +330,7 @@ body{
 .mpbtn{width:36px;height:36px;border:none;border-radius:var(--r-md);font-size:15px;cursor:pointer}
 .mpbtn.share{background:#EFF6FF;color:var(--primary)}
 .mpbtn.del{background:#FEF2F2;color:var(--red)}
+.mpbtn.edit{background:#FFF7ED;color:#d97706;font-size:14px}
 
 /* FAB */
 .fab{position:fixed;bottom:80px;right:16px;width:54px;height:54px;
@@ -519,6 +520,79 @@ body{
     <div class="cftr">
       <div class="ctotal">Jami: <span id="ctotal">0 so&#39;m</span></div>
       <button class="obtn" id="obtn" onclick="openPayModal()">📦 Buyurtma berish</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAHRIRLASH PANELI -->
+<div class="fpanel" id="epanel" style="display:none">
+  <div class="fsheet" id="esheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="ftitle" style="margin-bottom:0">✏️ Tahrirlash</div>
+      <button onclick="closeEdit()" style="width:32px;height:32px;border-radius:50%;
+        border:none;background:rgba(0,0,0,0.08);font-size:16px;cursor:pointer">✕</button>
+    </div>
+
+    <input type="hidden" id="e-pid" value="0">
+
+    <div class="flabel">Mahsulot nomi</div>
+    <input class="finp" id="e-name" placeholder="Nom">
+
+    <div class="flabel">Narx va birlik</div>
+    <div class="frow">
+      <input class="finp" id="e-price" type="number" placeholder="Narx (so'm)" style="flex:2">
+      <select class="finp" id="e-unit" style="flex:1;color:#1a1a3e;background:#fff">
+        <option>dona</option><option>quti</option><option>kg</option>
+        <option>litr</option><option>ml</option><option>paket</option>
+        <option>gr</option><option>set</option>
+      </select>
+    </div>
+
+    <div class="flabel">Stok</div>
+    <input class="finp" id="e-stock" type="number" placeholder="0 = cheksiz">
+
+    <div class="flabel">Tavsif</div>
+    <textarea class="finp" id="e-desc" rows="2" placeholder="Mahsulot haqida..."></textarea>
+
+    <div class="flabel">📦 Mavjudlik</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;
+        border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="e-lbl-local">
+        <input type="radio" name="edtype" value="local" checked
+          onchange="eSelDtype(this)" style="accent-color:#22c55e"> 🟢 Omborda
+      </label>
+      <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;
+        border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="e-lbl-china">
+        <input type="radio" name="edtype" value="china"
+          onchange="eSelDtype(this)" style="accent-color:#f59e0b"> 🌍 Global bozor
+      </label>
+    </div>
+
+    <div class="flabel">⏳ Yetkazish muddati</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;
+        border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+        <input type="radio" name="eddays" value="2-3" checked style="accent-color:#22c55e"> 🚀 2-3 kun
+      </label>
+      <label style="flex:1;display:flex;align-items:center;gap:6px;padding:9px 12px;
+        border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+        <input type="radio" name="eddays" value="15-30" style="accent-color:#f59e0b"> ⏳ 15-30 kun
+      </label>
+    </div>
+
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;
+      padding:10px 12px;border:1.5px solid var(--border);border-radius:10px">
+      <input type="checkbox" id="e-inst" style="width:18px;height:18px;accent-color:#8b5cf6">
+      <label for="e-inst" style="cursor:pointer;font-size:13px">💳 Muddatli to'lov mavjud</label>
+    </div>
+
+    <div class="flabel">Variantlar</div>
+    <div class="var-editor" id="e-var-editor"></div>
+    <button class="add-var-btn" onclick="addEVarRow()">+ Variant qo'shish</button>
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="fsave" id="e-save" onclick="saveEdit()" style="flex:1">💾 Saqlash</button>
+      <button class="fcancel" onclick="closeEdit()" style="flex:0;padding:14px 18px">Bekor</button>
     </div>
   </div>
 </div>
@@ -1214,6 +1288,7 @@ function loadMy() {
             (p.article_code?'<div class="mpcode">📌 '+esc(p.article_code)+'</div>':'')+
           '</div>'+
           '<div class="mpbtns">'+
+            '<button class="mpbtn edit" onclick="openEdit('+p.id+')">✏️</button>'+
             '<button class="mpbtn share" onclick="shareProdMy('+p.id+',\''+esc(p.article_code||'')+'\')">📤</button>'+
             (p.is_active===2?'<button class="mpbtn" onclick="archiveProd('+p.id+',\'restore\')">✅</button>':'<button class="mpbtn" onclick="archiveProd('+p.id+',\'archive\')">🗂</button>')+
           '</div>'+
@@ -1239,6 +1314,141 @@ function shareProdMy(pid, code) {
 }
 
 function delProd(pid){ archiveProd(pid,'archive'); }
+
+// ── TAHRIRLASH ────────────────────────────────────────────────────────────────
+var _editVarCount = 0;
+
+function openEdit(pid){
+  // Ma'lumotlarni API dan olamiz
+  fetch('/api/catalog/product/'+pid+'?uid='+UID)
+    .then(function(r){return r.json();}).then(function(p){
+      if(!p||!p.id){ alert('Mahsulot topilmadi'); return; }
+      // Formani to'ldiramiz
+      document.getElementById('e-pid').value   = p.id;
+      document.getElementById('e-name').value  = p.name||'';
+      document.getElementById('e-price').value = p.price||'';
+      document.getElementById('e-stock').value = p.stock||'';
+      document.getElementById('e-desc').value  = p.description||'';
+      // Unit
+      var unitSel = document.getElementById('e-unit');
+      if(unitSel){
+        for(var i=0;i<unitSel.options.length;i++){
+          if(unitSel.options[i].value===p.unit){ unitSel.selectedIndex=i; break; }
+        }
+      }
+      // Delivery type
+      var dType = p.delivery_type||'local';
+      document.querySelectorAll('input[name="edtype"]').forEach(function(r){
+        r.checked = r.value === dType;
+      });
+      eSelDtype(document.querySelector('input[name="edtype"]:checked'));
+      // Delivery days
+      var dDays = p.delivery_days||'2-3';
+      document.querySelectorAll('input[name="eddays"]').forEach(function(r){
+        r.checked = r.value === dDays;
+      });
+      // Installment
+      var inst = document.getElementById('e-inst');
+      if(inst) inst.checked = !!p.installment;
+      // Variantlar
+      _editVarCount = 0;
+      var veditor = document.getElementById('e-var-editor');
+      veditor.innerHTML = '';
+      (p.variants||[]).forEach(function(v){
+        addEVarRow(v.size_name, v.article, v.stock, v.price);
+      });
+      // Panelni ochamiz
+      var ep = document.getElementById('epanel');
+      ep.style.display = 'flex';
+      var cw = document.querySelector('.cats-wrap');
+      if(cw) cw.style.visibility = 'hidden';
+    }).catch(function(e){ alert('Xato: '+e.message); });
+}
+
+function closeEdit(){
+  document.getElementById('epanel').style.display = 'none';
+  var cw = document.querySelector('.cats-wrap');
+  if(cw) cw.style.visibility = 'visible';
+}
+
+function eSelDtype(radio){
+  if(!radio) return;
+  var ll = document.getElementById('e-lbl-local');
+  var lc = document.getElementById('e-lbl-china');
+  if(ll) ll.style.borderColor = radio.value==='local' ? '#22c55e' : 'var(--border)';
+  if(lc) lc.style.borderColor = radio.value==='china' ? '#f59e0b' : 'var(--border)';
+}
+
+function addEVarRow(sname, art, stk, pr){
+  _editVarCount++;
+  var id = _editVarCount;
+  var row = document.createElement('div');
+  row.className = 'var-item'; row.id = 'evr-'+id;
+  row.innerHTML =
+    '<input class="finp" id="evs-'+id+'" placeholder="Razmer (masalan: 3.5mm)" style="margin-bottom:6px" value="'+(sname||'')+'">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">'+
+      '<input class="finp" id="evp-'+id+'" type="number" placeholder="Narx" style="margin-bottom:0" value="'+(pr||'')+'">'+
+      '<input class="finp" id="evq-'+id+'" type="number" placeholder="Stok" style="margin-bottom:0" value="'+(stk||'')+'">'+
+      '<input class="finp" id="eva-'+id+'" placeholder="Artikul" style="margin-bottom:0" value="'+(art||'')+'">'+
+    '</div>'+
+    '<button onclick="document.getElementById('evr-'+id+'').remove()" '+
+      'style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0;margin-bottom:8px">✕ O'chirish</button>';
+  document.getElementById('e-var-editor').appendChild(row);
+}
+
+function saveEdit(){
+  var pid   = parseInt(document.getElementById('e-pid').value)||0;
+  var name  = document.getElementById('e-name').value.trim();
+  var price = parseFloat(document.getElementById('e-price').value)||0;
+  var unit  = document.getElementById('e-unit').value;
+  var stock = parseInt(document.getElementById('e-stock').value)||0;
+  var desc  = document.getElementById('e-desc').value.trim();
+  var dType = (document.querySelector('input[name="edtype"]:checked')||{value:'local'}).value;
+  var dDays = (document.querySelector('input[name="eddays"]:checked')||{value:'2-3'}).value;
+  var inst  = document.getElementById('e-inst').checked ? 1 : 0;
+
+  if(!name){ alert('Nom kiriting!'); return; }
+  if(!price||price<=0){ alert('Narx kiriting!'); return; }
+
+  // Variantlar
+  var variants = [];
+  document.querySelectorAll('#e-var-editor .var-item').forEach(function(row){
+    var id = row.id.replace('evr-','');
+    var s = document.getElementById('evs-'+id);
+    if(s && s.value.trim()){
+      variants.push({
+        size_name: s.value.trim(),
+        article:   (document.getElementById('eva-'+id)||{value:''}).value.trim(),
+        stock:     parseInt((document.getElementById('evq-'+id)||{value:0}).value)||0,
+        price:     parseFloat((document.getElementById('evp-'+id)||{value:0}).value)||0
+      });
+    }
+  });
+
+  var btn = document.getElementById('e-save');
+  btn.disabled=true; btn.textContent='⏳ Saqlanmoqda...';
+
+  fetch('/api/catalog/edit_product',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      user_id: UID, product_id: pid,
+      name: name, price: price, unit: unit,
+      stock: stock, description: desc,
+      delivery_type: dType, delivery_days: dDays,
+      installment: inst, variants: variants
+    })
+  }).then(function(r){return r.json();}).then(function(d){
+    btn.disabled=false; btn.textContent='💾 Saqlash';
+    if(d.ok){
+      closeEdit();
+      toast('✅ Saqlandi!');
+      loadMy(); loadCatalog();
+    } else { alert('❌ '+(d.error||'Xato')); }
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent='💾 Saqlash';
+    alert('❌ '+e.message);
+  });
+}
 
 function archiveProd(pid, action){
   var msg = action==='archive' ? 'Arxivga o\'tkazilsinmi?' : 'Faollashtirilsinmi?';
@@ -1408,7 +1618,15 @@ function submitOrder(payType, instMonths) {
                    payType === 'inst' ? '📅 To\'lov: Muddatli '+instMonths+'x' :
                                         '🚚 To\'lov: Yetkazilganda';
       if (tg) tg.showAlert('✅ Buyurtma yuborildi!\n\n' + payMsg + '\n\nSotuvchi tez orada bog\'lanadi.');
-    } else { alert('Xato: '+(d.error||'')); }
+    } else {
+      var errMsg = d.message || d.error || 'Xato yuz berdi';
+      if(d.error === 'phone_required' || d.error === 'region_required'){
+        if(tg) tg.showAlert('⚠️ ' + errMsg);
+        else alert('⚠️ ' + errMsg);
+      } else {
+        alert('❌ ' + errMsg);
+      }
+    }
   }).catch(function(e){
     btn.disabled = false; btn.textContent = '📦 Buyurtma berish';
     alert('Xato: '+e.message);
