@@ -6259,6 +6259,119 @@ async def start_webserver():
                 content_type="application/json")
     app.router.add_post("/api/catalog/del_product", _api_del_product)
 
+    async def _api_edit_product(req):
+        """Mahsulotni tahrirlash — faqat sotuvchining o'z mahsuloti."""
+        try:
+            body = await req.json()
+            uid  = int(body.get("user_id") or 0)
+            pid  = int(body.get("product_id") or 0)
+
+            if not uid or not pid:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"user_id va product_id kerak"}),
+                    content_type="application/json")
+
+            # Xavfsizlik: faqat o'z do'koni mahsulotini tahrirlaydi
+            shop = await db_get("SELECT id FROM shops WHERE owner_id=?", (uid,))
+            if not shop:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"Do\'kon topilmadi"}),
+                    content_type="application/json")
+
+            prod = await db_get(
+                "SELECT id,name FROM products WHERE id=? AND shop_id=?",
+                (pid, shop["id"]))
+            if not prod:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"Mahsulot topilmadi yoki sizniki emas"}),
+                    content_type="application/json")
+
+            # Yangilanadigan maydonlar
+            name  = (body.get("name") or "").strip()
+            price = float(body.get("price") or 0)
+            unit  = (body.get("unit") or "").strip()
+            stock = int(body.get("stock") or 0)
+            desc  = (body.get("description") or "").strip()
+            d_type = body.get("delivery_type") or "local"
+            d_days = body.get("delivery_days") or "2-3"
+            inst   = 1 if body.get("installment") else 0
+            cat_id = int(body.get("category_id") or 0)
+
+            # Validatsiya
+            if name and len(name) < 2:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"Nom kamida 2 ta harf"}),
+                    content_type="application/json")
+            if price < 0:
+                return _web.Response(
+                    text=_json.dumps({"ok":False,"error":"Narx manfiy bo\'lmaydi"}),
+                    content_type="application/json")
+            if d_type not in ("local","china"):
+                d_type = "local"
+
+            # Faqat yuborilgan maydonlarni yangilaymiz
+            updates = []
+            params  = []
+            if name:
+                updates.append("name=?"); params.append(name)
+            if price > 0:
+                updates.append("price=?"); params.append(price)
+            if unit:
+                updates.append("unit=?"); params.append(unit)
+            if body.get("stock") is not None:
+                updates.append("stock=?"); params.append(stock)
+            if desc or body.get("description") == "":
+                updates.append("description=?"); params.append(desc)
+            if body.get("delivery_type"):
+                updates.append("delivery_type=?"); params.append(d_type)
+            if body.get("delivery_days"):
+                updates.append("delivery_days=?"); params.append(d_days)
+            if body.get("installment") is not None:
+                updates.append("installment=?"); params.append(inst)
+            if cat_id > 0:
+                updates.append("category_id=?"); params.append(cat_id)
+
+            if updates:
+                params.extend([pid, shop["id"]])
+                sql_set = ", ".join(updates)
+                await db_run(
+                    f"UPDATE products SET {sql_set} WHERE id=? AND shop_id=?",
+                    tuple(params)
+                )
+
+            # Variantlar — yuborilsa hammasi o'chirib qayta yozamiz
+            variants = body.get("variants")
+            if variants is not None:
+                await db_run(
+                    "DELETE FROM product_variants WHERE product_id=?", (pid,))
+                for v in variants:
+                    size = (v.get("size_name") or "").strip()
+                    if not size: continue
+                    await db_insert(
+                        "INSERT INTO product_variants"
+                        "(product_id,size_name,article,stock,price) "
+                        "VALUES(?,?,?,?,?)",
+                        (pid, size,
+                         v.get("article") or "",
+                         int(v.get("stock") or 0),
+                         float(v.get("price") or 0))
+                    )
+
+            log.info(f"[EDIT] uid={uid} pid={pid} yangilandi: {updates}")
+            return _web.Response(
+                text=_json.dumps({"ok":True,"product_id":pid}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin":"*"})
+
+        except Exception as e:
+            log.error(f"[EDIT] xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok":False,"error":str(e)}),
+                content_type="application/json")
+    app.router.add_post("/api/catalog/edit_product", _api_edit_product)
+
+
+
     async def _api_quick_order(req):
         try:
             body = await req.json()
