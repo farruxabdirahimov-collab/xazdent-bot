@@ -1523,7 +1523,8 @@ function saveEdit(){
     btn.disabled=false; btn.textContent='💾 Saqlash';
     if(d.ok){
       closeEdit();
-      toast('✅ Saqlandi!');
+      if(tg) tg.showAlert('✅ Saqlandi!');
+      else alert('✅ Saqlandi!');
       loadMy(); loadCatalog();
     } else { alert('❌ '+(d.error||'Xato')); }
   }).catch(function(e){
@@ -1540,7 +1541,8 @@ function archiveProd(pid, action){
     body:JSON.stringify({product_id:pid, user_id:UID, action:action})
   }).then(function(r){return r.json();}).then(function(d){
     if(d.ok){
-      toast(action==='archive'?'🗂 Arxivga o\'tkazildi':'✅ Faollashtirildi');
+      if(tg) tg.showAlert(action==='archive'?'🗂 Arxivga o\'tkazildi':'✅ Faollashtirildi');
+      else alert(action==='archive'?'🗂 Arxivga o\'tkazildi':'✅ Faollashtirildi');
       loadMy(); loadCatalog();
     } else { alert('Xato: '+(d.error||'')); }
   });
