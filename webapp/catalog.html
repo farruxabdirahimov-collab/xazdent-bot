@@ -24,7 +24,7 @@
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
   background:var(--bg);color:var(--text);
-  padding-bottom:72px;min-height:100vh;
+  padding-bottom:80px;min-height:100vh;
 }
 
 /* TOP */
@@ -351,6 +351,15 @@ body{
   display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
 .nb.on{color:var(--primary)}
 .nb-ic{font-size:22px;line-height:1}
+.nb-badge{
+  position:absolute;top:-4px;right:-8px;
+  min-width:16px;height:16px;
+  background:var(--red,#ef4444);color:#fff;
+  border-radius:8px;font-size:9px;font-weight:700;
+  display:none;align-items:center;justify-content:center;
+  padding:0 4px;line-height:1;
+}
+.nb-badge.on{display:flex}
 
 .spin{display:inline-block;width:26px;height:26px;
   border:2.5px solid var(--border);border-top-color:var(--primary);
@@ -500,6 +509,12 @@ body{
 <div class="nav">
   <button class="nb on" id="nb-cat" onclick="showView('catalog',this)">
     <span class="nb-ic">🛍</span><span>Katalog</span>
+  </button>
+  <button class="nb" id="nb-cart-btn" onclick="openCart()">
+    <span class="nb-ic" style="position:relative;display:inline-block">
+      🛒<span class="nb-badge" id="nb-cbadge"></span>
+    </span>
+    <span>Savat</span>
   </button>
   <button class="nb" id="nb-my" onclick="showView('my',this)" style="display:none">
     <span class="nb-ic">📦</span><span>Mening</span>
@@ -833,6 +848,9 @@ function showView(v, btn) {
   curView = v;
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
   if (btn) btn.classList.add('on');
+  // Savat tugmasi hech qachon "on" bo'lmasin (u panel ochadi)
+  var nbCart = document.getElementById('nb-cart-btn');
+  if(nbCart) nbCart.classList.remove('on');
   var isCat = v === 'catalog';
   document.getElementById('srch-row').style.display = isCat ? 'block' : 'none';
   document.getElementById('cats').style.display = isCat ? 'flex' : 'none';
@@ -953,9 +971,18 @@ function renderQtyRow(pid) {
 
 function updateCartBadge() {
   var total = Object.values(cart).reduce(function(s,i){return s+i.qty;},0);
+  // Header badge
   var badge = document.getElementById('cbadge');
-  badge.textContent = total;
-  badge.classList.toggle('on', total > 0);
+  if(badge){ badge.textContent = total; badge.classList.toggle('on', total > 0); }
+  // Nav badge
+  var nbadge = document.getElementById('nb-cbadge');
+  if(nbadge){
+    nbadge.textContent = total > 9 ? '9+' : total;
+    nbadge.classList.toggle('on', total > 0);
+  }
+  // Nav savat tugmasi highlight
+  var nbBtn = document.getElementById('nb-cart-btn');
+  if(nbBtn) nbBtn.style.color = total > 0 ? 'var(--primary)' : '';
 }
 
 // ── CATS ─────────────────────────────────────────────────────────────────────
