@@ -5248,6 +5248,11 @@ async def api_partner_add_product(req):
     unit         = body.get("unit") or "dona"
     description  = body.get("description") or ""
     images       = (body.get("images") or [])[:5]   # URL list, max 5
+    # Base64 rasmlar — URL bilan parallel ishlaydi
+    # Formatlar: ["data:image/jpeg;base64,..."] yoki ["/9j/4AAQ..."] yoki bitta string
+    _raw_b64 = body.get("photo_base64") or body.get("photos_base64") or []
+    if isinstance(_raw_b64, str): _raw_b64 = [_raw_b64]
+    photos_base64 = [x for x in _raw_b64 if x][:5]   # max 5 ta
     variants     = body.get("variants") or []
     delivery_type = body.get("delivery_type") or "local"
     delivery_days = body.get("delivery_days") or "15-30"
@@ -5261,6 +5266,10 @@ async def api_partner_add_product(req):
         delivery_type = "china"
     if delivery_type not in ("local", "china"):
         delivery_type = "local"
+
+    # Jami rasm soni: URL + base64 = max 5
+    max_remaining = max(0, 5 - len(images))
+    photos_base64 = photos_base64[:max_remaining]
 
     if not uid or not name or price <= 0:
         return _web.Response(
@@ -5401,7 +5410,81 @@ async def api_partner_add_product(req):
                 except Exception as e:
                     log.error(f"[PARTNER] Rasm {i} umumiy xato: {type(e).__name__}: {e}")
 
-        log.info(f"[PARTNER] Jami {len(all_photo_ids)}/{len(images)} rasm saqlandi")
+        log.info(f"[PARTNER] URL rasmlar: {len(all_photo_ids)}/{len(images)} saqlandi")
+
+        # 7b. Base64 rasmlarni qayta ishlash (URL dan keyin)
+        import base64 as _b64p
+        for i, b64_raw in enumerate(photos_base64):
+            sort_idx = len(all_photo_ids)  # URL rasmlardan keyin
+            try:
+                # Header ni tozalaymiz: "data:image/jpeg;base64,..." → "..."
+                if isinstance(b64_raw, str):
+                    if "base64," in b64_raw:
+                        b64_raw = b64_raw.split("base64,")[1]
+                    b64_raw = b64_raw.strip().replace(" ", "+").replace("\n", "")
+                    # Padding
+                    missing = len(b64_raw) % 4
+                    if missing:
+                        b64_raw += "=" * (4 - missing)
+                    img_bytes = _b64p.b64decode(b64_raw)
+                elif isinstance(b64_raw, bytes):
+                    img_bytes = b64_raw
+                else:
+                    log.warning(f"[PARTNER] Base64 rasm {i} noto'g'ri tip: {type(b64_raw)}")
+                    continue
+
+                if len(img_bytes) < 1000:
+                    log.warning(f"[PARTNER] Base64 rasm {i} juda kichik: {len(img_bytes)} bytes")
+                    continue
+
+                log.info(f"[PARTNER] Base64 rasm {i}: {len(img_bytes)} bytes")
+                fname_b64 = f"partner_b64_{pid}_{i}.jpg"
+                buf_b64 = BufferedInputFile(img_bytes, filename=fname_b64)
+
+                # Telegram ga yuborish
+                sent_b64 = None
+                try:
+                    sent_b64 = await bot.send_photo(
+                        storage_chat, buf_b64,
+                        caption=f"🖼 #{art_code} · b64 rasm {sort_idx+1}"
+                    )
+                    log.info(f"[PARTNER] Base64 rasm {i} sotuvchiga yuborildi")
+                except Exception as eb1:
+                    log.warning(f"[PARTNER] Base64 sotuvchiga yuborib bo'lmadi: {eb1}")
+                    if admin_id:
+                        try:
+                            buf_b64_2 = BufferedInputFile(img_bytes, filename=fname_b64)
+                            sent_b64 = await bot.send_photo(
+                                admin_id, buf_b64_2,
+                                caption=f"🖼 [{art_code}] {name} · b64 {sort_idx+1}"
+                            )
+                            log.info(f"[PARTNER] Base64 rasm {i} adminga yuborildi")
+                        except Exception as eb2:
+                            log.error(f"[PARTNER] Base64 adminga ham yuborib bo'lmadi: {eb2}")
+
+                if not sent_b64:
+                    continue
+
+                fid_b64 = sent_b64.photo[-1].file_id
+                all_photo_ids.append(fid_b64)
+
+                await db_insert(
+                    "INSERT INTO product_photos(product_id,file_id,sort_order) "
+                    "VALUES(?,?,?)",
+                    (pid, fid_b64, sort_idx)
+                )
+                # Agar URL rasmlar bo'lmagan bo'lsa — birinchi base64 rasm asosiy
+                if sort_idx == 0:
+                    await db_run(
+                        "UPDATE products SET photo_file_id=? WHERE id=?",
+                        (fid_b64, pid)
+                    )
+                log.info(f"[PARTNER] ✅ Base64 rasm {i+1} bazaga saqlandi: {fid_b64[:20]}...")
+
+            except Exception as eb:
+                log.error(f"[PARTNER] Base64 rasm {i} umumiy xato: {type(eb).__name__}: {eb}")
+
+        log.info(f"[PARTNER] Jami {len(all_photo_ids)} rasm saqlandi (URL+base64)")
 
         # 8. Variantlar
         for v in variants:
