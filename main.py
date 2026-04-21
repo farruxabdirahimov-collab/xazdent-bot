@@ -753,11 +753,19 @@ async def cb_role(call: CallbackQuery, state: FSMContext):
     lg = u["lang"] or "uz"
     await state.set_state(RegState.name)
     if role == "clinic":
-        ask = "🏥 Klinika nomini kiriting:\n\n_Masalan: Sadaf Dental_"
+        ask = (
+            "🏥 *Klinika yoki vrach ma\'lumotlari*\n\n"
+            "Klinika nomini yoki ism-familiyangizni kiriting:\n"
+            "_Masalan: Sadaf Dental — yoki — Jasur Rizayev_"
+        )
     elif role == "zubtex":
-        ask = "🔬 Zubtexnik ismingiz va ish joyingizni kiriting:"
+        ask = (
+            "🔬 *Zubtexnik ma\'lumotlari*\n\n"
+            "Ism-familiyangiz va ish joyingizni kiriting:\n"
+            "_Masalan: Alisher Karimov — DentalLab_"
+        )
     else:
-        ask = "🏪 Do\'kon / kompaniya nomingizni kiriting:"
+        ask = "🏪 Do\'kon yoki kompaniya nomingizni kiriting:\n\n_Masalan: DentalPlus Toshkent_"
     await call.message.answer(ask, reply_markup=ReplyKeyboardRemove())
     await call.answer()
 
@@ -5293,53 +5301,107 @@ async def api_partner_add_product(req):
 
         # 7. Rasmlarni URL dan yuklab Telegram ga yuborish
         import aiohttp as _aiohttp
+        import hashlib as _hl
         all_photo_ids = []
-        storage_uid = uid
-        # Admin ga yuborib file_id olamiz (o'chiramiz)
+        # Rasm saqlash uchun chat: avval sotuvchi, bo'lmasa admin
         admin_id = ADMIN_IDS[0] if ADMIN_IDS else None
+        storage_chat = uid  # Telegram bot sotuvchiga yozishi uchun /start bosgan bo'lishi kerak
 
         async with _aiohttp.ClientSession() as session:
             for i, img_url in enumerate(images):
-                if not img_url: continue
+                # URL tekshirish
+                if not img_url or not isinstance(img_url, str):
+                    log.warning(f"[PARTNER] Rasm {i} URL noto'g'ri: {img_url!r}")
+                    continue
+                img_url = img_url.strip()
+                if not img_url.startswith(("http://","https://")):
+                    log.warning(f"[PARTNER] Rasm {i} URL http emas: {img_url[:50]}")
+                    continue
                 try:
+                    # URL dan rasm yuklaymiz
                     async with session.get(
                         img_url,
-                        timeout=_aiohttp.ClientTimeout(total=15),
+                        timeout=_aiohttp.ClientTimeout(total=20),
                         ssl=False,
-                        headers={"User-Agent": "Mozilla/5.0"}
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+                            "Referer": "https://www.aliexpress.com/"
+                        }
                     ) as resp:
                         if resp.status != 200:
-                            log.warning(f"[PARTNER] Rasm {i} yuklanmadi: {resp.status}")
+                            log.warning(f"[PARTNER] Rasm {i} server {resp.status}: {img_url[:60]}")
                             continue
+                        # Content-Type tekshirish
+                        ct = resp.headers.get("Content-Type","")
+                        if "image" not in ct and "octet" not in ct:
+                            log.warning(f"[PARTNER] Rasm {i} content-type: {ct}")
                         img_bytes = await resp.read()
-                    if len(img_bytes) < 500:
+
+                    # Minimum hajm tekshirish
+                    if len(img_bytes) < 1000:
+                        log.warning(f"[PARTNER] Rasm {i} juda kichik: {len(img_bytes)} bytes")
                         continue
-                    import hashlib as _hl
-                    fname = _hl.md5(img_url.encode()).hexdigest()[:8] + ".jpg"
+
+                    log.info(f"[PARTNER] Rasm {i} yuklandi: {len(img_bytes)} bytes")
+
+                    # Fayl nomi
+                    ext = ".jpg"
+                    if "png" in img_url.lower(): ext = ".png"
+                    elif "webp" in img_url.lower(): ext = ".webp"
+                    fname = f"partner_{pid}_{i}{ext}"
+
                     buf = BufferedInputFile(img_bytes, filename=fname)
-                    # Sotuvchiga yuborib saqlashga urinamiz, bo'lmasa adminga
+
+                    # Telegram ga yuboramiz — sotuvchi chatiga
+                    sent = None
+                    # 1-urinish: sotuvchiga
                     try:
-                        sent = await bot.send_photo(storage_uid, buf,
-                            caption=f"📦 #{art_code} rasm {i+1}")
-                    except Exception:
+                        sent = await bot.send_photo(
+                            storage_chat, buf,
+                            caption=f"🖼 #{art_code} · rasm {i+1}/{len(images)}"
+                        )
+                        log.info(f"[PARTNER] Rasm {i+1} sotuvchiga yuborildi")
+                    except Exception as e1:
+                        log.warning(f"[PARTNER] Sotuvchiga yuborib bo'lmadi: {e1}")
+                        # 2-urinish: adminga
                         if admin_id:
-                            sent = await bot.send_photo(admin_id, buf,
-                                caption=f"📦 #{art_code} rasm {i+1}")
-                        else:
-                            continue
+                            try:
+                                buf2 = BufferedInputFile(img_bytes, filename=fname)
+                                sent = await bot.send_photo(
+                                    admin_id, buf2,
+                                    caption=f"🖼 [{art_code}] {name} · rasm {i+1}"
+                                )
+                                log.info(f"[PARTNER] Rasm {i+1} adminga yuborildi")
+                            except Exception as e2:
+                                log.error(f"[PARTNER] Adminga ham yuborib bo'lmadi: {e2}")
+
+                    if not sent:
+                        log.error(f"[PARTNER] Rasm {i} — hech qayerga yuborib bo'lmadi")
+                        continue
+
+                    # file_id olish va saqlash
                     fid = sent.photo[-1].file_id
                     all_photo_ids.append(fid)
+
+                    # product_photos jadvaliga saqlash
                     await db_insert(
-                        "INSERT INTO product_photos(product_id,file_id,sort_order) VALUES(?,?,?)",
+                        "INSERT INTO product_photos(product_id,file_id,sort_order) "
+                        "VALUES(?,?,?)",
                         (pid, fid, i)
                     )
+                    # Birinchi rasm — products.photo_file_id ga ham
                     if i == 0:
                         await db_run(
                             "UPDATE products SET photo_file_id=? WHERE id=?",
-                            (fid, pid))
-                    log.info(f"[PARTNER] Rasm {i+1} saqlandi")
+                            (fid, pid)
+                        )
+                    log.info(f"[PARTNER] ✅ Rasm {i+1} bazaga saqlandi: {fid[:20]}...")
+
                 except Exception as e:
-                    log.error(f"[PARTNER] Rasm {i} xato: {e}")
+                    log.error(f"[PARTNER] Rasm {i} umumiy xato: {type(e).__name__}: {e}")
+
+        log.info(f"[PARTNER] Jami {len(all_photo_ids)}/{len(images)} rasm saqlandi")
 
         # 8. Variantlar
         for v in variants:
@@ -6164,6 +6226,27 @@ async def start_webserver():
                 return _web.Response(
                     text=_json.dumps({"ok":False,"error":"foydalanuvchi topilmadi"}),
                     content_type="application/json")
+
+            # Telefon va viloyat majburiy tekshiruv
+            if not u.get("phone"):
+                return _web.Response(
+                    text=_json.dumps({
+                        "ok": False,
+                        "error": "phone_required",
+                        "message": "📞 Telefon raqamingiz kiritilmagan!\n\nBotga qayting va /start bosing."
+                    }),
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin":"*"})
+            if not u.get("region"):
+                return _web.Response(
+                    text=_json.dumps({
+                        "ok": False,
+                        "error": "region_required",
+                        "message": "📍 Viloyatingiz tanlanmagan!\n\nBotga qayting va /start bosing."
+                    }),
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin":"*"})
+
             # Arxiv mahsulotlarga buyurtma blok
             for it in flat_items:
                 pid_check = int(it.get("product_id") or 0)
