@@ -5940,8 +5940,19 @@ async def start_webserver():
                 "variants": [{"size_name":v["size_name"],"article":v["article"] or "",
                                "stock":v["stock"] or 0,"price":float(v["price"] or 0)} for v in vars_rows]
             })
+        # USD kurs
+        usd_row = await db_get("SELECT value FROM settings WHERE key='usd_rate'")
+        usd_rate = float(usd_row["value"]) if usd_row and usd_row["value"] else 12800.0
+        usd_updated = ""
+        upd_row = await db_get("SELECT value FROM settings WHERE key='usd_rate_updated'")
+        if upd_row: usd_updated = upd_row["value"] or ""
+
         return _web.Response(
-            text=_json.dumps({"products": data}, ensure_ascii=False),
+            text=_json.dumps({
+                "products": data,
+                "usd_rate": usd_rate,
+                "usd_updated": usd_updated
+            }, ensure_ascii=False),
             content_type="application/json",
             headers={"Access-Control-Allow-Origin": "*"})
     app.router.add_get("/api/catalog", _api_catalog)
@@ -6952,9 +6963,13 @@ async def start_webserver():
                                  content_type="application/json",
                                  headers={"Access-Control-Allow-Origin":"*"})
         data = {
-            "ball_price":  await get_setting("ball_price") or "1000",
-            "card_number": await get_setting("card_number") or "",
-            "elon_price":  await get_setting("elon_price") or "0",
+            "ball_price":    await get_setting("ball_price") or "1000",
+            "card_number":   await get_setting("card_number") or "",
+            "elon_price":    await get_setting("elon_price") or "0",
+            "trial_days":    await get_setting("trial_days") or "30",
+            "sub_price":     await get_setting("sub_price") or "300000",
+            "usd_rate":      await get_setting("usd_rate") or "12800",
+            "usd_rate_updated": await get_setting("usd_rate_updated") or "",
         }
         return _web.Response(text=_json.dumps({"ok":True,"data":data}),
                              content_type="application/json",
@@ -6966,9 +6981,24 @@ async def start_webserver():
             body = await req.json()
             if int(body.get("admin_id",0)) not in ADMIN_IDS:
                 return _web.Response(text=_json.dumps({"ok":False}), content_type="application/json")
-            for key in ["ball_price","card_number","elon_price"]:
-                if key in body: await update_setting(key, str(body[key]))
-            return _web.Response(text=_json.dumps({"ok":True}), content_type="application/json")
+            for key in ["ball_price","card_number","elon_price","trial_days","sub_price"]:
+                if body.get(key): await update_setting(key, str(body[key]))
+            # USD kurs qo'lda o'zgartirish
+            if body.get("usd_rate"):
+                await update_setting("usd_rate", str(float(body["usd_rate"])))
+                from datetime import datetime as _dt2
+                await update_setting("usd_rate_updated", _dt2.now().strftime("%d.%m.%Y %H:%M") + " (qo\'lda)")
+            # CBU dan yangilash
+            usd_rate_new = None
+            if body.get("refresh_usd"):
+                usd_rate_new = await _get_usd_rate_from_cbu()
+                if usd_rate_new:
+                    await update_setting("usd_rate", str(usd_rate_new))
+                    from datetime import datetime as _dt3
+                    await update_setting("usd_rate_updated", _dt3.now().strftime("%d.%m.%Y %H:%M") + " (CBU)")
+            resp = {"ok": True}
+            if usd_rate_new: resp["usd_rate"] = usd_rate_new
+            return _web.Response(text=_json.dumps(resp), content_type="application/json")
         except Exception as e:
             return _web.Response(text=_json.dumps({"ok":False,"error":str(e)}),
                                  content_type="application/json")
@@ -7526,6 +7556,59 @@ async def start_webserver():
     await site.start()
     log.info(f"🌐 Web server: http://0.0.0.0:{port}")
 
+
+async def _get_usd_rate_from_cbu():
+    """CBU dan USD kursini oladi."""
+    try:
+        import aiohttp as _ah
+        async with _ah.ClientSession() as session:
+            async with session.get(
+                "https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/",
+                timeout=_ah.ClientTimeout(total=10),
+                ssl=False
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    if data and len(data) > 0:
+                        rate = float(data[0].get("Rate", 0))
+                        if rate > 1000:  # Mantiqiy tekshiruv
+                            return rate
+    except Exception as e:
+        log.error(f"CBU kurs olish xato: {e}")
+    return None
+
+async def usd_rate_checker():
+    """Har kuni 09:00 da USD kursini yangilaydi."""
+    import asyncio
+    while True:
+        try:
+            from datetime import datetime as _dt
+            now = _dt.now()
+            # Keyingi 09:00 gacha kutamiz
+            next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+            if now >= next_run:
+                from datetime import timedelta as _td
+                next_run += _td(days=1)
+            wait_secs = (next_run - now).total_seconds()
+            log.info(f"💱 USD kurs yangilanishi: {next_run.strftime('%d.%m %H:%M')} da ({int(wait_secs/3600)}h)")
+            await asyncio.sleep(wait_secs)
+
+            # CBU dan kurs olish
+            rate = await _get_usd_rate_from_cbu()
+            if rate:
+                await db_run(
+                    "UPDATE settings SET value=? WHERE key='usd_rate'",
+                    (str(rate),))
+                await db_run(
+                    "UPDATE settings SET value=? WHERE key='usd_rate_updated'",
+                    (_dt.now().strftime("%d.%m.%Y %H:%M"),))
+                log.info(f"✅ USD kurs yangilandi: {rate:.2f} so'm")
+            else:
+                log.warning("⚠️ CBU dan kurs olinmadi — eski qiymat saqlanadi")
+        except Exception as e:
+            log.error(f"usd_rate_checker xato: {e}")
+            await asyncio.sleep(3600)  # Xato bo'lsa 1 soatdan keyin qayta
+
 async def expire_checker():
     """Har 15 daqiqada muddati o'tgan ehtiyojlarni yopadi."""
     while True:
@@ -7579,6 +7662,7 @@ async def main():
     await start_webserver()
     asyncio.create_task(expire_checker())
     asyncio.create_task(delivery_checker())
+    asyncio.create_task(usd_rate_checker())
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 if __name__ == "__main__":
