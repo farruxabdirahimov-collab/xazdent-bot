@@ -360,6 +360,23 @@ body{
   padding:0 4px;line-height:1;
 }
 .nb-badge.on{display:flex}
+/* Valyuta toggle */
+.curr-toggle{
+  display:flex;align-items:center;gap:2px;
+  background:var(--border);border-radius:20px;
+  padding:3px;flex-shrink:0;
+}
+.curr-btn{
+  padding:4px 10px;border-radius:16px;
+  border:none;font-size:11px;font-weight:700;
+  cursor:pointer;background:transparent;
+  color:var(--hint);transition:all .2s;
+  font-family:inherit;
+}
+.curr-btn.on{
+  background:#fff;color:var(--primary);
+  box-shadow:0 1px 4px rgba(0,0,0,0.1);
+}
 
 .spin{display:inline-block;width:26px;height:26px;
   border:2.5px solid var(--border);border-top-color:var(--primary);
@@ -470,9 +487,15 @@ body{
 <div class="top">
   <div class="top-row">
     <div class="top-title" id="top-title">🛍 XazDent Market</div>
-    <button class="cart-ic" id="cart-ic" onclick="openCart()">
-      🛒<div class="cbadge" id="cbadge"></div>
-    </button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="curr-toggle">
+        <button class="curr-btn on" id="btn-uzs" onclick="setCurr('uzs',this)">SO'M</button>
+        <button class="curr-btn" id="btn-usd" onclick="setCurr('usd',this)">USD</button>
+      </div>
+      <button class="cart-ic" id="cart-ic" onclick="openCart()">
+        🛒<div class="cbadge" id="cbadge"></div>
+      </button>
+    </div>
   </div>
   <div class="srch-row" id="srch-row">
     <div class="srch-wrap">
@@ -777,6 +800,36 @@ if (!UID) UID = parseInt(_qp.get('uid')||'0')||0;
 ROLE = _qp.get('role') || 'clinic';
 
 var cart = {}, curCat = '', curSearch = '', curView = 'catalog', curDelivery = '', curInst = 0;
+var curCurr = 'uzs';   // 'uzs' yoki 'usd'
+var usdRate = 12800;   // API dan yangilanadi
+var usdUpdated = '';
+
+function setCurr(c, btn){
+  curCurr = c;
+  document.querySelectorAll('.curr-btn').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  // Narxlarni qayta render qilamiz
+  if(curView === 'catalog') loadCatalog();
+  else if(curView === 'my') loadMy();
+}
+
+function fmtPrice(price){
+  if(curCurr === 'usd'){
+    var usd = price / usdRate;
+    if(usd < 10) return '$' + usd.toFixed(1);
+    return '$' + Math.round(usd).toLocaleString();
+  }
+  return fmt(price) + " so'm";
+}
+
+function fmtPriceDual(price){
+  // So'm + dollar
+  var somStr = fmt(price) + " so'm";
+  var usdStr = '$' + (price/usdRate < 10 ? (price/usdRate).toFixed(1) : Math.round(price/usdRate));
+  return curCurr === 'usd'
+    ? usdStr + ' <span style="color:var(--hint);font-size:10px">(' + somStr + ')</span>'
+    : somStr + ' <span style="color:var(--hint);font-size:10px">(' + usdStr + ')</span>';
+}
 var formPhotos = [], varCount = 0, _prods = {};
 var varSelections = {}, varPrices = {}, detPid = null, detProd = null, detQty = 1;
 
@@ -821,10 +874,10 @@ function deliveryBadgeFull(p){
   return '<div class="dbadges" style="margin:6px 0">'+b+'</div>';
 }
 function minPriceStr(p){
-  if(!p.variants||!p.variants.length) return fmt(p.price);
+  if(!p.variants||!p.variants.length) return fmtPrice(p.price);
   var prices=[p.price];
   p.variants.forEach(function(v){ if(v.price&&v.price>0) prices.push(v.price); });
-  return fmt(Math.min.apply(null,prices));
+  return fmtPrice(Math.min.apply(null,prices));
 }
 function filterVars(q) {
   var rows = document.querySelectorAll('#var-list .var-multi-row');
@@ -837,10 +890,10 @@ function filterVars(q) {
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmt(n){ return Math.round(n||0).toLocaleString(); }
 function minPrice(p){
-  if(!p.variants||!p.variants.length) return fmt(p.price);
+  if(!p.variants||!p.variants.length) return fmtPrice(p.price);
   var prices=[p.price];
   p.variants.forEach(function(v){ if(v.price&&v.price>0) prices.push(v.price); });
-  return fmt(Math.min.apply(null,prices));
+  return fmtPrice(Math.min.apply(null,prices));
 }
 
 // ── VIEW ─────────────────────────────────────────────────────────────────────
@@ -872,6 +925,8 @@ function loadCatalog() {
   if(curInst) _durl+='&installment=1';
   fetch(_durl)
     .then(function(r){ return r.json(); }).then(function(d) {
+      // USD kurs yangilanadi
+      if(d.usd_rate) { usdRate = d.usd_rate; usdUpdated = d.usd_updated || ''; }
       var prods = d.products || [];
       prods.forEach(function(p){ _prods[p.id] = p; });
       if (!prods.length) {
@@ -1128,7 +1183,7 @@ function openDetail(pid) {
       '<div class="dname">'+esc(p.name)+'</div>'+
       (p.article_code?'<div class="dcode">📌 '+esc(p.article_code)+'</div>':'')+
       '<div class="dshop">🏪 '+esc(p.shop_name||'?')+' · 📍 '+esc(p.region||'')+'</div>'+
-      '<div class="dprice">'+fmt(p.price)+' so\'m <span style="font-size:14px;font-weight:400;color:var(--hint)">/'+esc(p.unit)+'</span></div>'+
+      '<div class="dprice">'+fmtPrice(p.price)+'<span style="font-size:14px;font-weight:400;color:var(--hint)">/'+esc(p.unit)+'</span></div>'+
       (p.description?'<div class="ddesc">'+esc(p.description)+'</div>':'')+
       buyerHtml+
     '</div>';
@@ -1169,7 +1224,7 @@ function updVarUI(name) {
     total += pr * varSelections[n];
   });
   var tel = document.getElementById('var-total');
-  if (tel) tel.textContent = total > 0 ? '💰 Jami: '+fmt(total)+' so\'m' : '';
+  if (tel) tel.textContent = total > 0 ? '💰 Jami: '+fmtPrice(total) : '';
 }
 
 function detAddCart() {
@@ -1219,12 +1274,12 @@ function shareProd(pid) {
   var p = _prods[pid]; if (!p) return;
   var code = p.article_code || ('p_'+pid);
   var url = 'https://t.me/XazdentBot?start=xz_'+code;
-  var txt = '🦷 '+p.name+' — '+fmt(p.price)+' so\'m/'+p.unit+
+  var txt = '🦷 '+p.name+' — '+fmtPrice(p.price)+'/'+p.unit+
     '\n🏪 '+(p.shop_name||'')+
     (p.article_code?'\n📌 '+p.article_code:'')+
     '\n\n👆 '+url;
   if (tg && tg.openTelegramLink) {
-    var shareUrl = 'https://t.me/share/url?url='+encodeURIComponent(url)+'&text='+encodeURIComponent('🦷 '+p.name+' — '+fmt(p.price)+' so\'m');
+    var shareUrl = 'https://t.me/share/url?url='+encodeURIComponent(url)+'&text='+encodeURIComponent('🦷 '+p.name+' — '+fmtPrice(p.price));
     tg.openTelegramLink(shareUrl);
   } else if (navigator.clipboard) {
     navigator.clipboard.writeText(url).then(function(){ alert('Havola nusxalandi!'); });
@@ -1311,7 +1366,7 @@ function loadMy() {
           '<div class="mpimg">'+img+'</div>'+
           '<div class="mpinfo">'+
             '<div class="mpname">'+esc(p.name)+'</div>'+
-            '<div class="mpprice">'+fmt(p.price)+' so\'m/'+esc(p.unit)+'</div>'+
+            '<div class="mpprice">'+fmtPrice(p.price)+'/'+esc(p.unit)+'</div>'+
             (p.article_code?'<div class="mpcode">📌 '+esc(p.article_code)+'</div>':'')+
           '</div>'+
           '<div class="mpbtns">'+
@@ -1518,7 +1573,7 @@ function renderCart() {
       '<div class="ci-img">'+img+'</div>'+
       '<div class="ci-info">'+
         '<div class="ci-name">'+esc(label)+'</div>'+
-        '<div class="ci-price">'+fmt(sub)+' so\'m</div>'+
+        '<div class="ci-price">'+fmtPrice(sub)+'</div>'+
       '</div>'+
       '<div class="ci-ctrl">'+
         '<button class="ciqb" onclick="cChQty(\''+key+'\', -1)">−</button>'+
@@ -1529,7 +1584,7 @@ function renderCart() {
     '</div>';
   });
   document.getElementById('citems').innerHTML = html;
-  document.getElementById('ctotal').textContent = fmt(total)+' so\'m';
+  document.getElementById('ctotal').textContent = fmtPrice(total);
 }
 
 function cChQty(key, d) {
@@ -1594,7 +1649,7 @@ function selInst(months, el) {
   var total = items.reduce(function(s,it){ return s+(it.product.price||0)*it.qty; },0);
   var monthly = Math.ceil(total / months);
   document.getElementById('inst-calc').textContent =
-    months + 'x · ' + fmt(monthly) + ' so\'m / oy';
+    months + 'x · ' + fmtPrice(monthly) + ' / oy';
   var btn = document.getElementById('pay-confirm-btn');
   btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
 }
