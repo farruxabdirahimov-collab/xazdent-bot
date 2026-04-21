@@ -1584,10 +1584,21 @@ function saveSett(){
     elon_price:document.getElementById('si-elon').value,
     trial_days:document.getElementById('si-trial')&&document.getElementById('si-trial').value,
     sub_price:document.getElementById('si-sub')&&document.getElementById('si-sub').value,
+    usd_rate:document.getElementById('si-usd')&&document.getElementById('si-usd').value,
   }).then(function(d){alert(d.ok?'✓ SAQLANDI':'⚠ XATO');});
 }
 
 function dlExcel(){window.location.href='/api/admin/excel?uid='+UID;}
+function refreshUsdRate(){
+  apiPost('/api/admin/save_settings',{refresh_usd:true}).then(function(d){
+    if(d.ok && d.usd_rate){
+      var el=document.getElementById('si-usd');
+      if(el) el.value=d.usd_rate;
+      alert('✅ CBU kurs: '+d.usd_rate+' so\'m');
+      loaded.settings=false; loadSettings();
+    } else { alert('⚠️ CBU dan kurs olinmadi'); }
+  });
+}
 
 // ── COUNTDOWN ────────────────────────────────────────────────────────────────
 function updateCountdown(){
