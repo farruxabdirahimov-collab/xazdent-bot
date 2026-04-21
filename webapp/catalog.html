@@ -1418,8 +1418,8 @@ function addEVarRow(sname, art, stk, pr){
       '<input class="finp" id="evq-'+id+'" type="number" placeholder="Stok" style="margin-bottom:0" value="'+(stk||'')+'">'+
       '<input class="finp" id="eva-'+id+'" placeholder="Artikul" style="margin-bottom:0" value="'+(art||'')+'">'+
     '</div>'+
-    '<button onclick="document.getElementById('evr-'+id+'').remove()" '+
-      'style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0;margin-bottom:8px">✕ O'chirish</button>';
+    '<button onclick="document.getElementById(&quot;evr-'+id+'&quot;).remove()" '+
+      'style="font-size:11px;color:var(--red);background:none;border:none;cursor:pointer;padding:0;margin-bottom:8px">&#x2715; O&#39;chirish</button>';
   document.getElementById('e-var-editor').appendChild(row);
 }
 
