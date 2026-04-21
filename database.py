@@ -275,6 +275,15 @@ async def init_db():
         await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_url TEXT")
+        # USD kurs sozlamalari
+        await c.execute("""
+            INSERT INTO settings(key,value) VALUES('usd_rate','12800')
+            ON CONFLICT(key) DO NOTHING
+        """)
+        await c.execute("""
+            INSERT INTO settings(key,value) VALUES('usd_rate_updated','')
+            ON CONFLICT(key) DO NOTHING
+        """)
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_type TEXT DEFAULT 'local'")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS delivery_days TEXT DEFAULT '2-3'")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS installment INTEGER DEFAULT 0")
