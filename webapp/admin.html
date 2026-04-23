@@ -501,6 +501,30 @@ textarea.finp{resize:vertical;min-height:80px;}
 }
 .ud-detail.open{display:block;}
 
+/* PARTNER */
+.partner-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:12px;margin-bottom:8px;
+}
+.partner-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.partner-av{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--card2);font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.partner-info{flex:1;min-width:0;}
+.partner-name{font-size:14px;font-weight:600;}
+.partner-sub{font-size:11px;color:var(--hint);margin-top:2px;}
+.partner-limit{
+  height:6px;background:rgba(255,255,255,0.06);
+  border-radius:3px;margin:8px 0 4px;overflow:hidden;
+}
+.partner-limit-bar{height:100%;border-radius:3px;transition:width .8s ease;}
+.partner-limit-bar.ok{background:linear-gradient(90deg,var(--neon1),var(--neon3));}
+.partner-limit-bar.warn{background:linear-gradient(90deg,var(--amber),#f97316);}
+.partner-limit-bar.full{background:linear-gradient(90deg,var(--red),#dc2626);}
+
 /* COUNTDOWN */
 .countdown-bar{
   background:linear-gradient(135deg,rgba(0,245,160,0.08),rgba(124,58,237,0.08));
@@ -570,6 +594,7 @@ textarea.finp{resize:vertical;min-height:80px;}
     <button class="tab"     onclick="fetchPage('market',this)">🏪 MARKET</button>
     <button class="tab"     onclick="fetchPage('announce',this)">📢 E'LON</button>
     <button class="tab"     onclick="fetchPage('warehouse',this)">📦 OMBOR</button>
+    <button class="tab"     onclick="fetchPage('partner',this)">🤝 HAMKOR</button>
   </div>
   <div class="tabs" id="tabs2">
     <button class="tab"     onclick="fetchPage('analytics',this)">📈 ANALITIKA</button>
@@ -722,6 +747,30 @@ textarea.finp{resize:vertical;min-height:80px;}
 <!-- OMBOR -->
 <div class="pg" id="pg-warehouse">
   <div id="warehouse-body"><div class="loading"><div class="cp-loader"></div>YUKLANMOQDA...</div></div>
+</div>
+
+<!-- HAMKOR BOT -->
+<div class="pg" id="pg-partner">
+  <div class="card" style="margin-bottom:10px">
+    <div class="sec-title" style="margin-top:0">🤝 HAMKOR BOT SOTUVCHILAR</div>
+    <div style="font-size:11px;color:var(--hint);margin-bottom:10px">
+      Sotuvchilarga hamkor bot orqali mahsulot yuklash ruxsatini boshqaring
+    </div>
+
+    <!-- Yangi ruxsat berish -->
+    <div style="margin-bottom:12px">
+      <div class="flabel">SOTUVCHI UID (Telegram ID)</div>
+      <div style="display:flex;gap:8px">
+        <input class="finp" id="p-uid" type="number" placeholder="123456789" style="margin-bottom:0;flex:1">
+        <input class="finp" id="p-limit" type="number" placeholder="50" style="margin-bottom:0;width:70px" value="50">
+        <button class="btn btn-primary btn-sm" onclick="partnerGrant()">✅ RUXSAT</button>
+      </div>
+      <input class="finp" id="p-note" placeholder="Izoh (ixtiyoriy)" style="margin-top:6px;margin-bottom:0">
+    </div>
+    <div id="partner-action-res" style="font-size:11px;margin-bottom:8px"></div>
+  </div>
+
+  <div id="partner-body"><div class="loading"><div class="cp-loader"></div>YUKLANMOQDA...</div></div>
 </div>
 
 <!-- KATEGORIYALAR -->
@@ -896,7 +945,8 @@ function fetchPage(name,btn){
              announce:loadAnnHistory,subs:loadSubs,complaints:loadComplaints,
              checks:loadChecks,settings:loadSettings,
              warehouse:loadWarehouse,categories:loadCategories,
-             analytics:loadAnalytics};
+             analytics:loadAnalytics,
+             partner:loadPartner};
     if(fns[name]) fns[name]();
   }
 }
@@ -1735,6 +1785,97 @@ function loadAnalytics(){
     document.getElementById('analytics-body').innerHTML=
       sumHtml+catHtml+viewHtml+cartHtml+srchHtml;
   }).catch(function(){showErr('analytics-body','Xato');});
+}
+
+function loadPartner(){
+  document.getElementById('partner-body').innerHTML='<div class="loading"><div class="cp-loader"></div></div>';
+  api('/api/admin/partner_sellers').then(function(d){
+    if(!d.ok){showErr('partner-body','Xato');return;}
+    var rows=d.data||[];
+    if(!rows.length){
+      document.getElementById('partner-body').innerHTML=
+        '<div class="loading">// HAMKOR SOTUVCHILAR YO\'Q</div>';
+      return;
+    }
+    var html='';
+    rows.forEach(function(r){
+      var used=r.used||0, lim=r.monthly_limit||50;
+      var pct=Math.min(100,Math.round(used/lim*100));
+      var barCls=pct>=90?'full':pct>=60?'warn':'ok';
+      var badge=r.status==='active'?
+        '<span class="badge badge-ok">AKTIV</span>':
+        '<span class="badge badge-err">BLOKLANGAN</span>';
+      html+='<div class="partner-card">'+
+        '<div class="partner-hdr">'+
+          '<div class="partner-av">🛒</div>'+
+          '<div class="partner-info">'+
+            '<div class="partner-name">'+esc(r.name||'?')+'</div>'+
+            '<div class="partner-sub">'+
+              (r.phone?'📞 '+esc(r.phone)+' · ':'')+
+              '🆔 '+r.uid+
+            '</div>'+
+            '<div class="partner-sub">📍 '+esc(r.region||'—')+'</div>'+
+          '</div>'+
+          badge+
+        '</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--hint)">'+
+          '<span>Oylik: '+used+' / '+lim+' ta</span>'+
+          '<span>Jami yuklagan: '+r.partner_products+' ta</span>'+
+        '</div>'+
+        '<div class="partner-limit">'+
+          '<div class="partner-limit-bar '+barCls+'" style="width:'+pct+'%"></div>'+
+        '</div>'+
+        '<div class="btn-row" style="margin-top:8px">'+
+          (r.status==='active'?
+            '<button class="btn btn-danger btn-sm" onclick="partnerBlock('+r.uid+')">⊘ BLOKLASH</button>':
+            '<button class="btn btn-outline btn-sm" onclick="partnerUnblock('+r.uid+')">✓ RUXSAT</button>')+
+          '<button class="btn btn-outline btn-sm" onclick="partnerSetLimit('+r.uid+','+lim+')">📦 LIMIT</button>'+
+          '<button class="btn btn-outline btn-sm" onclick="msgUser('+r.uid+')">✉ XABAR</button>'+
+        '</div>'+
+        (r.note?'<div style="font-size:10px;color:var(--hint);margin-top:6px">📝 '+esc(r.note)+'</div>':'')+
+      '</div>';
+    });
+    document.getElementById('partner-body').innerHTML=html;
+  }).catch(function(){showErr('partner-body','Xato');});
+}
+
+function partnerAction(uid, action, limit, note){
+  var res=document.getElementById('partner-action-res');
+  res.textContent='// YUKLANMOQDA...';res.style.color='var(--hint)';
+  apiPost('/api/admin/partner_toggle',{
+    target_uid:uid, action:action,
+    limit:limit||50, note:note||''
+  }).then(function(d){
+    if(d.ok){
+      res.textContent='✓ '+d.message;res.style.color='var(--neon1)';
+      loaded.partner=false;loadPartner();
+    } else {
+      res.textContent='⚠ '+(d.error||'Xato');res.style.color='var(--red)';
+    }
+  });
+}
+
+function partnerGrant(){
+  var uid=parseInt(document.getElementById('p-uid').value)||0;
+  var lim=parseInt(document.getElementById('p-limit').value)||50;
+  var note=document.getElementById('p-note').value.trim();
+  if(!uid){alert('UID kiriting!');return;}
+  partnerAction(uid,'grant',lim,note);
+}
+
+function partnerBlock(uid){
+  if(!confirm('BLOKLASH?'))return;
+  partnerAction(uid,'block',0,'');
+}
+
+function partnerUnblock(uid){
+  var lim=parseInt(prompt('Yangi limit (dona):','50'))||50;
+  partnerAction(uid,'grant',lim,'');
+}
+
+function partnerSetLimit(uid,curLim){
+  var lim=parseInt(prompt('Yangi limit (dona):',curLim))||50;
+  partnerAction(uid,'set_limit',lim,'');
 }
 
 function loadWarehouse(){
