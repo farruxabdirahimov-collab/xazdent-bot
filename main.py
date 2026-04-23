@@ -5276,6 +5276,31 @@ async def api_partner_add_product(req):
             text=_json.dumps({"ok": False, "error": "uid, name, price majburiy"}),
             content_type="application/json", status=400)
 
+    # Ruxsat va limit tekshirish
+    pa = await db_get("SELECT * FROM partner_access WHERE user_id=?", (uid,))
+    if not pa:
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": "Hamkor bot ruxsati yo\'q. Admin bilan bog\'laning."}),
+            content_type="application/json", status=403)
+    if pa["status"] != "active":
+        return _web.Response(
+            text=_json.dumps({"ok": False, "error": "Ruxsat bloklangan"}),
+            content_type="application/json", status=403)
+    from datetime import datetime
+    cur_month = datetime.now().strftime("%Y-%m")
+    if pa.get("last_reset_month") != cur_month:
+        await db_run(
+            "UPDATE partner_access SET used_this_month=0, last_reset_month=? WHERE user_id=?",
+            (cur_month, uid))
+        pa = await db_get("SELECT * FROM partner_access WHERE user_id=?", (uid,))
+    if int(pa["used_this_month"] or 0) >= int(pa["monthly_limit"] or 50):
+        return _web.Response(
+            text=_json.dumps({
+                "ok": False,
+                "error": f"Oylik limit tugadi ({pa['monthly_limit']} ta). Keyingi oy yangilanadi."
+            }),
+            content_type="application/json", status=429)
+
     try:
         # 4. Do'kon tekshirish / yaratish
         shop = await db_get("SELECT * FROM shops WHERE owner_id=?", (uid,))
@@ -5525,6 +5550,13 @@ async def api_partner_add_product(req):
                     caption, reply_markup=channel_kb)
         except Exception as ch_e:
             log.error(f"[PARTNER] Kanal post xato: {ch_e}")
+
+        # Oylik hisoblagichni oshiramiz
+        pa_check = await db_get("SELECT id FROM partner_access WHERE user_id=?", (uid,))
+        if pa_check:
+            await db_run(
+                "UPDATE partner_access SET used_this_month=COALESCE(used_this_month,0)+1 WHERE user_id=?",
+                (uid,))
 
         log.info(f"[PARTNER] Yangi mahsulot: {art_code} — {name} uid={uid}")
         return _web.Response(
@@ -6256,6 +6288,337 @@ async def start_webserver():
             return _web.Response(
                 text=_json.dumps({"ok":False,"error":str(e)}),
                 content_type="application/json")
+
+
+    # ── HAMKOR BOT ENDPOINTLARI ──────────────────────────────────────────────
+
+    async def _api_partner_check_access(req):
+        """
+        Hamkor bot: uid bo'yicha ruxsat va limit tekshirish.
+        GET /api/partner/check_access?uid=123456789
+        Headers: X-Partner-Token: <PARTNER_TOKEN>
+        """
+        token = req.headers.get("X-Partner-Token", "")
+        p_token = os.getenv("PARTNER_TOKEN", "")
+        if not p_token or token != p_token:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "Ruxsat yo\'q"}),
+                content_type="application/json", status=403,
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        uid = int(req.query.get("uid") or 0)
+        if not uid:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "uid kerak"}),
+                content_type="application/json", status=400,
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # Foydalanuvchi tekshirish
+        u = await db_get(
+            "SELECT id, clinic_name, full_name, role, phone, region FROM users WHERE id=?",
+            (uid,))
+        if not u:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "Foydalanuvchi topilmadi"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        if u["role"] != "seller":
+            return _web.Response(
+                text=_json.dumps({
+                    "ok": False,
+                    "error": "Faqat sotuvchilar uchun",
+                    "role": u["role"]
+                }),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # Ruxsat jadvali
+        pa = await db_get("SELECT * FROM partner_access WHERE user_id=?", (uid,))
+
+        if not pa:
+            return _web.Response(
+                text=_json.dumps({
+                    "ok": False,
+                    "error": "Hamkor bot uchun ruxsat berilmagan",
+                    "hint": "Admin orqali ruxsat so\'rang"
+                }),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        if pa["status"] != "active":
+            return _web.Response(
+                text=_json.dumps({
+                    "ok": False,
+                    "error": "Ruxsat bloklangan",
+                    "status": pa["status"]
+                }),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # Oylik limitni yangilash
+        from datetime import datetime
+        cur_month = datetime.now().strftime("%Y-%m")
+        if pa.get("last_reset_month") != cur_month:
+            await db_run(
+                "UPDATE partner_access SET used_this_month=0, last_reset_month=? WHERE user_id=?",
+                (cur_month, uid))
+            pa = await db_get("SELECT * FROM partner_access WHERE user_id=?", (uid,))
+
+        limit = int(pa["monthly_limit"] or 50)
+        used  = int(pa["used_this_month"] or 0)
+        name  = u.get("clinic_name") or u.get("full_name") or "Sotuvchi"
+
+        return _web.Response(
+            text=_json.dumps({
+                "ok":        True,
+                "uid":       uid,
+                "name":      name,
+                "phone":     u.get("phone") or "",
+                "region":    u.get("region") or "",
+                "status":    pa["status"],
+                "limit":     limit,
+                "used":      used,
+                "remaining": max(0, limit - used),
+                "can_upload": used < limit,
+            }, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/partner/check_access", _api_partner_check_access)
+
+    async def _admin_partner_sellers(req):
+        """
+        Admin: hamkor bot sotuvchilar ro\'yxati.
+        GET /api/admin/partner_sellers
+        """
+        uid = int(req.query.get("uid", 0))
+        if ADMIN_IDS and uid not in ADMIN_IDS:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "ruxsat yo\'q"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        rows = await db_all("""
+            SELECT
+                pa.user_id, pa.status, pa.monthly_limit,
+                pa.used_this_month, pa.last_reset_month,
+                pa.created_at, pa.note,
+                u.clinic_name, u.full_name, u.phone, u.region,
+                COALESCE(
+                    (SELECT COUNT(*) FROM products p
+                     JOIN shops s ON p.shop_id=s.id
+                     WHERE s.owner_id=pa.user_id AND p.source_url IS NOT NULL
+                     AND p.source_url != \'\'),
+                    0
+                ) as partner_products
+            FROM partner_access pa
+            JOIN users u ON pa.user_id=u.id
+            ORDER BY pa.created_at DESC
+        """, ())
+
+        from datetime import datetime
+        cur_month = datetime.now().strftime("%Y-%m")
+        data = []
+        for r in rows:
+            used = int(r["used_this_month"] or 0) if r.get("last_reset_month") == cur_month else 0
+            data.append({
+                "uid":              r["user_id"],
+                "name":             r.get("clinic_name") or r.get("full_name") or "?",
+                "phone":            r.get("phone") or "",
+                "region":           r.get("region") or "",
+                "status":           r["status"],
+                "monthly_limit":    int(r["monthly_limit"] or 50),
+                "used":             used,
+                "partner_products": int(r["partner_products"] or 0),
+                "created_at":       r["created_at"],
+                "note":             r.get("note") or "",
+            })
+
+        return _web.Response(
+            text=_json.dumps({"ok": True, "data": data}, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/admin/partner_sellers", _admin_partner_sellers)
+
+    async def _admin_partner_toggle(req):
+        """
+        Admin: sotuvchiga ruxsat berish/bloklash/limit o\'zgartirish.
+        POST /api/admin/partner_toggle
+        Body: {admin_id, target_uid, action: "grant"|"block"|"set_limit", limit?: 50, note?: "..."}
+        """
+        try:
+            body = await req.json()
+            admin_id   = int(body.get("admin_id") or 0)
+            target_uid = int(body.get("target_uid") or 0)
+            action     = body.get("action") or ""
+            limit      = int(body.get("limit") or 50)
+            note       = body.get("note") or ""
+
+            if ADMIN_IDS and admin_id not in ADMIN_IDS:
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "ruxsat yo\'q"}),
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin": "*"})
+
+            if not target_uid or action not in ("grant", "block", "set_limit"):
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "target_uid va action kerak"}),
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin": "*"})
+
+            # Foydalanuvchi sotuvchimi?
+            u = await db_get("SELECT id, role FROM users WHERE id=?", (target_uid,))
+            if not u or u["role"] != "seller":
+                return _web.Response(
+                    text=_json.dumps({"ok": False, "error": "Foydalanuvchi sotuvchi emas"}),
+                    content_type="application/json",
+                    headers={"Access-Control-Allow-Origin": "*"})
+
+            existing = await db_get("SELECT id FROM partner_access WHERE user_id=?", (target_uid,))
+
+            if action == "grant":
+                if existing:
+                    await db_run(
+                        "UPDATE partner_access SET status=\'active\', monthly_limit=?, "
+                        "granted_by=?, note=? WHERE user_id=?",
+                        (limit, admin_id, note, target_uid))
+                else:
+                    await db_insert(
+                        "INSERT INTO partner_access(user_id,status,monthly_limit,granted_by,note) "
+                        "VALUES(?,\'active\',?,?,?)",
+                        (target_uid, limit, admin_id, note))
+                # Sotuvchiga xabar
+                try:
+                    await bot.send_message(
+                        target_uid,
+                        f"✅ *Hamkor bot ruxsati berildi!*\n\n"
+                        f"📦 Oylik limit: {limit} ta mahsulot\n\n"
+                        f"Endi hamkor bot orqali mahsulot yuklashingiz mumkin."
+                    )
+                except Exception:
+                    pass
+                msg = f"✅ Ruxsat berildi (limit: {limit})"
+
+            elif action == "block":
+                if existing:
+                    await db_run(
+                        "UPDATE partner_access SET status=\'blocked\', note=? WHERE user_id=?",
+                        (note, target_uid))
+                else:
+                    await db_insert(
+                        "INSERT INTO partner_access(user_id,status,monthly_limit,granted_by,note) "
+                        "VALUES(?,\'blocked\',?,?,?)",
+                        (target_uid, limit, admin_id, note))
+                try:
+                    await bot.send_message(
+                        target_uid,
+                        "❌ *Hamkor bot ruxsati bloklandi.*\n\n"
+                        "Batafsil ma\'lumot uchun adminга murojaat qiling."
+                    )
+                except Exception:
+                    pass
+                msg = "⊘ Bloklandi"
+
+            elif action == "set_limit":
+                if existing:
+                    await db_run(
+                        "UPDATE partner_access SET monthly_limit=?, note=? WHERE user_id=?",
+                        (limit, note, target_uid))
+                else:
+                    return _web.Response(
+                        text=_json.dumps({"ok": False, "error": "Avval ruxsat bering"}),
+                        content_type="application/json",
+                        headers={"Access-Control-Allow-Origin": "*"})
+                msg = f"📦 Limit o\'zgartirildi: {limit}"
+
+            return _web.Response(
+                text=_json.dumps({"ok": True, "message": msg}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        except Exception as e:
+            log.error(f"partner_toggle xato: {e}")
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": str(e)}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_post("/api/admin/partner_toggle", _admin_partner_toggle)
+
+    async def _api_partner_check_seller(req):
+        """
+        Hamkor bot: telefon raqam orqali sotuvchini tekshirish.
+        GET /api/partner/check_seller?phone=998901234567
+        Headers: X-Partner-Token: <PARTNER_TOKEN>
+        """
+        token = req.headers.get("X-Partner-Token", "")
+        p_token = os.getenv("PARTNER_TOKEN", "")
+        if not p_token or token != p_token:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "Ruxsat yo\'q"}),
+                content_type="application/json", status=403,
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        phone = req.query.get("phone", "").strip().replace(" ", "").replace("-", "")
+        if not phone:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "phone parametri kerak"}),
+                content_type="application/json", status=400,
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # +998... yoki 998... yoki 8... formatlarini normallashtirish
+        if phone.startswith("+"):
+            phone = phone[1:]
+
+        # Bazada qidirish — telefon turli formatda saqlangan bo'lishi mumkin
+        u = await db_get(
+            "SELECT id, clinic_name, full_name, role, region, phone "
+            "FROM users WHERE REPLACE(REPLACE(phone,\'+\',\'\'),\' \',\'\')=? "
+            "AND role=\'seller\'",
+            (phone,)
+        )
+
+        # Topilmasa +998 bilan ham qidirish
+        if not u:
+            u = await db_get(
+                "SELECT id, clinic_name, full_name, role, region, phone "
+                "FROM users WHERE REPLACE(REPLACE(phone,\'+\',\'\'),\' \',\'\')=? "
+                "AND role=\'seller\'",
+                ("+" + phone,)
+            )
+
+        if not u:
+            return _web.Response(
+                text=_json.dumps({
+                    "ok": False,
+                    "error": "Sotuvchi topilmadi",
+                    "hint": "Foydalanuvchi XazDentda ro\'yxatdan o\'tmagan yoki sotuvchi emas"
+                }),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # Do'kon ma'lumotlari
+        shop = await db_get(
+            "SELECT shop_name, region, status FROM shops WHERE owner_id=?",
+            (u["id"],)
+        )
+
+        name = u.get("clinic_name") or u.get("full_name") or "Noma\'lum"
+
+        return _web.Response(
+            text=_json.dumps({
+                "ok":       True,
+                "uid":      u["id"],
+                "name":     name,
+                "role":     u["role"],
+                "region":   u.get("region") or "",
+                "phone":    u.get("phone") or "",
+                "shop_name": shop["shop_name"] if shop else name,
+                "shop_active": shop["status"] == "active" if shop else False,
+            }, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/partner/check_seller", _api_partner_check_seller)
+
     app.router.add_post("/api/partner/add_product", api_partner_add_product)
     app.router.add_post("/api/catalog/add_product", _api_add_product)
 
