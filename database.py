@@ -275,6 +275,20 @@ async def init_db():
         await c.execute("ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price REAL DEFAULT 0")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS article_code TEXT")
         await c.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS source_url TEXT")
+
+        # partner_access — hamkor bot uchun ruxsat jadvali
+        await c.execute("""
+        CREATE TABLE IF NOT EXISTS partner_access (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'active',
+            monthly_limit INTEGER DEFAULT 50,
+            used_this_month INTEGER DEFAULT 0,
+            last_reset_month TEXT DEFAULT to_char(now(),'YYYY-MM'),
+            granted_by BIGINT,
+            note TEXT,
+            created_at TEXT DEFAULT to_char(now(),'YYYY-MM-DD HH24:MI:SS')
+        )""")
         # USD kurs sozlamalari
         await c.execute("""
             INSERT INTO settings(key,value) VALUES('usd_rate','12800')
