@@ -545,6 +545,9 @@ body{
   <button class="nb" onclick="showView('orders',this)">
     <span class="nb-ic">📋</span><span>Buyurtmalar</span>
   </button>
+  <button class="nb" id="nb-stats" onclick="showView('stats',this)" style="display:none">
+    <span class="nb-ic">📊</span><span>Statistika</span>
+  </button>
 </div>
 
 <!-- CART -->
@@ -793,6 +796,7 @@ function track(event, data){
 }
 var tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
+initSellerNav();
 var UID = 0, ROLE = 'clinic';
 if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) UID = tg.initDataUnsafe.user.id;
 var _qp = new URLSearchParams(window.location.search);
@@ -901,17 +905,33 @@ function showView(v, btn) {
   curView = v;
   document.querySelectorAll('.nb').forEach(function(b){ b.classList.remove('on'); });
   if (btn) btn.classList.add('on');
-  // Savat tugmasi hech qachon "on" bo'lmasin (u panel ochadi)
   var nbCart = document.getElementById('nb-cart-btn');
   if(nbCart) nbCart.classList.remove('on');
   var isCat = v === 'catalog';
   document.getElementById('srch-row').style.display = isCat ? 'block' : 'none';
   document.getElementById('cats').style.display = isCat ? 'flex' : 'none';
   document.getElementById('fab').classList.toggle('show', v === 'my' && ROLE === 'seller');
-  if (v === 'catalog') { document.getElementById('top-title').textContent = '🛍 XazDent Market'; loadCatalog(); }
-  else if (v === 'my') { document.getElementById('top-title').textContent = '📦 Mahsulotlarim'; loadMy(); }
-  else { document.getElementById('top-title').textContent = '📋 Buyurtmalar';
-    document.getElementById('main').innerHTML = '<div class="empty"><div class="empty-ic">📋</div>Tez orada...</div>'; }
+  if (v === 'catalog') {
+    document.getElementById('top-title').textContent = '🛍 XazDent Market';
+    loadCatalog();
+  } else if (v === 'my') {
+    document.getElementById('top-title').textContent = '📦 Mahsulotlarim';
+    loadMy();
+  } else if (v === 'stats') {
+    document.getElementById('top-title').textContent = '📊 Statistika';
+    loadMyStats();
+  } else {
+    document.getElementById('top-title').textContent = '📋 Buyurtmalar';
+    document.getElementById('main').innerHTML =
+      '<div class="empty"><div class="empty-ic">📋</div>Tez orada...</div>';
+  }
+}
+
+function initSellerNav() {
+  if (ROLE === 'seller') {
+    var el = document.getElementById('nb-stats');
+    if(el) el.style.display = '';
+  }
 }
 
 // ── CATALOG ──────────────────────────────────────────────────────────────────
@@ -1349,6 +1369,91 @@ function updDots() {
 }
 
 // ── MY PRODUCTS ──────────────────────────────────────────────────────────────
+function loadMyStats() {
+  if(ROLE !== 'seller'){return;}
+  document.getElementById('main').innerHTML =
+    '<div class="loading"><div class="spin"></div></div>';
+  fetch('/api/catalog/my_stats?uid='+UID)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d.ok){
+        document.getElementById('main').innerHTML =
+          '<div class="empty">Statistika yo\'q</div>';
+        return;
+      }
+      var s=d.summary||{}, prods=d.top_products||[];
+      var maxV=prods.reduce(function(m,p){return Math.max(m,p.views||0);},1);
+
+      // Summary kartalar
+      var html=
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+          statCard('👁','KO\'RISHLAR',s.total_views,'Bu oy: '+s.month_views,'#3b82f6')+
+          statCard('🛒','SAVATGA',s.total_cart,'Konversiya: '+s.conversion+'%','#00c48c')+
+          statCard('📋','BUYURTMA',s.total_orders,'Tasdiqlandi: '+s.confirmed,'#f59e0b')+
+          statCard('📦','YETKAZILDI',s.delivered,'','#7c3aed')+
+        '</div>';
+
+      // Top mahsulotlar
+      if(prods.length){
+        html+='<div style="background:var(--card);border:1px solid var(--border);'+
+          'border-radius:12px;overflow:hidden;margin-bottom:12px">'+
+          '<div style="padding:12px 14px;font-size:11px;font-weight:700;'+
+          'color:var(--hint);letter-spacing:1.5px;border-bottom:1px solid var(--border)">'+
+          '📊 MAHSULOTLAR KO\'RSATKICHLARI</div>';
+
+        prods.forEach(function(p,i){
+          var pct=Math.round((p.views||0)/maxV*100);
+          var barColor=pct>60?'#00c48c':pct>30?'#f59e0b':'#64748b';
+          html+=
+            '<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'+
+              '<div style="display:flex;justify-content:space-between;'+
+              'align-items:flex-start;margin-bottom:6px">'+
+                '<div>'+
+                  '<div style="font-size:13px;font-weight:600;margin-bottom:2px">'+
+                    esc(p.name)+'</div>'+
+                  '<div style="font-size:11px;color:var(--hint)">'+
+                    fmtPrice(p.price)+' · '+
+                    '👁 '+p.views+' · '+
+                    '🛒 '+p.cart+' · '+
+                    '📋 '+p.orders+
+                  '</div>'+
+                '</div>'+
+                '<span style="font-size:18px;color:'+barColor+';font-weight:700;'+
+                'font-family:monospace">'+(i+1)+'</span>'+
+              '</div>'+
+              '<div style="height:4px;background:rgba(0,0,0,.06);border-radius:2px;overflow:hidden">'+
+                '<div style="height:100%;width:'+pct+'%;background:'+barColor+';'+
+                'border-radius:2px;transition:width .8s ease"></div>'+
+              '</div>'+
+            '</div>';
+        });
+        html+='</div>';
+      } else {
+        html+='<div class="empty" style="padding:30px">'+
+          '<div class="empty-ic">📊</div>'+
+          'Hali ko\'rish ma\'lumoti yo\'q.<br>'+
+          '<span style="font-size:12px;color:var(--hint)">'+
+          'Xaridorlar mahsulotlaringizni ko\'rgandan keyin ko\'rinadi</span></div>';
+      }
+      document.getElementById('main').innerHTML = html;
+    }).catch(function(){
+      document.getElementById('main').innerHTML =
+        '<div class="empty">Xato yuz berdi</div>';
+    });
+}
+
+function statCard(icon, label, val, sub, color){
+  return '<div style="background:var(--card);border:1px solid var(--border);'+
+    'border-radius:12px;padding:12px 10px;text-align:center">'+
+    '<div style="font-size:22px;margin-bottom:4px">'+icon+'</div>'+
+    '<div style="font-size:22px;font-weight:700;color:'+color+'">'+
+      (val||0)+'</div>'+
+    '<div style="font-size:10px;color:var(--hint);letter-spacing:1px;margin-top:2px">'+
+      esc(label)+'</div>'+
+    (sub?'<div style="font-size:10px;color:'+color+';margin-top:2px">'+esc(sub)+'</div>':'')+
+  '</div>';
+}
+
 function loadMy() {
   document.getElementById('main').innerHTML = '<div class="loading"><div class="spin"></div></div>';
   fetch('/api/catalog/my?uid='+UID)
