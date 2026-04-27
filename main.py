@@ -6027,6 +6027,119 @@ async def start_webserver():
             text=_json.dumps({"products": data}, ensure_ascii=False),
             content_type="application/json",
             headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _api_my_stats(req):
+        """
+        Sotuvchi uchun o'z mahsulotlari statistikasi.
+        GET /api/catalog/my_stats?uid=123
+        """
+        uid = int(req.query.get("uid") or 0)
+        if not uid:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "uid kerak"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        # Do'kon topish
+        shop = await db_get("SELECT id, shop_name FROM shops WHERE owner_id=?", (uid,))
+        if not shop:
+            return _web.Response(
+                text=_json.dumps({"ok": False, "error": "Do\'kon topilmadi"}),
+                content_type="application/json",
+                headers={"Access-Control-Allow-Origin": "*"})
+
+        shop_id = shop["id"]
+
+        # Umumiy ko'rishlar
+        total_views = (await db_get(
+            "SELECT COUNT(*) as c FROM product_views v "
+            "JOIN products p ON v.product_id=p.id WHERE p.shop_id=?",
+            (shop_id,)))["c"]
+
+        # Bu oy ko'rishlar
+        from datetime import datetime
+        month = datetime.now().strftime("%Y-%m")
+        month_views = (await db_get(
+            "SELECT COUNT(*) as c FROM product_views v "
+            "JOIN products p ON v.product_id=p.id "
+            "WHERE p.shop_id=? AND v.created_at LIKE ?",
+            (shop_id, f"{month}%")))["c"]
+
+        # Bugungi ko'rishlar
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_views = (await db_get(
+            "SELECT COUNT(*) as c FROM product_views v "
+            "JOIN products p ON v.product_id=p.id "
+            "WHERE p.shop_id=? AND v.created_at LIKE ?",
+            (shop_id, f"{today}%")))["c"]
+
+        # Savatga qo'shishlar (jami)
+        total_cart = (await db_get(
+            "SELECT COUNT(*) as c FROM cart_adds ca "
+            "JOIN products p ON ca.product_id=p.id WHERE p.shop_id=?",
+            (shop_id,)))["c"]
+
+        # Buyurtmalar
+        total_orders = (await db_get(
+            "SELECT COUNT(*) as c FROM catalog_orders "
+            "WHERE seller_id=?", (uid,)))["c"]
+
+        confirmed_orders = (await db_get(
+            "SELECT COUNT(*) as c FROM catalog_orders "
+            "WHERE seller_id=? AND status=\'confirmed\'", (uid,)))["c"]
+
+        delivered_orders = (await db_get(
+            "SELECT COUNT(*) as c FROM catalog_orders "
+            "WHERE seller_id=? AND status=\'delivered\'", (uid,)))["c"]
+
+        # Top ko'rilgan mahsulotlar
+        top_views = await db_all(
+            "SELECT p.id, p.name, p.price, "
+            "COUNT(v.id) as view_cnt, "
+            "COALESCE((SELECT COUNT(*) FROM cart_adds ca "
+            "WHERE ca.product_id=p.id),0) as cart_cnt, "
+            "COALESCE((SELECT COUNT(*) FROM catalog_orders co "
+            "JOIN products pp ON pp.shop_id=co.seller_id "
+            "WHERE pp.id=p.id),0) as order_cnt "
+            "FROM products p "
+            "LEFT JOIN product_views v ON v.product_id=p.id "
+            "WHERE p.shop_id=? AND COALESCE(p.is_active,1)=1 "
+            "GROUP BY p.id, p.name, p.price "
+            "ORDER BY view_cnt DESC LIMIT 10",
+            (shop_id,))
+
+        # Konversiya: ko'rdi → savat
+        conv = round(total_cart / total_views * 100, 1) if total_views > 0 else 0
+
+        return _web.Response(
+            text=_json.dumps({
+                "ok": True,
+                "shop_name": shop["shop_name"],
+                "summary": {
+                    "total_views":     total_views,
+                    "month_views":     month_views,
+                    "today_views":     today_views,
+                    "total_cart":      total_cart,
+                    "total_orders":    total_orders,
+                    "confirmed":       confirmed_orders,
+                    "delivered":       delivered_orders,
+                    "conversion":      conv,
+                },
+                "top_products": [
+                    {
+                        "id":        r["id"],
+                        "name":      r["name"],
+                        "price":     float(r["price"] or 0),
+                        "views":     r["view_cnt"],
+                        "cart":      r["cart_cnt"],
+                        "orders":    r["order_cnt"],
+                    } for r in top_views
+                ]
+            }, ensure_ascii=False),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"})
+    app.router.add_get("/api/catalog/my_stats", _api_my_stats)
+
     app.router.add_get("/api/catalog/my", _api_catalog_my)
 
     async def _api_catalog_product(req):
